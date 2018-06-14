@@ -66,16 +66,7 @@
 \newcommand{\pardir}[2]{\ensuremath{\frac{\partial #2}{\partial #1} }}
 \newcommand{\ppardir}[2]{\ensuremath{\frac{\partial }{\partial #1} \left( #2\right)}}
 \newcommand{\eps}{\epsilon}
-
-%\newcommand{\tcfour}{3C\,454.3}
-%\newcommand{\tctwo}{3C\,279}
-%\newcommand{\pkst}{PKS 1222$+$21}
-%\newcommand{\pksf}{PKS 1510$-$89}
-% \newcommand{\grs}{GRS~1915+105}
-
-\newcommand{\cloudy}{{\sc cloudy}}
-\newcommand{\xstar}{{\sc xstar}}
-
+\newcommand{\alert}[1]{\color{red}#1\color{black}}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \title[]{Time-dependent magnetospheric flow}
@@ -95,7 +86,6 @@
 \end{abstract}
 
 \begin{keywords}
-quasars: emission lines -- gamma-rays: general -- opacity
 \end{keywords}
 
 \section{Dimensionless formulation}
@@ -182,7 +172,9 @@ account.
 
 Boundary conditions were profoundly different from those in \citet{basko-sunyaev1976}: we
 assume no matter or energy flow through the lower boundary (NS surface), and a constant
-mass inflow at a fixed velocity at the right (disc) boundary. 
+mass inflow at a fixed velocity at the right (disc) boundary. Energy input at
+the outer boundary assumes pressure balance condition at the edge of the
+magnetosphere $p_{\rm mag} = p_{\rm rad} = 3u_{\rm rad}$.
 
 
 
