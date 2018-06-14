@@ -23,29 +23,76 @@ import os.path
 
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=100 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
 
-afac=1. # part of the longitudes subtended by the flow
-re=1000. # magnetospheric radius
-dre=100. # radial extent of the flow at re
+afac=0.5 # part of the longitudes subtended by the flow
+re=100. # magnetospheric radius
+dre=10. # radial extent of the flow at re
 
 omega=0.9*re**(-1.5) # in Keplerian units on the outer rim
 rstar=6. # GM/c**2 units
 mdot=100. # mass accretion rat e
 vout=-0.5/sqrt(re) # initial poloidal velocity at the outer boundary 
-csq0=vout**2*5. # speed of sound at the outer boundary (approximately)
+csq0=vout**2*10. # speed of sound at the outer boundary (approximately)
 eta=0.2 # radiation efficiency (not used yet)
 mfloor=1e-25  # crash floor for mass per unit length
 rhofloor=1e-25 # crash floor for density
 ufloor=1e-25 # crash floor for energy density
 
+b12=1.
+umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accretor
+pmagout=umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc
+
+xirad=1. # radiation loss scaling
+
+#############################################################
+# Plotting block (to be moved to a separate file)
+def uplot(r, u, rho, name='outplot'):
+    '''
+    energy u supplemented by rest-mass energy rho c^2
+    '''
+    ioff()
+    clf()
+    plot(r, u, 'k', label='$u$',linewidth=2)
+    plot(r, rho, 'r', label=r'$\rho c^2$')
+    plot(r, rho/r, 'r', label=r'$\rho/r$')
+    plot(r, umag*(rstar/r)**6, 'b', label=r'$u_{\rm mag}$')
+    #    plot(x, y0, 'b')
+    #    xscale('log')
+    xlabel('$r$, $GM/c^2$ units')
+    yscale('log')
+    xscale('log')    
+    legend()
+    savefig(name+'.png')
+
+def vplot(x, v, cs, name='outplot'):
+    '''
+    velocity, speed of sound, and virial velocity
+    '''
+    ioff()
+    clf()
+    plot(x, v, 'k', label='$v/c$',linewidth=2)
+    plot(x, cs, 'g', label=r'$\pm c_{\rm s}/c$')
+    plot(x, -cs, 'g')
+    plot(x, x*0.+1./sqrt(x), 'r', label=r'$\pm v_{\rm vir}/c$')
+    plot(x, x*0.-1./sqrt(x), 'r')
+    xlabel('$r$, $GM/c^2$ units')
+    #    yscale('log')
+    xscale('log')
+    ylim(-0.2,0.2)
+    legend()
+    savefig(name+'.png')
+#########################################################################
+
+
 ###########################################################################################
-def geometry(r):
+def geometry(r, writeout=None):
     '''
     computes all the geometrical quantities. Sufficient to run once before the start of the simulation.
     Output: sin(theta), cos(theta), sin(alpha), cos(alpha), tangential cross-section area, 
     and l (zero at the surface, growing with radius)
+    adding nontrivial writeout key allows to write the geometry to an ascii file 
     '''
     #    theta=arcsin(sqrt(r/re))
     #    sth=sin(theta) ; cth=cos(theta)
@@ -55,27 +102,14 @@ def geometry(r):
     sina=sin(alpha) ; cosa=cos(alpha)
     l=cumtrapz(sqrt(1.+3.*cth**2)/2./cth, x=r, initial=0.) # coordinate along the field line
     # dl diverges near R=Re, hence the maximal radius should be smaller than Re
-    
-    clf()
-    plot(r[1:], l[1:])
-    xscale('log')
-    yscale('log')
-    xlabel('r')
-    ylabel('l')
-    savefig('lrtest.png')
-    clf()
-    plot(r, across)
-    xscale('log')
-    yscale('log')
-    xlabel('r')
-    ylabel('A')
-    savefig('artest.png')
-    clf()
-    plot(r, sth*cosa+cth*sina)
-    xscale('log')
-    xlabel('r')
-    ylabel(r'$(\mathbf{l} \cdot \mathbf{e}_r)$')
-    savefig('sinsum.png')
+    # ascii output:
+    if(writeout != None):
+        theta=arctan(sth/cth)
+        fgeo=open(writeout, 'w')
+        fgeo.write('# format: r -- theta -- alpha -- across -- l\n')
+        for k in arange(size(l)):
+            fgeo.write(str(r[k])+' '+str(theta[k])+' '+str(alpha[k])+' '+str(across[k])+' '+str(l[k])+'\n')
+        fgeo.close()
     
     return sth, cth, sina, cosa, across, l
 
@@ -113,7 +147,7 @@ def solver_hlle(f, q, sl, sr):
         fhalf[wpos] = ((sr[1:]*f[:-1]-sl[:-1]*f[1:]+sl[:-1]*sr[1:]*(q[1:]-q[:-1]))/(sr[1:]-sl[:-1]))[wpos] # classic HLLE
     return fhalf
 
-def sources(rho, v, u, across, r, sth, cth, sina, cosa):
+def sources(rho, v, u, across, r, sth, cth, sina, cosa, dt=0.):
     '''
     computes the RHSs of conservation equations
     no changes in mass
@@ -122,8 +156,14 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa):
     '''
     sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     gamedd=0. # so far turned off
-    force=-sinsum/r**2*(1.-gamedd)+omega**2*r*sth*cosa
-    qloss=8./3.*(u/(rho+1.))*r*sth*afac
+    force=(-sinsum/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across
+    if(dt>0.):
+        qloss_fac=xirad*8./3./(rho+1.)*r*sth*afac*dt
+        qloss=(1.-exp(-qloss_fac))/dt
+    else:
+        qloss=xirad*8./3.*(u/(rho+1.))*r*sth*afac
+    #    qloss*=0.
+        
     work=v*force
     return rho*0., force, work-qloss
 
@@ -135,35 +175,16 @@ def toprim(m, s, e, across, r, sth):
     rho=m/across
     v=s/m
     v[rho<=rhofloor]=0.
-    u=e/across-rho*(v**2/2.-1./r-0.5*(r*sth*omega)**2)
-#    u[u<=ufloor]=0.
+    u=(e-m*(v**2/2.-1./r-0.5*(r*sth*omega)**2))/across
+    u[u<=ufloor]=0.
     return rho, v, u
-
-def uplot(x, y, name='outplot'):
-    clf()
-    plot(x, y, '.k')
-    plot(x, 1./x, 'r')
-    #    plot(x, y0, 'b')
-    #    xscale('log')
-    yscale('log')
-    xscale('log')    
-    savefig(name+'.png')
-
-def vplot(x, v, name='outplot'):
-    clf()
-    plot(x, v, '.k')
-    plot(x, x*0.+1./sqrt(x), 'r')
-    plot(x, x*0.-1./sqrt(x), 'r')
-    #    yscale('log')
-    xscale('log')
-    ylim(-0.2,0.2)
-    savefig(name+'.png')
 
 def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     '''
     main advance in a dt step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta)
     output: three new densities
+    includes boundary conditions!
     '''
     nl=size(m)
     m1=zeros(nl) ; s1=zeros(nl); e1=zeros(nl)
@@ -173,10 +194,9 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     # enforcing boundary conditions:
     m1[0] = m[0] + (-(s_half[0]-0.)/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero
     m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot
-    pdot=mdot*vout-mdot*csq0 # momentum inflow (including pressure)
-    edot=-mdot*(vout**2/2.+csq0*3.-1./r-0.5*(r*sth*omega)**2)[-1] # energy flux from the right boundary
+    edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*mdot/m[-1]*pmagout # energy flux from the right boundary
     s1[-1] = -mdot
-    e1[0] = e[0]  + (-(fe_half[0]-0.)/(l_half[1]-l_half[0])+de[0]) * dt #  energy flux is zero
+    e1[0] = e[0]  + (-(fe_half[0]-0.)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
     e1[-1] = e[-1]  +(-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])+de[-1]) * dt  # enegry inlow
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     s1[0]=0.
@@ -195,7 +215,7 @@ def alltire():
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
-    sth, cth, sina, cosa, across, l = geometry(rnew) # all the geometric quantities for the l-equidistant mesh
+    sth, cth, sina, cosa, across, l = geometry(rnew, writeout='geo.dat') # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
     r_half=rfun(luni_half) # half-step radial coordinates
     sth_half, cth_half, sina_half, cosa_half, across_half, l_half = geometry(r_half) # mid-step geometry in r
@@ -208,14 +228,14 @@ def alltire():
     m=mdot/abs(vinit) # mass distribution
     m0=m 
     s+=vinit*m
-    e+=m*(csq0*3.*30.+vinit**2/2.-1./r-0.5*(r*sth*omega)**2)
+    e+=m*(pmagout/(m/across)[-1]*3.+vinit**2/2.-1./r-0.5*(r*sth*omega)**2)
     
     dlmin=(l[1:]-l[:-1]).min()/2.
-    dt = dlmin*0.5
+    dt = dlmin*0.1
     print("dt = "+str(dt))
     #    ti=input("dt")
     
-    t=0.; dtout=1. ; tstore=0. ; tmax=1e5 ; nout=0
+    t=0.; dtout=10. ; tstore=0. ; tmax=1e5 ; nout=0
     
     while(t<tmax):
         # first make a preliminary half-step
@@ -248,13 +268,20 @@ def alltire():
             tstore+=dtout
             print("t = "+str(t))
             #            oneplot(r, rho, name='rhotie{:05d}'.format(nout))
-            uplot(r, u, name='utie{:05d}'.format(nout))
-            vplot(r, v, name='vtie{:05d}'.format(nout))
-            nout+=1
+            uplot(r, u, rho, name='utie{:05d}'.format(nout))
+            vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
             print("mass = "+str(trapz(m[1:-1], x=l[1:-1])))
             print("mass(simpson) = "+str(simps(m[1:-1], x=l[1:-1])))
             print("energy = "+str(trapz(e[1:-1], x=l[1:-1])))
             print("momentum = "+str(trapz(s[1:-1], x=l[1:-1])))
-
+            # ascii output:
+            fname='tireout{:05d}'.format(nout)+'.dat'
+            fstream=open(fname, 'w')
+            fstream.write('# t = '+str(t)+'\n')
+            fstream.write('# format: l -- rho -- v -- u\n')
+            for k in arange(nx):
+                fstream.write(str(l[k])+' '+str(v[k])+' '+str(u[k])+'\n')
+            fstream.close()
+            nout+=1
 # if you want to make a movie of how the velocity changes with time:
 # ffmpeg -f image2 -r 35 -pattern_type glob -i 'vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
