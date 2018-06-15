@@ -156,8 +156,14 @@ $D = \frac{1}{3\rho}$ is diffusion coefficient. We do not consider any sources
 or losses of mass ($S_m=0$), while for momentum, gravitational and centrifugal forces
 were taken into account
 \begin{equation}\label{E:timedep:srcs}
-S_s = - \frac{1}{r^2}\sin(\theta+\alpha) + \omega^2r \sin\theta \cos\alpha.
+S_s = - \frac{1}{r^2}\sin(\theta+\alpha) \left( 1-\Gamma\right) + \omega^2r \sin\theta \cos\alpha.
 \end{equation}
+Here, $\Gamma=\eta_{\rm irr} L / \tau$ is the correction for radiation pressure
+(Eddington factor), $\eta_{\rm irr}\lesssim $ is assumed constant, $L$ is the
+total power lost by the flow as radiation, and $\tau$ is the optical depth
+across the flow in poloidal direction, estimated as $\tau = \rho \Delta \theta
+= \frac{2R\sin\theta}{A} m $.
+
 For energy, there are two contributions: work done by the forces and energy
 loss due to radiation,
 \begin{equation}\label{E:timedep:srce}
