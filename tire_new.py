@@ -23,26 +23,28 @@ import os.path
 
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=100 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
 
-afac=0.5 # part of the longitudes subtended by the flow
-re=100. # magnetospheric radius
-dre=10. # radial extent of the flow at re
-
-omega=0.9*re**(-1.5) # in Keplerian units on the outer rim
+b12=1.
+m1=1.4
+mdot=1000. # mass accretion rate
 rstar=6. # GM/c**2 units
-mdot=100. # mass accretion rat e
-vout=-0.5/sqrt(re) # initial poloidal velocity at the outer boundary 
-csq0=vout**2*10. # speed of sound at the outer boundary (approximately)
-eta=0.2 # radiation efficiency (not used yet)
+# vout=-0.5/sqrt(re) # initial poloidal velocity at the outer boundary 
+eta=0.5 # self-illumination efficiency 
 mfloor=1e-25  # crash floor for mass per unit length
 rhofloor=1e-25 # crash floor for density
 ufloor=1e-25 # crash floor for energy density
+afac=0.5 # part of the longitudes subtended by the flow
+re = 123. * ((b12*rstar**3)**2/mdot)**(2./7.)*m1**(-4./7.) # magnetospheric radius
+dre=minimum(mdot, re*0.5) # radial extent of the flow at re
+print("magnetospheric radius re = "+str(re))
+print("Delta re = "+str(dre))
 
-b12=1.
+omega=0.9*re**(-1.5) # in Keplerian units on the outer rim
 umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accretor
 pmagout=umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc
+vout=-0.5*pmagout/mdot*4.*pi*re*dre # initial poloidal velocity at the outer boundary 
 
 xirad=1. # radiation loss scaling
 
@@ -147,15 +149,16 @@ def solver_hlle(f, q, sl, sr):
         fhalf[wpos] = ((sr[1:]*f[:-1]-sl[:-1]*f[1:]+sl[:-1]*sr[1:]*(q[1:]-q[:-1]))/(sr[1:]-sl[:-1]))[wpos] # classic HLLE
     return fhalf
 
-def sources(rho, v, u, across, r, sth, cth, sina, cosa, dt=0.):
+def sources(rho, v, u, across, r, sth, cth, sina, cosa, dt=0., ltot=0.):
     '''
     computes the RHSs of conservation equations
     no changes in mass
     momentum injection through gravitational and centrifugal forces
     energy losses through the surface
+    outputs: dm, ds, de, and separately the amount of energy radiated per unit length per unit time ("flux")
     '''
     sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
-    gamedd=0. # so far turned off
+    gamedd=eta*ltot/(rho*across/(2.*r*sth)) # so far turned off
     force=(-sinsum/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across
     if(dt>0.):
         qloss_fac=xirad*8./3./(rho+1.)*r*sth*afac*dt
@@ -165,12 +168,11 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, dt=0.):
     #    qloss*=0.
         
     work=v*force
-    return rho*0., force, work-qloss
+    return rho*0., force, work-qloss, qloss
 
 def toprim(m, s, e, across, r, sth):
     '''
     convert conserved quantities to primitives
-    maybe make all this geometry a structure? or just global?
     '''
     rho=m/across
     v=s/m
@@ -236,6 +238,9 @@ def alltire():
     #    ti=input("dt")
     
     t=0.; dtout=10. ; tstore=0. ; tmax=1e5 ; nout=0
+
+    ltot=0. # estimated total luminosity
+    fflux=open('flux.dat', 'w')
     
     while(t<tmax):
         # first make a preliminary half-step
@@ -257,7 +262,8 @@ def alltire():
         s_half=solver_hlle(s, m, vl, vr)
         p_half=solver_hlle(p, s, vl, vr)
         fe_half=solver_hlle(fe, e, vl, vr)
-        dm, ds, de = sources(rho, v, u, across, r, sth, cth, sina, cosa)
+        dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa)
+        ltot=simps(flux[1:-1], x=l[1:-1])
         m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth)
         t+=dt
         if(isnan(rho.max()) | (rho.max() > 1e20)):
@@ -267,11 +273,13 @@ def alltire():
         if(t>=tstore):
             tstore+=dtout
             print("t = "+str(t))
+            fflux.write(str(t)+' '+str(ltot)+'\n')
+            fflux.flush()
             #            oneplot(r, rho, name='rhotie{:05d}'.format(nout))
             uplot(r, u, rho, name='utie{:05d}'.format(nout))
             vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
             print("mass = "+str(trapz(m[1:-1], x=l[1:-1])))
-            print("mass(simpson) = "+str(simps(m[1:-1], x=l[1:-1])))
+            print("ltot = "+str(ltot))
             print("energy = "+str(trapz(e[1:-1], x=l[1:-1])))
             print("momentum = "+str(trapz(s[1:-1], x=l[1:-1])))
             # ascii output:
@@ -283,5 +291,6 @@ def alltire():
                 fstream.write(str(l[k])+' '+str(v[k])+' '+str(u[k])+'\n')
             fstream.close()
             nout+=1
+    fflux.close()
 # if you want to make a movie of how the velocity changes with time:
 # ffmpeg -f image2 -r 35 -pattern_type glob -i 'vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
