@@ -40,6 +40,7 @@ re = 123. * ((b12*rstar**3)**2/mdot)**(2./7.)*m1**(-4./7.) # magnetospheric radi
 dre=minimum(mdot, re*0.5) # radial extent of the flow at re
 print("magnetospheric radius re = "+str(re))
 print("Delta re = "+str(dre))
+tscale=4.92594e-06*m1
 
 omega=0.9*re**(-1.5) # in Keplerian units on the outer rim
 umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accretor
@@ -272,8 +273,8 @@ def alltire():
             return(1)
         if(t>=tstore):
             tstore+=dtout
-            print("t = "+str(t))
-            fflux.write(str(t)+' '+str(ltot)+'\n')
+            print("t = "+str(t*tscale)+"s")
+            fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
             fflux.flush()
             #            oneplot(r, rho, name='rhotie{:05d}'.format(nout))
             uplot(r, u, rho, name='utie{:05d}'.format(nout))
