@@ -15,6 +15,9 @@ rc('text', usetex=True)
 matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
 def pds(infile):
+    '''
+    makes a power spectrum plot
+    '''
     lines = np.loadtxt(infile+".dat", comments="#", delimiter=" ", unpack=False)
     t=lines[:,0] ; l=lines[:,1]
     f=np.fft.rfft((l-l.mean())/l.std())
@@ -24,4 +27,5 @@ def pds(infile):
     clf()
     plot(freq[1:], pds[1:], 'k')
     xscale('log') ; yscale('log')
+    ylabel('PDS') ; xlabel('$f$, Hz')
     savefig(infile+'_pds.png')
