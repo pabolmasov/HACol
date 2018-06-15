@@ -14,10 +14,8 @@ rc('text', usetex=True)
 # #add amsmath to the preamble
 matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
-import numpy as np
-import matplotlib.pyplot as plt
 import numpy.random
-import time
+# import time
 import os
 import os.path
 
@@ -204,7 +202,8 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     s1[0]=0.
     return m1, s1, e1
-    
+
+#########################################################################################
 def alltire():
     '''
     the main routine bringing all together.
