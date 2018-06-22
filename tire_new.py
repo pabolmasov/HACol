@@ -160,7 +160,7 @@ def alltire():
     print("dt = "+str(dt))
     #    ti=input("dt")
     
-    t=0.; dtout=20. ; tstore=0. ; tmax=1e5 ; nout=0
+    t=0.;  tstore=0.  ; nout=0
 
     ltot=0. # estimated total luminosity
     fflux=open('flux.dat', 'w')
@@ -200,8 +200,8 @@ def alltire():
             fflux.flush()
             #            oneplot(r, rho, name='rhotie{:05d}'.format(nout))
             if ifplot:
-                uplot(r, u, rho, sth, v, name='utie{:05d}'.format(nout))
-                vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
+                plots.uplot(r, u, rho, sth, v, name='utie{:05d}'.format(nout))
+                plots.vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
             print("mass = "+str(trapz(m[1:-1], x=l[1:-1])))
             print("ltot = "+str(ltot))
             print("energy = "+str(trapz(e[1:-1], x=l[1:-1])))
