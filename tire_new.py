@@ -1,91 +1,14 @@
-import matplotlib
-from matplotlib import rc
-from matplotlib import axes
-from numpy import *
-from pylab import *
 from scipy.integrate import *
 from scipy.interpolate import *
-
-#Uncomment the following if you want to use LaTeX in figures 
-rc('font',**{'family':'serif'})
-rc('mathtext',fontset='cm')
-rc('mathtext',rm='stix')
-rc('text', usetex=True)
-# #add amsmath to the preamble
-matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
 import numpy.random
 # import time
 import os
 import os.path
 
-# let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
-
-nx=1000 # the actual number of points in use
-nx0=nx*20 # first we make a finer mesh for interpolation
-
-b12=1.
-m1=1.4
-mdot=1000. # mass accretion rate
-rstar=6. # GM/c**2 units
-# vout=-0.5/sqrt(re) # initial poloidal velocity at the outer boundary 
-eta=0.5 # self-illumination efficiency 
-mfloor=1e-25  # crash floor for mass per unit length
-rhofloor=1e-25 # crash floor for density
-ufloor=1e-25 # crash floor for energy density
-afac=0.5 # part of the longitudes subtended by the flow
-re = 123. * ((b12*rstar**3)**2/mdot)**(2./7.)*m1**(-4./7.) # magnetospheric radius
-dre=minimum(mdot, re*0.5) # radial extent of the flow at re
-print("magnetospheric radius re = "+str(re))
-print("Delta re = "+str(dre))
-tscale=4.92594e-06*m1
-
-omega=0.9*re**(-1.5) # in Keplerian units on the outer rim
-umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accretor
-pmagout=umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc
-vout=-0.5*pmagout/mdot*4.*pi*re*dre # initial poloidal velocity at the outer boundary 
-
-xirad=1. # radiation loss scaling
-
-#############################################################
-# Plotting block (to be moved to a separate file)
-def uplot(r, u, rho, name='outplot'):
-    '''
-    energy u supplemented by rest-mass energy rho c^2
-    '''
-    ioff()
-    clf()
-    plot(r, u, 'k', label='$u$',linewidth=2)
-    plot(r, rho, 'r', label=r'$\rho c^2$')
-    plot(r, rho/r, 'r', label=r'$\rho/r$')
-    plot(r, umag*(rstar/r)**6, 'b', label=r'$u_{\rm mag}$')
-    #    plot(x, y0, 'b')
-    #    xscale('log')
-    xlabel('$r$, $GM/c^2$ units')
-    yscale('log')
-    xscale('log')    
-    legend()
-    savefig(name+'.png')
-
-def vplot(x, v, cs, name='outplot'):
-    '''
-    velocity, speed of sound, and virial velocity
-    '''
-    ioff()
-    clf()
-    plot(x, v, 'k', label='$v/c$',linewidth=2)
-    plot(x, cs, 'g', label=r'$\pm c_{\rm s}/c$')
-    plot(x, -cs, 'g')
-    plot(x, x*0.+1./sqrt(x), 'r', label=r'$\pm v_{\rm vir}/c$')
-    plot(x, x*0.-1./sqrt(x), 'r')
-    xlabel('$r$, $GM/c^2$ units')
-    #    yscale('log')
-    xscale('log')
-    ylim(-0.2,0.2)
-    legend()
-    savefig(name+'.png')
-#########################################################################
-
+from globals import *
+if ifplot:
+    import plots
 
 ###########################################################################################
 def geometry(r, writeout=None):
@@ -143,7 +66,7 @@ def solver_hlle(f, q, sl, sr):
     #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
     ds=sr[1:]-sl[:-1]
     wpos=where(ds>0.)
-    fhalf=sr[1:]*0.
+    fhalf=(f[1:]+f[:-1])/2.
     if(size(wpos)>0):
         fhalf[wpos] = ((sr[1:]*f[:-1]-sl[:-1]*f[1:]+sl[:-1]*sr[1:]*(q[1:]-q[:-1]))/(sr[1:]-sl[:-1]))[wpos] # classic HLLE
     return fhalf
@@ -195,10 +118,10 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     # enforcing boundary conditions:
     m1[0] = m[0] + (-(s_half[0]-0.)/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero
     m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot
-    edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*mdot/m[-1]*pmagout # energy flux from the right boundary
+    edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*vout*pmagout # energy flux from the right boundary
     s1[-1] = -mdot
     e1[0] = e[0]  + (-(fe_half[0]-0.)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
-    e1[-1] = e[-1]  +(-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])+de[-1]) * dt  # enegry inlow
+    e1[-1] = e[-1]  +(-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     s1[0]=0.
     return m1, s1, e1
@@ -233,11 +156,11 @@ def alltire():
     e+=m*(pmagout/(m/across)[-1]*3.+vinit**2/2.-1./r-0.5*(r*sth*omega)**2)
     
     dlmin=(l[1:]-l[:-1]).min()/2.
-    dt = dlmin*0.1
+    dt = dlmin*0.5
     print("dt = "+str(dt))
     #    ti=input("dt")
     
-    t=0.; dtout=10. ; tstore=0. ; tmax=1e5 ; nout=0
+    t=0.; dtout=20. ; tstore=0. ; tmax=1e5 ; nout=0
 
     ltot=0. # estimated total luminosity
     fflux=open('flux.dat', 'w')
@@ -276,8 +199,9 @@ def alltire():
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
             fflux.flush()
             #            oneplot(r, rho, name='rhotie{:05d}'.format(nout))
-            uplot(r, u, rho, name='utie{:05d}'.format(nout))
-            vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
+            if ifplot:
+                uplot(r, u, rho, sth, v, name='utie{:05d}'.format(nout))
+                vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
             print("mass = "+str(trapz(m[1:-1], x=l[1:-1])))
             print("ltot = "+str(ltot))
             print("energy = "+str(trapz(e[1:-1], x=l[1:-1])))
