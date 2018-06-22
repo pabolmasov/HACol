@@ -28,7 +28,7 @@ def uplot(r, u, rho, sth, v, name='outplot'):
     plot(r, rho/r, 'r', label=r'$\rho/r$', linestyle='dotted')
     plot(r, rho*0.5*(r*omega*sth)**2, 'r', label=r'$\frac{1}{2}\rho (\Omega R \sin\theta)^2$', linestyle='dashed')
     plot(r, umag*(rstar/r)**6, 'b', label=r'$u_{\rm mag}$')
-    B=u*4./3.+rho*(-1./r+0.5*(r*omega*sth)**2+v**2/2.)
+    B=u*4./3.+rho*(-1./r-0.5*(r*omega*sth)**2+v**2/2.)
     plot(r, B, 'g', label='$B$', linestyle='dotted')
     plot(r, -B, 'g', label='$-B$')
     #    plot(x, y0, 'b')
@@ -57,3 +57,12 @@ def vplot(x, v, cs, name='outplot'):
     legend()
     savefig(name+'.png')
 #########################################################################
+# post-processing PDS plot:
+
+def pdsplot(freq, pds, infile='flux'):
+    clf()
+    plot(freq[1:], pds[1:], 'k')
+    xscale('log') ; yscale('log')
+    ylabel('PDS') ; xlabel('$f$, Hz')
+    savefig(infile+'_pds.png')
+    close()

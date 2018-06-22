@@ -20,8 +20,10 @@ dre=minimum(mdot, re*0.5) # radial extent of the flow at re
 print("magnetospheric radius re = "+str(re))
 print("Delta re = "+str(dre))
 tscale=4.92594e-06*m1
+tmax=100./tscale # maximal time in tscales
+dtout=50. # output time step in tscales
 
-omega=0.0*re**(-1.5) # in Keplerian units on the outer rim
+omega=0.9*re**(-1.5) # in Keplerian units on the outer rim
 umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accretor
 pmagout=umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc
 vout=-0.25*pmagout*4.*pi*re*dre/mdot # initial poloidal velocity at the outer boundary 
