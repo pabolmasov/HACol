@@ -26,7 +26,7 @@ nx0=nx*20 # first we make a finer mesh for interpolation
 
 b12=10.
 m1=1.4
-mdot=10000./4./pi # mass accretion rate
+mdot=1000./4./pi # mass accretion rate
 rstar=6. # GM/c**2 units
 # vout=-0.5/sqrt(re) # initial poloidal velocity at the outer boundary 
 eta=0.5 # self-illumination efficiency 
@@ -40,12 +40,12 @@ print("magnetospheric radius re = "+str(re))
 print("Delta re = "+str(dre))
 tscale=4.92594e-06*m1
 
-omega=0.95*re**(-1.5) # in Keplerian units on the outer rim
+omega=0.0*re**(-1.5) # in Keplerian units on the outer rim
 umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accretor
 pmagout=umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc
-vout=-0.5*pmagout*4.*pi*re*dre/mdot # initial poloidal velocity at the outer boundary 
+vout=-0.25*pmagout*4.*pi*re*dre/mdot # initial poloidal velocity at the outer boundary 
 
-xirad=1. # radiation loss scaling
+xirad=0.25 # radiation loss scaling
 
 #############################################################
 # Plotting block (to be moved to a separate file)
@@ -61,7 +61,7 @@ def uplot(r, u, rho, sth, v, name='outplot'):
     plot(r, rho/r, 'r', label=r'$\rho/r$', linestyle='dotted')
     plot(r, rho*0.5*(r*omega*sth)**2, 'r', label=r'$\frac{1}{2}\rho (\Omega R \sin\theta)^2$', linestyle='dashed')
     plot(r, umag*(rstar/r)**6, 'b', label=r'$u_{\rm mag}$')
-    B=u*4./3.+rho(-1./r+0.5*(r*omega*sth)**2+v**2/2.)
+    B=u*4./3.+rho*(-1./r+0.5*(r*omega*sth)**2+v**2/2.)
     plot(r, B, 'g', label='$B$', linestyle='dotted')
     plot(r, B, 'g', label='$-B$')
     #    plot(x, y0, 'b')
@@ -281,7 +281,7 @@ def alltire():
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
             fflux.flush()
             #            oneplot(r, rho, name='rhotie{:05d}'.format(nout))
-            uplot(r, u, rho, sth, name='utie{:05d}'.format(nout))
+            uplot(r, u, rho, sth, v, name='utie{:05d}'.format(nout))
             vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
             print("mass = "+str(trapz(m[1:-1], x=l[1:-1])))
             print("ltot = "+str(ltot))
