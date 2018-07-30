@@ -71,7 +71,7 @@ def solver_hlle(f, q, sl, sr):
         fhalf[wpos] = ((sr[1:]*f[:-1]-sl[:-1]*f[1:]+sl[:-1]*sr[1:]*(q[1:]-q[:-1]))/(sr[1:]-sl[:-1]))[wpos] # classic HLLE
     return fhalf
 
-def sources(rho, v, u, across, r, sth, cth, sina, cosa, dt=0., ltot=0.):
+def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     '''
     computes the RHSs of conservation equations
     no changes in mass
@@ -80,13 +80,10 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, dt=0., ltot=0.):
     outputs: dm, ds, de, and separately the amount of energy radiated per unit length per unit time ("flux")
     '''
     sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
-    gamedd=eta*ltot/(rho*across/(2.*r*sth)) # so far turned off
+    tau = rho*across/(2.*r*sth)
+    gamedd=eta * ltot / tau # so far turned off
     force=(-sinsum/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across
-    if(dt>0.):
-        qloss_fac=xirad*8./3./(rho+1.)*r*sth*afac*dt
-        qloss=(1.-exp(-qloss_fac))/dt
-    else:
-        qloss=xirad*8./3.*(u/(rho+1.))*r*sth*afac
+    qloss=u/(tau*xirad+1.)*r*2.*sth*afac
     #    qloss*=0.
         
     work=v*force
