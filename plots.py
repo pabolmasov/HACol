@@ -14,6 +14,9 @@ matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"]
 
 from globals import *
 
+close('all')
+ioff()
+
 #############################################################
 # Plotting block 
 def uplot(r, u, rho, sth, v, name='outplot'):
@@ -59,10 +62,33 @@ def vplot(x, v, cs, name='outplot'):
 #########################################################################
 # post-processing PDS plot:
 
-def pdsplot(freq, pds, infile='flux'):
+def pdsplot(freq, pds, outfile='pds'):
     clf()
     plot(freq[1:], pds[1:], 'k')
     xscale('log') ; yscale('log')
     ylabel('PDS') ; xlabel('$f$, Hz')
-    savefig(infile+'_pds.png')
+    savefig(outfile+'.png')
+    close()
+
+def binplot(freq, dfreq, pds, dpds, outfile='binnedpds'):
+    
+    clf()
+    errorbar(freq, pds, xerr=dfreq, yerr=dpds, marker='.', mec='k', mfc='k', c='k')
+    xscale('log') ; yscale('log')
+    ylabel('PDS') ; xlabel('$f$, Hz')
+    savefig(outfile+'.png')
+    close()
+    
+def dynspec(t2,binfreq2, pds2, outfile='flux_dyns'):
+    lpds=(pds2)
+    lmin=lpds[pds2>0.].min() ; lmax=lpds.max()
+    clf()
+    pcolor(t2, binfreq2, (lpds), cmap='jet', vmin=lmin, vmax=lmax)
+    colorbar()
+    xlim(t2.min(), t2.max())
+    ylim(binfreq2.min(), binfreq2.max())
+    yscale('log')
+    xlabel(r'$t$, s')
+    ylabel('$f$, Hz')
+    savefig(outfile+'.png')
     close()

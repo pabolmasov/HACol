@@ -1,0 +1,15 @@
+To run the code, make sure you have python3 (checked for python3.6) and
+ipython. The main
+file is tire_new.py, and the main procedure is alltire(). Tune all the
+global parameters in globals.py and then run your ipython or python. From
+ipython, compile the code
+> %run tire_new
+and then run the main routine
+> alltire()
+if everything is fine, the directory should immediately start filling with
+files like tireout..png and tireout..dat containing the snapshots of the
+simulation. Also, current total flux (namely, luminosity in L_Edd/4\pi units)
+will be writted to "flux.dat".
+
+I have not set the code up without ipython, certain libraries like scipy are
+not available then. 

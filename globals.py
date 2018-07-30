@@ -15,7 +15,7 @@ mfloor=1e-25  # crash floor for mass per unit length
 rhofloor=1e-25 # crash floor for density
 ufloor=1e-25 # crash floor for energy density
 afac=0.5 # part of the longitudes subtended by the flow
-re = 123. * ((b12*rstar**3)**2/mdot)**(2./7.)*m1**(-4./7.) # magnetospheric radius
+re = 123. * ((b12*rstar**3)**2/mdot)**(2./7.)*m1**(-1./7.) # magnetospheric radius
 dre=minimum(mdot, re*0.5) # radial extent of the flow at re
 print("magnetospheric radius re = "+str(re))
 print("Delta re = "+str(dre))
@@ -26,7 +26,7 @@ dtout=50. # output time step in tscales
 omega=0.9*re**(-1.5) # in Keplerian units on the outer rim
 umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accretor
 pmagout=umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc
-vout=-0.25*pmagout*4.*pi*re*dre/mdot # initial poloidal velocity at the outer boundary 
+vout=-0.25*pmagout*4.*pi*re*dre/mdot # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 xirad=0.25 # radiation loss scaling
 
