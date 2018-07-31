@@ -26,9 +26,10 @@ dtout=50. # output time step in tscales
 omega=0.9*re**(-1.5) # in Keplerian units on the outer rim
 umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accretor
 pmagout=umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc
-vout=-0.25*pmagout*4.*pi*re*dre/mdot # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+vout=-0.25*pmagout*4.*pi*re*dre*afac/mdot # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 xirad=0.25 # radiation loss scaling
 
-ifplot=True
+ifplot = True
+plotalias = 10 # plot every Nth output step 
 
