@@ -18,7 +18,9 @@ not available then.
 
 OUTPUTS
 
-So far, it produces multiple structure snapshots "tireout*.dat" containing density, velocity, and energy density as functions of length along the field line. Also, total luminosity is written in "flux.dat" as a function of time. 
+So far, if "ifhdf" flag is False in globals.py, it produces multiple structure snapshots "tireout*.dat" containing density, velocity, and energy density as functions of length along the field line. Also, total luminosity is written in "flux.dat" as a function of time. 
+
+Alternatively, if "ifhdf" is True, it will write the same information in the HDF5 file "tireout.hdf5". Individual snapshots are stored as individual datasets "entry000000", "entry000001" etc. 
 
 POSSIBLE PROBLEMS
 
