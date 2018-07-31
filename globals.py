@@ -30,6 +30,9 @@ vout=-0.25*pmagout*4.*pi*re*dre*afac/mdot # initial poloidal velocity at the out
 
 xirad=0.25 # radiation loss scaling
 
+# plotting options:
 ifplot = True
 plotalias = 10 # plot every Nth output step 
 
+# output options:
+ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)

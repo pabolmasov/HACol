@@ -12,6 +12,7 @@ rc('text', usetex=True)
 # #add amsmath to the preamble
 matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
+import hdfoutput as hdf
 from globals import *
 
 close('all')
@@ -92,3 +93,14 @@ def dynspec(t2,binfreq2, pds2, outfile='flux_dyns'):
     ylabel('$f$, Hz')
     savefig(outfile+'.png')
     close()
+
+####################
+def postplot(hname, nentry):
+    '''
+    reading and plotting a single snapshot number "nentry" 
+    taken from the HDF output "hname"
+    '''
+    entryname, t, l, r, sth, rho, u, v = hdf.read(hname, nentry)
+    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
+    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
+    
