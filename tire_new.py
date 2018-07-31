@@ -6,6 +6,7 @@ import numpy.random
 import os
 import os.path
 
+import hdfoutput as hdf
 from globals import *
 if ifplot:
     import plots
@@ -161,6 +162,9 @@ def alltire():
 
     ltot=0. # estimated total luminosity
     fflux=open('flux.dat', 'w')
+    if(ifhdf):
+        hname = 'tireout.hdf5'
+        hfile = hdf.init(hname, l, r, sth, cth, m1, mdot, eta, afac, re, dre, omega)
     
     while(t<tmax):
         # first make a preliminary half-step
@@ -203,15 +207,20 @@ def alltire():
             print("ltot = "+str(ltot))
             print("energy = "+str(trapz(e[1:-1], x=l[1:-1])))
             print("momentum = "+str(trapz(s[1:-1], x=l[1:-1])))
-            # ascii output:
-            fname='tireout{:05d}'.format(nout)+'.dat'
-            fstream=open(fname, 'w')
-            fstream.write('# t = '+str(t)+'\n')
-            fstream.write('# format: l -- rho -- v -- u\n')
-            for k in arange(nx):
-                fstream.write(str(l[k])+' 'str(rho[k])+''+str(v[k])+' '+str(u[k])+'\n')
-            fstream.close()
+            if(ifhdf):
+                hdf.dump(hfile, nout, t, rho, v, u)
+            else:
+                # ascii output:
+                fname='tireout{:05d}'.format(nout)+'.dat'
+                fstream=open(fname, 'w')
+                fstream.write('# t = '+str(t)+'\n')
+                fstream.write('# format: l -- rho -- v -- u\n')
+                for k in arange(nx):
+                    fstream.write(str(l[k])+' '+str(rho[k])+''+str(v[k])+' '+str(u[k])+'\n')
+                fstream.close()
             nout+=1
     fflux.close()
+    if(ifhdf):
+        hdf.close(hfile)
 # if you want to make a movie of how the velocity changes with time:
 # ffmpeg -f image2 -r 35 -pattern_type glob -i 'vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
