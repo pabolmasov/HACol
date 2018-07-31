@@ -196,7 +196,7 @@ def alltire():
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
             fflux.flush()
             #            oneplot(r, rho, name='rhotie{:05d}'.format(nout))
-            if ifplot:
+            if ifplot & (nout%plotalias == 0):
                 plots.uplot(r, u, rho, sth, v, name='utie{:05d}'.format(nout))
                 plots.vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
             print("mass = "+str(trapz(m[1:-1], x=l[1:-1])))
@@ -209,7 +209,7 @@ def alltire():
             fstream.write('# t = '+str(t)+'\n')
             fstream.write('# format: l -- rho -- v -- u\n')
             for k in arange(nx):
-                fstream.write(str(l[k])+' '+str(v[k])+' '+str(u[k])+'\n')
+                fstream.write(str(l[k])+' 'str(rho[k])+''+str(v[k])+' '+str(u[k])+'\n')
             fstream.close()
             nout+=1
     fflux.close()
