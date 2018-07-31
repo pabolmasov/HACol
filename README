@@ -1,3 +1,5 @@
+
+INSTALLATION AND RUNNING
 To run the code, make sure you have python3 (checked for python3.6) and
 ipython. The main
 file is tire_new.py, and the main procedure is alltire(). Tune all the
@@ -13,3 +15,12 @@ will be writted to "flux.dat".
 
 I have not set the code up without ipython, certain libraries like scipy are
 not available then. 
+
+OUTPUTS
+
+So far, it produces multiple structure snapshots "tireout*.dat" containing density, velocity, and energy density as functions of length along the field line. Also, total luminosity is written in "flux.dat" as a function of time. 
+
+POSSIBLE PROBLEMS
+
+As the code produces a lot of individual output files, you may encounter problems with file indexers. Notably, baloo file extractor easily hangs the system, hence it is instructive to turn it off by "balooctl disable" in the session you are running. 
+
