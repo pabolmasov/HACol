@@ -26,3 +26,4 @@ POSSIBLE PROBLEMS
 
 As the code produces a lot of individual output files, you may encounter problems with file indexers. Notably, baloo file extractor easily hangs the system, hence it is instructive to turn it off by "balooctl disable" in the session you are running. 
 
+The code is designed in a way to make the results accessable as soon as possible. You do not need to wait until the simulation ends to read and reduce the output entries. If you need to kill the code during the simulation, all the results would be saved. The output files are not accessable for reading from the same ipython session then. 
