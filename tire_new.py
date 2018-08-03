@@ -116,7 +116,7 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     # enforcing boundary conditions:
     m1[0] = m[0] + (-(s_half[0]-0.)/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero
     m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot
-    edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*vout*pmagout # energy flux from the right boundary
+    edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*vout*pmagout # energy flux from the right boundary
     s1[-1] = -mdot
     e1[0] = e[0]  + (-(fe_half[0]-0.)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
     e1[-1] = e[-1]  +(-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
@@ -132,7 +132,7 @@ def alltire():
     
     sthd=1./sqrt(1.+(dre/re)**2) # initial sin(theta)
     rmax=re*sthd # slightly less then re 
-    r=(rmax-rstar)**(arange(nx0)/double(nx0-1))+rstar # very fine radial mesh
+    r=(((rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*rstar # very fine radial mesh
     sth, cth, sina, cosa, across, l = geometry(r) # radial-equidistant mesh
     luni=linspace(l.min(), l.max(), nx) # l-equidistant mesh
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
@@ -147,7 +147,7 @@ def alltire():
     
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-    vinit=vout*(r-rstar)/(r+rstar)*sqrt(re/re) # initial velocity
+    vinit=vout*(r-rstar)/(r+rstar)*sqrt(re/r) # initial velocity
     m=mdot/abs(vinit) # mass distribution
     m0=m 
     s+=vinit*m
@@ -175,7 +175,7 @@ def alltire():
         #        print(e)
         #        ii=input('m')
         rho_half = (rho[1:]+rho[:-1])/2. ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2. 
-        dul_half = across_half/(rho_half+1.)*(u[1:]-u[:-1])/(l[1:]-l[:-1]) # radial diffusion
+        dul_half = across_half/(rho_half+1.)*(u[1:]-u[:-1])/(l[1:]-l[:-1])/3. # radial diffusion
         dul=rho*0.
         dul[1:-1]=(dul_half[1:]+dul_half[:-1])/2. # we need to smooth it for stability
         s, p, fe = fluxes(rho, v, u, across, r, sth)
