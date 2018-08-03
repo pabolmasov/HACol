@@ -147,7 +147,7 @@ def alltire():
     
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-    vinit=vout*(r-rstar)/(r+rstar)*sqrt(re/r) # initial velocity
+    vinit=vout*(r-rstar)/(r+rstar)*sqrt(re/re) # initial velocity
     m=mdot/abs(vinit) # mass distribution
     m0=m 
     s+=vinit*m

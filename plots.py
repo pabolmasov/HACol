@@ -49,6 +49,7 @@ def vplot(x, v, cs, name='outplot'):
     '''
     ioff()
     clf()
+    plot(x, v*0., 'k:')
     plot(x, v, 'k', label='$v/c$',linewidth=2)
     plot(x, cs, 'g', label=r'$\pm c_{\rm s}/c$')
     plot(x, -cs, 'g')
@@ -74,7 +75,7 @@ def pdsplot(freq, pds, outfile='pds'):
 def binplot(freq, dfreq, pds, dpds, outfile='binnedpds'):
     
     clf()
-    errorbar(freq, pds, xerr=dfreq, yerr=dpds, marker='.', mec='k', mfc='k', c='k')
+    errorbar(freq, pds, xerr=dfreq, yerr=dpds, fmt='.k')
     xscale('log') ; yscale('log')
     ylabel('PDS') ; xlabel('$f$, Hz')
     savefig(outfile+'.png')
@@ -104,3 +105,9 @@ def postplot(hname, nentry):
     uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
     vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
     
+def multiplots(hname, n1, n2):
+    '''
+    invoking postplot for a number of frames
+    '''
+    for k in arange(n2-n1)+n1:
+        postplot(hname, k)
