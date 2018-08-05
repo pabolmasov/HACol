@@ -116,12 +116,12 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     # enforcing boundary conditions:
     m1[0] = m[0] + (-(s_half[0]-0.)/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero
     m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot
-    edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*vout*pmagout # energy flux from the right boundary
+    edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*re*dre*afac*vout*pmagout # energy flux from the right boundary
+    s1[0]=0.
     s1[-1] = -mdot
     e1[0] = e[0]  + (-(fe_half[0]-0.)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
     e1[-1] = e[-1]  +(-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
-    s1[0]=0.
     return m1, s1, e1
 
 #########################################################################################
@@ -148,7 +148,7 @@ def alltire():
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
     vinit=vout*(r-rstar)/(r+rstar)*sqrt(re/r) # initial velocity
-    m=mdot/abs(vinit) # mass distribution
+    m=mdot/abs(vinit)*exp(-(r+rstar)/(r-rstar)) # mass distribution
     m0=m 
     s+=vinit*m
     e+=m*(pmagout/(m/across)[-1]*3.+vinit**2/2.-1./r-0.5*(r*sth*omega)**2)
@@ -162,6 +162,7 @@ def alltire():
 
     ltot=0. # estimated total luminosity
     fflux=open('flux.dat', 'w')
+    ftot=open('totals.dat', 'w')
     if(ifhdf):
         hname = 'tireout.hdf5'
         hfile = hdf.init(hname, l, r, sth, cth, m1, mdot, eta, afac, re, dre, omega)
@@ -203,10 +204,15 @@ def alltire():
             if ifplot & (nout%plotalias == 0):
                 plots.uplot(r, u, rho, sth, v, name='utie{:05d}'.format(nout))
                 plots.vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
-            print("mass = "+str(trapz(m[1:-1], x=l[1:-1])))
+            mtot=trapz(m[1:-1], x=l[1:-1])
+            etot=trapz(e[1:-1], x=l[1:-1])
+            print("mass = "+str(mtot))
             print("ltot = "+str(ltot))
-            print("energy = "+str(trapz(e[1:-1], x=l[1:-1])))
+            print("energy = "+str(etot))
             print("momentum = "+str(trapz(s[1:-1], x=l[1:-1])))
+            
+            ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
+            ftot.flush()
             if(ifhdf):
                 hdf.dump(hfile, nout, t, rho, v, u)
             else:
@@ -220,6 +226,7 @@ def alltire():
                 fstream.close()
             nout+=1
     fflux.close()
+    ftot.close()
     if(ifhdf):
         hdf.close(hfile)
 # if you want to make a movie of how the velocity changes with time:

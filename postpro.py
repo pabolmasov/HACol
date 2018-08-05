@@ -57,11 +57,11 @@ def dynspec(infile='flux', ntimes=10, nbins=10):
     tbin=linspace(t.min(), t.max(), ntimes+1)
     tcenter=(tbin[1:]+tbin[:-1])/2.
     freq1=1./(t.max())*double(ntimes)/2. ; freq2=freq1*double(nsize)/double(ntimes)/2.
-    binfreq=linspace(freq1, freq2, nbins+1)
+    binfreq=logspace(log10(freq1), log10(freq2), num=nbins+1)
     binfreqc=(binfreq[1:]+binfreq[:-1])/2.
     pds2=zeros([ntimes, nbins]) ;   dpds2=zeros([ntimes, nbins])
     t2=zeros([ntimes+1, nbins+1], dtype=double)
-    nbin=zeros([ntimes+1, nbins+1], dtype=double)
+    nbin=zeros([ntimes, nbins], dtype=double)
     binfreq2=zeros([ntimes+1, nbins+1], dtype=double)
     fdyns=open(infile+'_dyns.dat', 'w')
     for kt in arange(ntimes):
@@ -83,4 +83,4 @@ def dynspec(infile='flux', ntimes=10, nbins=10):
             fdyns.write(str(tcenter[kt])+' '+str(binfreq[kb])+' '+str(binfreq[kb+1])+' '+str(pds2[kt,kb])+' '+str(dpds2[kt,kb])+" "+str(nbin[kt,kb])+"\n")
     fdyns.close()
     print(t2.max())
-    plots.dynspec(t2,binfreq2, pds2, outfile=infile+'_dyns')
+    plots.dynspec(t2,binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)

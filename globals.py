@@ -7,7 +7,7 @@ nx0=nx*20 # first we make a finer mesh for interpolation
 
 b12=10.
 m1=1.4
-mdot=10.*4.*pi # mass accretion rate
+mdot=1.*4.*pi # mass accretion rate
 rstar=6. # GM/c**2 units
 # vout=-0.5/sqrt(re) # initial poloidal velocity at the outer boundary 
 eta=0.0 # self-illumination efficiency 
@@ -29,19 +29,20 @@ mdotscale=1.26492e16*m1 # G Msun / c kappa
 lscale=1.13685e37*m1 # G Msun c / kappa luminosity scale 
 #
 
-tmax=100./tscale # maximal time in tscales
-dtout=100. # output time step in tscales
+tmax=1000./tscale # maximal time in tscales
+dtout=0.01/tscale # output time step in tscales
 
-omega=0.0*re**(-1.5) # in Keplerian units on the outer rim
+omega=0.9*re**(-1.5) # in Keplerian units on the outer rim
+print("spin period "+str(2.*pi/omega*tscale))
 umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accretor
 pmagout=umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc
-vout=-0.5*pmagout*4.*pi*re*dre*afac/mdot # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+vout=-.5*pmagout*4.*pi*re*dre*afac/mdot # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 xirad=0.25 # radiation loss scaling
 
 # plotting options:
 ifplot = True
-plotalias = 50 # plot every Nth output step 
+plotalias = 10 # plot every Nth output step 
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)

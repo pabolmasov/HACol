@@ -37,6 +37,7 @@ def uplot(r, u, rho, sth, v, name='outplot'):
     plot(r, -B, 'g', label='$-B$')
     #    plot(x, y0, 'b')
     #    xscale('log')
+    ylim(umag*((rstar/r)**6).min(), umag)
     xlabel('$r$, $GM/c^2$ units')
     yscale('log')
     xscale('log')    
@@ -81,14 +82,20 @@ def binplot(freq, dfreq, pds, dpds, outfile='binnedpds'):
     savefig(outfile+'.png')
     close()
     
-def dynspec(t2,binfreq2, pds2, outfile='flux_dyns'):
-    lpds=(pds2)
-    lmin=lpds[pds2>0.].min() ; lmax=lpds.max()
+def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None):
+
+    nbin0=2
+    
+    lpds=log10(pds2)
+    lmin=lpds[nbin>nbin0].min() ; lmax=lpds[nbin>nbin0].max()
+    binfreqc=(binfreq2[1:,1:]+binfreq2[1:,:-1])/2.
+    fmin=binfreqc[nbin>nbin0].min()
+    fmax=binfreqc[nbin>nbin0].max()
     clf()
     pcolor(t2, binfreq2, (lpds), cmap='jet', vmin=lmin, vmax=lmax)
     colorbar()
     xlim(t2.min(), t2.max())
-    ylim(binfreq2.min(), binfreq2.max())
+    ylim(fmin, fmax)
     yscale('log')
     xlabel(r'$t$, s')
     ylabel('$f$, Hz')
