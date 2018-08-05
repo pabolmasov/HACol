@@ -3,6 +3,7 @@ from matplotlib import rc
 from matplotlib import axes
 from numpy import *
 from pylab import *
+from scipy.integrate import cumtrapz
 
 #Uncomment the following if you want to use LaTeX in figures 
 rc('font',**{'family':'serif'})
@@ -118,3 +119,18 @@ def multiplots(hname, n1, n2):
     '''
     for k in arange(n2-n1)+n1:
         postplot(hname, k)
+
+def energytest(fluxfile='flux', totfile='totals'):
+    lines = loadtxt(fluxfile+".dat", comments="#", delimiter=" ", unpack=False)
+    tflux = lines[:,0]/tscale ; flu=lines[:,1]
+    lines = loadtxt(totfile+".dat", comments="#", delimiter=" ", unpack=False)
+    tene = lines[:,0]/tscale ; ene=lines[:,2] ; mass=lines[:,1]
+    enlost = cumtrapz(flu, x=tflux, initial=0.)
+    clf()
+    plot(tflux*tscale, enlost, color='k')
+    plot(tene*tscale, ene, color='r')
+    plot(tene*tscale, mass*1e-3, color='g')
+    xlabel('t')
+    ylabel('energy')
+    savefig('energytest.png')
+    close()

@@ -65,7 +65,7 @@ def solver_hlle(f, q, sl, sr):
     flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
     '''
     #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
-    ds=sr[1:]-sl[:-1]
+    #    ds=sr[1:]-sl[:-1]
     wpos=where(ds>0.)
     fhalf=(f[1:]+f[:-1])/2.
     if(size(wpos)>0):
@@ -82,7 +82,7 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     '''
     sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     tau = rho*across/(2.*r*sth)
-    gamedd=eta * ltot / tau # so far turned off
+    gamedd=eta * ltot / tau 
     force=(-sinsum/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across
     qloss=u/(tau*xirad+1.)*r*2.*sth*afac
     #    qloss*=0.
@@ -134,21 +134,27 @@ def alltire():
     rmax=re*sthd # slightly less then re 
     r=(((rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*rstar # very fine radial mesh
     sth, cth, sina, cosa, across, l = geometry(r) # radial-equidistant mesh
-    luni=linspace(l.min(), l.max(), nx) # l-equidistant mesh
+    l += r.min() # we are starting from a finite radius
+    luni=exp(linspace(log(l.min()), log(l.max()), nx, endpoint=False)) # log(l)-equidistant mesh
+    l -= r.min() ; luni -= r.min()
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
+    print("r = "+str(r))
+    print("l = "+str(l))
+    print("luni = "+str(luni))
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     sth, cth, sina, cosa, across, l = geometry(rnew, writeout='geo.dat') # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
     r_half=rfun(luni_half) # half-step radial coordinates
     sth_half, cth_half, sina_half, cosa_half, across_half, l_half = geometry(r_half) # mid-step geometry in r
     l_half+=l[1]/2. # mid-step mesh starts halfstep later
-    print("halfstep l correction "+str((l_half-luni_half).std())+"\n")
-    
+#    print("halfstep l correction "+str((l_half-luni_half).std())+"\n")
+#    print("r mesh: "+str(r))
+#    ii=input("r")
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
     vinit=vout*(r-rstar)/(r+rstar)*sqrt(re/r) # initial velocity
-    m=mdot/abs(vinit)*exp(-(r+rstar)/(r-rstar)) # mass distribution
+    m=mdot/abs(vinit) # mass distribution
     m0=m 
     s+=vinit*m
     e+=m*(pmagout/(m/across)[-1]*3.+vinit**2/2.-1./r-0.5*(r*sth*omega)**2)
