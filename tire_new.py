@@ -237,3 +237,4 @@ def alltire():
         hdf.close(hfile)
 # if you want to make a movie of how the velocity changes with time:
 # ffmpeg -f image2 -r 35 -pattern_type glob -i 'vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
+#alltire()

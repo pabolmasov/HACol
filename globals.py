@@ -26,7 +26,8 @@ rscale=1.47676e5*m1 # GMsun/c**2
 rhoscale=1.93474e-05/m1 # c**2 / GMsun kappa, for kappa=0.35 (Solar metallicity, complete ionization)
 uscale=1.73886e16/m1 # c**4/GMsun kappa
 mdotscale=1.26492e16*m1 # G Msun / c kappa
-lscale=1.13685e37*m1 # G Msun c / kappa luminosity scale 
+lscale=1.13685e37*m1 # G Msun c / kappa luminosity scale
+massscale=6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 #
 
 tmax=1000./tscale # maximal time in tscales
