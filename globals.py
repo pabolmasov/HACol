@@ -2,12 +2,12 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=3000 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
 
 b12=10.
 m1=1.4
-mdot=1.*4.*pi # mass accretion rate
+mdot=100.*4.*pi # mass accretion rate
 rstar=6. # GM/c**2 units
 # vout=-0.5/sqrt(re) # initial poloidal velocity at the outer boundary 
 eta=0.0 # self-illumination efficiency 
@@ -15,7 +15,7 @@ mfloor=1e-25  # crash floor for mass per unit length
 rhofloor=1e-25 # crash floor for density
 ufloor=1e-25 # crash floor for energy density
 afac=0.5 # part of the longitudes subtended by the flow
-re = 122. * ((b12*rstar**3)**2/mdot)**(2./7.)*m1**(2./7.) # magnetospheric radius
+re = 122.4 * ((b12*rstar**3)**2/mdot)**(2./7.)*m1**(2./7.) # magnetospheric radius
 dre=minimum(1.5*mdot/(4.*pi), re*0.5) # radial extent of the flow at re
 print("magnetospheric radius re = "+str(re))
 print("Delta re = "+str(dre))
