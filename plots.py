@@ -129,7 +129,7 @@ def energytest(fluxfile='flux', totfile='totals'):
     clf()
     plot(tflux*tscale, enlost, color='k')
     plot(tene*tscale, ene, color='r')
-    plot(tene*tscale, mass*1e-3, color='g')
+    plot(tene*tscale, (mass-mass[0])*0.04, color='g')
     xlabel('t')
     ylabel('energy')
     savefig('energytest.png')

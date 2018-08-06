@@ -65,11 +65,11 @@ def solver_hlle(f, q, sl, sr):
     flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
     '''
     #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
-    #    ds=sr[1:]-sl[:-1]
+    ds=sr[1:]-sl[:-1]
     wpos=where(ds>0.)
     fhalf=(f[1:]+f[:-1])/2.
     if(size(wpos)>0):
-        fhalf[wpos] = ((sr[1:]*f[:-1]-sl[:-1]*f[1:]+sl[:-1]*sr[1:]*(q[1:]-q[:-1]))/(sr[1:]-sl[:-1]))[wpos] # classic HLLE
+        fhalf[wpos] = ((sr[1:]*f[:-1]-sl[:-1]*f[1:]+sl[:-1]*sr[1:]*(q[1:]-q[:-1]))/ds)[wpos] # classic HLLE
     return fhalf
 
 def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
@@ -81,10 +81,10 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     outputs: dm, ds, de, and separately the amount of energy radiated per unit length per unit time ("flux")
     '''
     sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
-    tau = rho*across/(2.*r*sth)
+    tau = rho*across/(4.*pi*r*sth)
     gamedd=eta * ltot / tau 
     force=(-sinsum/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across
-    qloss=u/(tau*xirad+1.)*r*2.*sth*afac
+    qloss=u/(tau*xirad+1.)*r*4.*pi*sth*afac
     #    qloss*=0.
         
     work=v*force
@@ -139,9 +139,9 @@ def alltire():
     l -= r.min() ; luni -= r.min()
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
-    print("r = "+str(r))
-    print("l = "+str(l))
-    print("luni = "+str(luni))
+    #  print("r = "+str(r))
+    #  print("l = "+str(l))
+    #  print("luni = "+str(luni))
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     sth, cth, sina, cosa, across, l = geometry(rnew, writeout='geo.dat') # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
