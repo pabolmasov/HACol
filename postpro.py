@@ -47,7 +47,7 @@ def pds(infile='flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='flux', ntimes=10, nbins=10):
+def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
     '''
@@ -57,7 +57,10 @@ def dynspec(infile='flux', ntimes=10, nbins=10):
     tbin=linspace(t.min(), t.max(), ntimes+1)
     tcenter=(tbin[1:]+tbin[:-1])/2.
     freq1=1./(t.max())*double(ntimes)/2. ; freq2=freq1*double(nsize)/double(ntimes)/2.
-    binfreq=logspace(log10(freq1), log10(freq2), num=nbins+1)
+    if(binlogscale):
+        binfreq=logspace(log10(freq1), log10(freq2), num=nbins+1)
+    else:
+        binfreq=linspace(freq1, freq2, nbins+1)
     binfreqc=(binfreq[1:]+binfreq[:-1])/2.
     pds2=zeros([ntimes, nbins]) ;   dpds2=zeros([ntimes, nbins])
     t2=zeros([ntimes+1, nbins+1], dtype=double)
@@ -65,7 +68,7 @@ def dynspec(infile='flux', ntimes=10, nbins=10):
     binfreq2=zeros([ntimes+1, nbins+1], dtype=double)
     fdyns=open(infile+'_dyns.dat', 'w')
     for kt in arange(ntimes):
-        wt=(t<tbin[kt+1]) & (t>tbin[kt])
+        wt=(t<tbin[kt+1]) & (t>=tbin[kt])
         lt=l[wt]
         fsp=fft.rfft((lt-lt.mean())/lt.std())
         nt=size(lt)

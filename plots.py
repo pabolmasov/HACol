@@ -126,10 +126,13 @@ def energytest(fluxfile='flux', totfile='totals'):
     lines = loadtxt(totfile+".dat", comments="#", delimiter=" ", unpack=False)
     tene = lines[:,0]/tscale ; ene=lines[:,2] ; mass=lines[:,1]
     enlost = cumtrapz(flu, x=tflux, initial=0.)
+    Neff=1./rstar
     clf()
     plot(tflux*tscale, enlost, color='k')
     plot(tene*tscale, ene, color='r')
-    plot(tene*tscale, (mass-mass[0])*0.1, color='g')
+    plot(tene*tscale, (mass-mass[0])*Neff, color='g')
+    plot(tene*tscale, tene*mdot*Neff, color='g', linestyle='dotted')
+    ylim(ene.min(), (ene+enlost).max())
     xlabel('t')
     ylabel('energy')
     savefig('energytest.png')

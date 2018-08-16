@@ -2,12 +2,14 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=3000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
+logmesh=False
 
-b12=10.
+b12=100.
 m1=1.4
-mdot=100.*4.*pi # mass accretion rate
+mdot=1000.*4.*pi # mass accretion rate
+accstop=False # true if we are going to zero the mass and energy fluxes through the outer boundary in actual equations
 rstar=6. # GM/c**2 units
 # vout=-0.5/sqrt(re) # initial poloidal velocity at the outer boundary 
 eta=0.0 # self-illumination efficiency 
