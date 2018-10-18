@@ -11,6 +11,10 @@ from globals import *
 if ifplot:
     import plots
 
+from timer import Timer
+timer = Timer(["total", "step", "io"],
+              ["main", "flux", "solver", "toprim", "velocity", "sources"])
+
 ###########################################################################################
 def geometry(r, writeout=None):
     '''
@@ -59,18 +63,30 @@ def fluxes(rho, v, u, across, r, sth):
     #    s[0]=0. ; p[0]=u[0]/3.*across[0]; fe[0]=0.
     return s, p, fe
 
-def solver_hlle(f, q, sl, sr):
+def solver_hlle(fs, qs, sl, sr):
     '''
     makes a proxy for a half-step flux, HLLE-like
     flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
     '''
     #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
+    f1,f2,f3 = fs  ;  q1,q2,q3 = qs
     ds=sr[1:]-sl[:-1]
-    wpos=where(ds>0.)
-    fhalf=(f[1:]+f[:-1])/2.
-    if(size(wpos)>0):
-        fhalf[wpos] = ((sr[1:]*f[:-1]-sl[:-1]*f[1:]+sl[:-1]*sr[1:]*(q[1:]-q[:-1]))/ds)[wpos] # classic HLLE
-    return fhalf
+    wreg=where((sr[1:]>0.)&(sl[:-1]<0.))
+    wleft=where(sr[1:]<0.) ; wright=where(sl[:-1]>0.)
+    fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
+    if(size(wreg)>0):
+        fhalf1[wreg] = ((sr[1:]*f1[:-1]-sl[:-1]*f1[1:]+sl[:-1]*sr[1:]*(q1[1:]-q1[:-1]))/ds)[wreg] # classic HLLE
+        fhalf2[wreg] = ((sr[1:]*f2[:-1]-sl[:-1]*f2[1:]+sl[:-1]*sr[1:]*(q2[1:]-q2[:-1]))/ds)[wreg] # classic HLLE
+        fhalf3[wreg] = ((sr[1:]*f3[:-1]-sl[:-1]*f3[1:]+sl[:-1]*sr[1:]*(q3[1:]-q3[:-1]))/ds)[wreg] # classic HLLE
+    if(size(wleft)>0):
+        fhalf1[wleft]=(f1[:-1])[wleft]
+        fhalf2[wleft]=(f2[:-1])[wleft]
+        fhalf3[wleft]=(f3[:-1])[wleft]
+    if(size(wright)>0):
+        fhalf1[wright]=(f1[1:])[wright]
+        fhalf2[wright]=(f2[1:])[wright]
+        fhalf3[wright]=(f3[1:])[wright]
+    return fhalf1, fhalf2, fhalf3
 
 def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     '''
@@ -80,15 +96,14 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     energy losses through the surface
     outputs: dm, ds, de, and separately the amount of energy radiated per unit length per unit time ("flux")
     '''
-    sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
-    tau = rho*across/(4.*pi*r*sth)
-    gamedd=eta * ltot / tau 
-    force=(-sinsum/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across
-    qloss=u/(tau*xirad+1.)*r*4.*pi*sth*afac
-    #    qloss*=0.
-        
-    work=v*force
-    return rho*0., force, work-qloss, qloss
+    #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
+    tau = rho*across/(4.*pi*r*sth*afac)
+    gamedd = eta * ltot / tau 
+    force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across
+    qloss = u/(tau*xirad+0.)*4.*pi*r*sth*afac # optically thick regime
+    #    qloss*=0.       
+    #    work=v*force
+    return rho*0., force, v*force-qloss, qloss
 
 def toprim(m, s, e, across, r, sth):
     '''
@@ -114,12 +129,19 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     s1[1:-1] = s[1:-1]+ (-(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds[1:-1]) * dt 
     e1[1:-1] = e[1:-1]+ (-(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]) * dt
     # enforcing boundary conditions:
-    m1[0] = m[0] + (-(s_half[0]-0.)/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero
-    m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot
-    edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*re*dre*afac*vout*pmagout # energy flux from the right boundary
-    s1[0]=0.
-    s1[-1] = -mdot
-    e1[0] = e[0]  + (-(fe_half[0]-0.)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
+    m1[0] = m[0] + (-(s_half[0]-0.)/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero through the inner boundary
+    s1[0] = 0. # zero mass flux through the inner boundary
+    if(accstop):
+        m1[-1] = m[-1] + (-(0.-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to 0.
+    else:
+        m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot (global)
+    if(accstop):
+        edot = -4.*re*dre*afac*vout*pmagout
+        s1[-1] = 0. # zero mass flux through the outer boundary
+    else:
+        edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*re*dre*afac*vout*pmagout # energy flux from the right boundary
+        s1[-1] = -mdot
+    e1[0] = e[0] + (-(fe_half[0]-0.)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
     e1[-1] = e[-1]  +(-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     return m1, s1, e1
@@ -129,13 +151,17 @@ def alltire():
     '''
     the main routine bringing all together.
     '''
+    timer.start("total")
     
     sthd=1./sqrt(1.+(dre/re)**2) # initial sin(theta)
     rmax=re*sthd # slightly less then re 
     r=(((rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*rstar # very fine radial mesh
     sth, cth, sina, cosa, across, l = geometry(r) # radial-equidistant mesh
     l += r.min() # we are starting from a finite radius
-    luni=exp(linspace(log(l.min()), log(l.max()), nx, endpoint=False)) # log(l)-equidistant mesh
+    if(logmesh):
+        luni=exp(linspace(log(l.min()), log(l.max()), nx, endpoint=False)) # log(l)-equidistant mesh
+    else:
+        luni=linspace(l.min(), l.max(), nx, endpoint=False)
     l -= r.min() ; luni -= r.min()
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
@@ -157,7 +183,7 @@ def alltire():
     m=mdot/abs(vinit) # mass distribution
     m0=m 
     s+=vinit*m
-    e+=m*(pmagout/(m/across)[-1]*3.+vinit**2/2.-1./r-0.5*(r*sth*omega)**2)
+    e+=pmagout*across[-1]*3.+(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m
     
     dlmin=(l[1:]-l[:-1]).min()/2.
     dt = dlmin*0.5
@@ -171,37 +197,49 @@ def alltire():
     ftot=open('totals.dat', 'w')
     if(ifhdf):
         hname = 'tireout.hdf5'
-        hfile = hdf.init(hname, l, r, sth, cth, m1, mdot, eta, afac, re, dre, omega)
+        hfile = hdf.init(hname, l, r, sth, cth) # , m1, mdot, eta, afac, re, dre, omega)
     
+    timer.start("total")
     while(t<tmax):
         # first make a preliminary half-step
+        timer.start_comp("toprim")
         mprev=m ; sprev=s ; eprev=e
         rho, v, u = toprim(m, s, e, across, r, sth) # primitive from conserved
-        #        v=v/sqrt(1.+v**2) # try relativistic approach?
-        #        print(rho)
-        #        print(e)
-        #        ii=input('m')
+        timer.stop_comp("toprim")
+        timer.start_comp("flux")
         rho_half = (rho[1:]+rho[:-1])/2. ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2. 
         dul_half = across_half/(rho_half+1.)*(u[1:]-u[:-1])/(l[1:]-l[:-1])/3. # radial diffusion
         dul=rho*0.
         dul[1:-1]=(dul_half[1:]+dul_half[:-1])/2. # we need to smooth it for stability
         s, p, fe = fluxes(rho, v, u, across, r, sth)
         fe+=-dul # adding diffusive flux
-        wpos=where(rho>rhofloor)
-        vr=v*0. ; vl=v*0.
-        vr[wpos]=(v+1.)[wpos] ; vl[wpos]=(v-1.)[wpos]
-        s_half=solver_hlle(s, m, vl, vr)
-        p_half=solver_hlle(p, s, vl, vr)
-        fe_half=solver_hlle(fe, e, vl, vr)
-        dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa)
+        timer.stop_comp("flux")
+        timer.start_comp("velocity")
+        wpos=where((rho>rhofloor)&(u>ufloor))
+        vr=v*0.+1. ; vl=v*0.-1. ; cs=v*0.+1.
+        #        cs[wpos]=sqrt(4./3.*u[wpos]/rho[wpos])
+        vr[wpos]=(v+cs)[wpos] ; vl[wpos]=(v-cs)[wpos]
+        timer.stop_comp("velocity")
+        timer.start_comp("solver")
+        s_half, p_half, fe_half = solver_hlle([s, p, fe], [m, s, e], vl, vr)
+        #        p_half=solver_hlle(p, s, vl, vr)
+        #        fe_half=solver_hlle(fe, e, vl, vr)
+        timer.stop_comp("solver")
+        timer.start_comp("sources")
+        dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
         ltot=simps(flux[1:-1], x=l[1:-1])
+        timer.stop_comp("sources")
+        timer.start_comp("main")
         m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth)
+        timer.stop_comp("main")
+        timer.lap("step") 
         t+=dt
         if(isnan(rho.max()) | (rho.max() > 1e20)):
             print(m)
             print(s)
             return(1)
         if(t>=tstore):
+            timer.start("io")
             tstore+=dtout
             print("t = "+str(t*tscale)+"s")
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
@@ -210,8 +248,8 @@ def alltire():
             if ifplot & (nout%plotalias == 0):
                 plots.uplot(r, u, rho, sth, v, name='utie{:05d}'.format(nout))
                 plots.vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
-            mtot=trapz(m[1:-1], x=l[1:-1])
-            etot=trapz(e[1:-1], x=l[1:-1])
+            mtot=simps(m[1:-1], x=l[1:-1])
+            etot=simps(e[1:-1], x=l[1:-1])
             print("mass = "+str(mtot))
             print("ltot = "+str(ltot))
             print("energy = "+str(etot))
@@ -230,6 +268,15 @@ def alltire():
                 for k in arange(nx):
                     fstream.write(str(l[k])+' '+str(rho[k])+''+str(v[k])+' '+str(u[k])+'\n')
                 fstream.close()
+                     #print simulation run-time statistics
+            timer.stop("io")
+            timer.stats("step")
+            timer.stats("io")
+            timer.comp_stats()
+
+            timer.start("step") #refresh lap counter (avoids IO profiling)
+            timer.purge_comps()
+   
             nout+=1
     fflux.close()
     ftot.close()
@@ -237,4 +284,6 @@ def alltire():
         hdf.close(hfile)
 # if you want to make a movie of how the velocity changes with time:
 # ffmpeg -f image2 -r 35 -pattern_type glob -i 'vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
-#alltire()
+# alltire()
+
+# index "4" is currently for xirad=0.25
