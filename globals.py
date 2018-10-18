@@ -6,11 +6,13 @@ nx=3000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
 logmesh=False
 
-b12=100.
+b12=260.
 m1=1.4
-mdot=1000.*4.*pi # mass accretion rate
+mdot=1e4*4.*pi/m1 # mass accretion rate
+# 1e21g/s --> 10597.1*4.*pi
 accstop=False # true if we are going to zero the mass and energy fluxes through the outer boundary in actual equations
-rstar=6. # GM/c**2 units
+rstar=6.8/m1 # GM/c**2 units
+# 10km --> 6.77159 for 1Msun
 # vout=-0.5/sqrt(re) # initial poloidal velocity at the outer boundary 
 eta=0.0 # self-illumination efficiency 
 mfloor=1e-25  # crash floor for mass per unit length
@@ -35,7 +37,7 @@ massscale=6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 tmax=1000./tscale # maximal time in tscales
 dtout=0.01/tscale # output time step in tscales
 
-omega=0.9*re**(-1.5) # in Keplerian units on the outer rim
+omega=sqrt(0.6)*re**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale))
 umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accretor
 pmagout=umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc

@@ -1,10 +1,11 @@
 import h5py
+from globals import *
 
 def entryname(n):
     entry = str(n).rjust(6, '0') # allows for 6 positions (hundreds of thousand of entries)
     return entry
 
-def init(hname, l, r, sth, cth, m1, mdot, eta, afac, re, dre, omega):
+def init(hname, l, r, sth, cth): # , m1, mdot, eta, afac, re, dre, omega):
     '''
     writing globals and geometry to the output HDF5 file
     '''
@@ -17,6 +18,7 @@ def init(hname, l, r, sth, cth, m1, mdot, eta, afac, re, dre, omega):
     glo.attrs['re']      = re
     glo.attrs['dre']      = dre
     glo.attrs['omega']      = omega
+    glo.attrs['rstar']      = rstar
 
     geom = hfile.create_group("geometry")
     geom.create_dataset("l", data=l)
@@ -45,8 +47,13 @@ def close(hfile):
 #########################
 
 def read(hname, nentry):
+    '''
+    read a single entry from an HDF5
+    '''
     hfile = h5py.File(hname, "r")
     geom=hfile["geometry"]
+    glo=hfile["globals"]
+    rstar=glo.attrs["rstar"]
     entry = entryname(nentry)
     l=geom["l"][:]  ;  r=geom["r"][:] ;  sth=geom["sth"][:] # reading geometry
     data=hfile["entry"+entry]
@@ -54,4 +61,18 @@ def read(hname, nentry):
     t=data.attrs["t"]
     print("t="+str(t))
     hfile.close()
-    return entry, t, l, r, sth, rho, u, v 
+    return entry, t, l, r/rstar, sth, rho, u, v 
+
+def toasc(hname='tireout.hdf5', nentry=0):
+    '''
+    convert a single HDF5 entry to an ascii table
+    '''
+    entry, t, l, r, sth, rho, u, v = read(hname, nentry)
+
+    nr=size(r)
+    # write an ascii file
+    fout = open(hname+'_'+entry, 'w')
+    for k in arange(nr):
+        fout.write(str(r[k])+" "+str(rho[k])+" "+str(v[k])+" "+str(u[k])+"\n")
+    fout.close()
+    

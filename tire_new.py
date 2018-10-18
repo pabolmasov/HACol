@@ -98,11 +98,11 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     '''
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     tau = rho*across/(4.*pi*r*sth*afac)
-    gamedd=eta * ltot / tau 
-    force=(-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across
-    qloss=u/(tau*xirad+1.)*4.*pi*r*sth*afac
+    gamedd = eta * ltot / tau 
+    force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across
+    qloss = u/(tau*xirad+0.)*4.*pi*r*sth*afac # optically thick regime
     #    qloss*=0.       
-#    work=v*force
+    #    work=v*force
     return rho*0., force, v*force-qloss, qloss
 
 def toprim(m, s, e, across, r, sth):
@@ -129,19 +129,19 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     s1[1:-1] = s[1:-1]+ (-(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds[1:-1]) * dt 
     e1[1:-1] = e[1:-1]+ (-(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]) * dt
     # enforcing boundary conditions:
-    m1[0] = m[0] + (-(s_half[0]-0.)/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero
+    m1[0] = m[0] + (-(s_half[0]-0.)/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero through the inner boundary
+    s1[0] = 0. # zero mass flux through the inner boundary
     if(accstop):
         m1[-1] = m[-1] + (-(0.-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to 0.
     else:
-        m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot
-        s1[0]=0.
+        m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot (global)
     if(accstop):
         edot = -4.*re*dre*afac*vout*pmagout
-        s1[-1] = 0.
+        s1[-1] = 0. # zero mass flux through the outer boundary
     else:
         edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*re*dre*afac*vout*pmagout # energy flux from the right boundary
         s1[-1] = -mdot
-    e1[0] = e[0]  + (-(fe_half[0]-0.)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
+    e1[0] = e[0] + (-(fe_half[0]-0.)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
     e1[-1] = e[-1]  +(-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     return m1, s1, e1
@@ -152,7 +152,7 @@ def alltire():
     the main routine bringing all together.
     '''
     timer.start("total")
-
+    
     sthd=1./sqrt(1.+(dre/re)**2) # initial sin(theta)
     rmax=re*sthd # slightly less then re 
     r=(((rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*rstar # very fine radial mesh
@@ -197,7 +197,7 @@ def alltire():
     ftot=open('totals.dat', 'w')
     if(ifhdf):
         hname = 'tireout.hdf5'
-        hfile = hdf.init(hname, l, r, sth, cth, m1, mdot, eta, afac, re, dre, omega)
+        hfile = hdf.init(hname, l, r, sth, cth) # , m1, mdot, eta, afac, re, dre, omega)
     
     timer.start("total")
     while(t<tmax):
@@ -285,3 +285,5 @@ def alltire():
 # if you want to make a movie of how the velocity changes with time:
 # ffmpeg -f image2 -r 35 -pattern_type glob -i 'vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
 # alltire()
+
+# index "4" is currently for xirad=0.25
