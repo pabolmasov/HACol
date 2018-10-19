@@ -100,7 +100,7 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     tau = rho*across/(4.*pi*r*sth*afac)
     gamedd = eta * ltot / tau 
     force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across
-    qloss = u/(tau*xirad+0.)*4.*pi*r*sth*afac # optically thick regime
+    qloss = u/(xirad*tau+0.)*4.*pi*r*sth*afac # optically thick regime
     #    qloss*=0.       
     #    work=v*force
     return rho*0., force, v*force-qloss, qloss
@@ -130,17 +130,22 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     e1[1:-1] = e[1:-1]+ (-(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]) * dt
     # enforcing boundary conditions:
     m1[0] = m[0] + (-(s_half[0]-0.)/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero through the inner boundary
-    s1[0] = 0. # zero mass flux through the inner boundary
+    #    s1[0] = 0. # zero mass flux through the inner boundary
     if(accstop):
         m1[-1] = m[-1] + (-(0.-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to 0.
+        s1[0] = 0.
     else:
         m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot (global)
+        
+        m1[0] = m[0] + (-(s_half[0]-(-mdot))/(l_half[1]-l_half[0])+dm[0]) * dt  # sink set to mdot (global)
+        s1[0] = -mdot
     if(accstop):
         edot = -4.*re*dre*afac*vout*pmagout
         s1[-1] = 0. # zero mass flux through the outer boundary
     else:
         edot=-mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*re*dre*afac*vout*pmagout # energy flux from the right boundary
         s1[-1] = -mdot
+        
     e1[0] = e[0] + (-(fe_half[0]-0.)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
     e1[-1] = e[-1]  +(-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
@@ -212,7 +217,7 @@ def alltire():
         dul=rho*0.
         dul[1:-1]=(dul_half[1:]+dul_half[:-1])/2. # we need to smooth it for stability
         s, p, fe = fluxes(rho, v, u, across, r, sth)
-        fe+=-dul # adding diffusive flux
+        fe+=-dul # adding diffusive flux !!!
         timer.stop_comp("flux")
         timer.start_comp("velocity")
         wpos=where((rho>rhofloor)&(u>ufloor))
@@ -248,6 +253,7 @@ def alltire():
             if ifplot & (nout%plotalias == 0):
                 plots.uplot(r, u, rho, sth, v, name='utie{:05d}'.format(nout))
                 plots.vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
+                plots.splot(r, u/rho**(4./3.), name='entropy{:05d}'.format(nout))
             mtot=simps(m[1:-1], x=l[1:-1])
             etot=simps(e[1:-1], x=l[1:-1])
             print("mass = "+str(mtot))
@@ -259,7 +265,7 @@ def alltire():
             ftot.flush()
             if(ifhdf):
                 hdf.dump(hfile, nout, t, rho, v, u)
-            else:
+            if !ifhdf | (nout%ascalias == 0)
                 # ascii output:
                 fname='tireout{:05d}'.format(nout)+'.dat'
                 fstream=open(fname, 'w')
@@ -268,7 +274,7 @@ def alltire():
                 for k in arange(nx):
                     fstream.write(str(l[k])+' '+str(rho[k])+''+str(v[k])+' '+str(u[k])+'\n')
                 fstream.close()
-                     #print simulation run-time statistics
+                #print simulation run-time statistics
             timer.stop("io")
             timer.stats("step")
             timer.stats("io")
