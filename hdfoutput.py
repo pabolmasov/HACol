@@ -72,7 +72,17 @@ def toasc(hname='tireout.hdf5', nentry=0):
     nr=size(r)
     # write an ascii file
     fout = open(hname+'_'+entry, 'w')
+    fout.write('# t = '+str(t)+'\n')
+    fout.write('# format: l -- rho -- v -- u\n')
     for k in arange(nr):
         fout.write(str(r[k])+" "+str(rho[k])+" "+str(v[k])+" "+str(u[k])+"\n")
     fout.close()
+    
+def multitoasc(n1, n2, no,hname='tireout.hdf5'):
+    '''
+    running toasc for a set of frames
+    '''
+    for k in linspace(n1,n2, num=no, dtype=int):
+        toasc(hname=hname, nentry=k)
+        print(k)
     

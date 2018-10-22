@@ -27,6 +27,7 @@ def uplot(r, u, rho, sth, v, name='outplot'):
     '''
     ioff()
     clf()
+    fig=figure()
     plot(r, u, 'k', label='$u$',linewidth=2)
     plot(r, rho, 'r', label=r'$\rho c^2$')
     plot(r, rho*v**2/2., 'm', label=r'$\frac{1}{2}\rho v^2$')
@@ -38,12 +39,15 @@ def uplot(r, u, rho, sth, v, name='outplot'):
     plot(r, -B, 'g', label='$-B$')
     #    plot(x, y0, 'b')
     #    xscale('log')
-    ylim(umag*((rstar/r)**6).min(), umag)
+    #    ylim(umag*((rstar/r)**6).min(), umag)
+    ylim(u[u>0.].min(), u.max())
     xlabel('$r$, $GM/c^2$ units')
     yscale('log')
     xscale('log')    
     legend()
+    fig.set_size_inches(4, 8)
     savefig(name+'.png')
+    close()
 
 def vplot(x, v, cs, name='outplot'):
     '''
@@ -63,6 +67,17 @@ def vplot(x, v, cs, name='outplot'):
     ylim(-0.2,0.2)
     legend()
     savefig(name+'.png')
+    close()
+def splot(x, y, name='outplot'):
+    '''
+    so far plots some quantity S(R) 
+    '''
+    clf()
+    plot(x, y, 'k')
+    xscale('log') ; yscale('log')
+    xlabel(r'$r$') ; ylabel(r'$S(R)$')
+    savefig(name+'.png')
+    
 #########################################################################
 # post-processing PDS plot:
 
@@ -104,6 +119,32 @@ def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None):
     close()
 
 ####################
+def quasi2d(hname, n1, n2):
+    '''
+    makes quasi-2D Rt plots
+    '''
+    nt=n2-n1
+    # first frame
+    entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1)
+    nr=size(r)
+    var = zeros([nt, nr], dtype=double)
+    tar = zeros(nt, dtype=double)
+    var[0,:] = v[:] ; tar[0] = t
+    for k in arange(n2-n1-1):
+        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1+k+1)
+        var[k+1, :] = v[:]
+        tar[k+1] = t
+    nv=30
+    vlev=linspace(var.min(), var.max(), nv)
+    clf()
+    fig=figure()
+    contourf(r, tar*tscale, var, levels=vlev,cmap='hot')
+    colorbar()
+    xscale('log') ;  xlabel(r'$r$') ; ylabel(r'$t$')
+    fig.set_size_inches(4, 6)
+    savefig('q2d.png')
+    close('all')
+
 def postplot(hname, nentry):
     '''
     reading and plotting a single snapshot number "nentry" 

@@ -2,22 +2,23 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=3000 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
 logmesh=False
 
-b12=260.
+b12=2.
 m1=1.4
-mdot=1e4*4.*pi/m1 # mass accretion rate
+mdot=1e2*4.*pi/m1 # mass accretion rate
+mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 10597.1*4.*pi
-accstop=False # true if we are going to zero the mass and energy fluxes through the outer boundary in actual equations
+# acc=True # true if we are going to zero the mass and energy fluxes through the outer boundary in actual equations
 rstar=6.8/m1 # GM/c**2 units
 # 10km --> 6.77159 for 1Msun
 # vout=-0.5/sqrt(re) # initial poloidal velocity at the outer boundary 
 eta=0.0 # self-illumination efficiency 
-mfloor=1e-25  # crash floor for mass per unit length
-rhofloor=1e-25 # crash floor for density
-ufloor=1e-25 # crash floor for energy density
+mfloor=1e-15  # crash floor for mass per unit length
+rhofloor=1e-15 # crash floor for density
+ufloor=1e-15 # crash floor for energy density
 afac=0.5 # part of the longitudes subtended by the flow
 re = 122.4 * ((b12*rstar**3)**2/mdot)**(2./7.)*m1**(2./7.) # magnetospheric radius
 dre=minimum(1.5*mdot/(4.*pi), re*0.5) # radial extent of the flow at re
@@ -43,11 +44,12 @@ umag=b12**2*3.2e6 # magnetic energy density at the surface, for a 1.4Msun accret
 pmagout=umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc
 vout=-.5*pmagout*4.*pi*re*dre*afac/mdot # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
-xirad=0.25 # radiation loss scaling
+xirad=0.2 # radiation loss scaling
 
 # plotting options:
 ifplot = True
 plotalias = 10 # plot every Nth output step 
+ascalias = 1 # make an ascii file every Nth output step
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
