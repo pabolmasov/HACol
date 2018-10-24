@@ -117,10 +117,10 @@ def toprim(m, s, e, across, r, sth):
     u[u<=ufloor]=0.
     return rho, v, u
 
-def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
+def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, across):
     '''
     main advance in a dt step
-    input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta)
+    input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
     output: three new densities
     includes boundary conditions!
     '''
@@ -141,9 +141,9 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     s1[0] = -mdot0
     s1[-1] = -mdot
     vout_current = s1[-1]/m1[-1]
-    edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*re*dre*afac*vout_current*pmagout # energy flux from the right boundary
+    edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*re*dre*afac*vout_current*umagout # energy flux from the right boundary
     if galyamode:
-        e1[0] = umag + m1[0] * (-1./r[0]) # *(u+rho*(v**2/2.- 1./r - 0.5*(omega*r*sth)**2))*across
+        e1[0] = across[0] * umag + m1[0] * (-1./r[0]) # *(u+rho*(v**2/2.- 1./r - 0.5*(omega*r*sth)**2))*across
     else:
         e1[0] = e[0] + (-(fe_half[0]-edot0)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
     e1[-1] = e[-1]  + (-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
@@ -159,7 +159,7 @@ def alltire():
     
     sthd=1./sqrt(1.+(dre/re)**2) # initial sin(theta)
     rmax=re*sthd # slightly less then re 
-    r=(((rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*rstar # very fine radial mesh
+    r=(((rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
     sth, cth, sina, cosa, across, l = geometry(r) # radial-equidistant mesh
     l += r.min() # we are starting from a finite radius
     if(logmesh):
@@ -184,13 +184,13 @@ def alltire():
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
     vinit=vout*(r-rstar)/(r+rstar)*sqrt(re/r) # initial velocity
-    m=mdot/abs(vout)*(1e-4+exp(-r.max()/r)) # mass distribution
+    m=mdot/(abs(vout)+abs(vinit)) # mass distribution
     m0=m 
     s+=vinit*m
-    e+=pmagout*across[-1]*3.+(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m
+    e+=umagout*across[-1]+(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m
     
     dlmin=(l[1:]-l[:-1]).min()/2.
-    dt = dlmin*0.5
+    dt = dlmin*0.25
     print("dt = "+str(dt))
     #    ti=input("dt")
     
@@ -227,23 +227,25 @@ def alltire():
         timer.start_comp("solver")
         #        print(sum(rho>rhofloor))
         s_half, p_half, fe_half = solver_hlle([s, p, fe], [m, s, e], vl, vr)
-        #        p_half=solver_hlle(p, s, vl, vr)
-        #        fe_half=solver_hlle(fe, e, vl, vr)
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
         ltot=simps(flux[1:-1], x=l[1:-1])
         timer.stop_comp("sources")
         timer.start_comp("main")
-        m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth)
+        m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth, across)
         timer.stop_comp("main")
-        timer.lap("step") 
+        timer.lap("step")
+        print(rho)
+        print(r/rstar)
+        input('rho')
         t+=dt
         if(abs(s).max()>1e20):
             print("m is positive in "+str(sum(m>mfloor))+" points")
             print("s is positive in "+str(sum(abs(s)>mfloor))+" points")
             print("p is positive in "+str(sum(abs(p)>mfloor))+" points")
             winf=(abs(s)>1e20)
+            print("t = "+str(t))
             print(r[winf]/rstar)
             print(m[winf])
             print(s[winf])
@@ -286,9 +288,9 @@ def alltire():
                     fname='tireout{:05d}'.format(nout)+'.dat'
                     fstream=open(fname, 'w')
                     fstream.write('# t = '+str(t)+'\n')
-                    fstream.write('# format: l -- rho -- v -- u\n')
+                    fstream.write('# format: r -- rho -- v -- u\n')
                     for k in arange(nx):
-                        fstream.write(str(l[k])+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k])+'\n')
+                        fstream.write(str(r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umag*(r[k]/rstar)**6)+'\n')
                     fstream.close()
                 #print simulation run-time statistics
             timer.stop("io")
