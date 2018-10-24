@@ -236,9 +236,6 @@ def alltire():
         m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth, across)
         timer.stop_comp("main")
         timer.lap("step")
-        print(rho)
-        print(r/rstar)
-        input('rho')
         t+=dt
         if(abs(s).max()>1e20):
             print("m is positive in "+str(sum(m>mfloor))+" points")
