@@ -136,13 +136,17 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth):
     else:
         mdot0 = 0.
         edot0 = 0.
-    edot = -mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*re*dre*afac*vout*pmagout # energy flux from the right boundary
     m1[0] = m[0] + (-(s_half[0]-(-mdot0))/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero through the inner boundary
     m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot (global)
     s1[0] = -mdot0
-    s1[-1] = -mdot        
-    e1[0] = e[0] + (-(fe_half[0]-edot0)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
-    e1[-1] = e[-1]  +(-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
+    s1[-1] = -mdot
+    vout_current = s1[-1]/m1[-1]
+    edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*re*dre*afac*vout_current*pmagout # energy flux from the right boundary
+    if galyamode:
+        e1[0] = umag + m1[0] * (-1./r[0]) # *(u+rho*(v**2/2.- 1./r - 0.5*(omega*r*sth)**2))*across
+    else:
+        e1[0] = e[0] + (-(fe_half[0]-edot0)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
+    e1[-1] = e[-1]  + (-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     return m1, s1, e1
 
@@ -209,7 +213,7 @@ def alltire():
         timer.start_comp("flux")
         rho_half = (rho[1:]+rho[:-1])/2. ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2. 
         dul_half = across_half/(rho_half+1.)*(u[1:]-u[:-1])/(l[1:]-l[:-1])/3. # radial diffusion
-        dul = rho*0.
+        dul = rho*0. # just setting the size of the array
         dul[1:-1]=(dul_half[1:]+dul_half[:-1])/2. # we need to smooth it for stability
         s, p, fe = fluxes(rho, v, u, across, r, sth)
         fe+=-dul # adding diffusive flux !!!

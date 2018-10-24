@@ -108,7 +108,7 @@ def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None):
     fmin=binfreqc[nbin>nbin0].min()
     fmax=binfreqc[nbin>nbin0].max()
     clf()
-    pcolor(t2, binfreq2, (lpds), cmap='jet', vmin=lmin, vmax=lmax)
+    pcolor(t2, binfreq2, lpds, cmap='jet', vmin=lmin, vmax=lmax)
     colorbar()
     xlim(t2.min(), t2.max())
     ylim(fmin, fmax)

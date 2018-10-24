@@ -14,7 +14,9 @@ def pds(infile='flux', binning=None, binlogscale=False):
     '''
     lines = loadtxt(infile+".dat", comments="#", delimiter=" ", unpack=False)
     t=lines[:,0] ; l=lines[:,1]
-    f=fft.rfft((l-l.mean())/l.std())
+    # remove linear trend!
+    linfit = polyfit(t, l, 1)
+    f=fft.rfft((l-linfit[0]*t-linfit[1])/l.std())
     freq=fft.rfftfreq(size(t),t[1]-t[0])
     
     pds=abs(f)**2
