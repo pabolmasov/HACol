@@ -43,7 +43,7 @@ massscale=6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 #
 tmax=1000./tscale # maximal time in tscales
 dtout=0.001/tscale # output time step in tscales
-omega=0.*sqrt(0.6)*re**(-1.5) # in Keplerian units on the outer rim
+omega=sqrt(0.6)*re**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag=b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretor
 umagout=0.5**2*umag*(rstar/re)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)

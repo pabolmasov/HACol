@@ -1,8 +1,8 @@
 import h5py
 from globals import *
 
-def entryname(n):
-    entry = str(n).rjust(6, '0') # allows for 6 positions (hundreds of thousand of entries)
+def entryname(n, ndig = 6):
+    entry = str(n).rjust(ndig, '0') # allows for 6 positions (hundreds of thousand of entries)
     return entry
 
 def init(hname, l, r, sth, cth): # , m1, mdot, eta, afac, re, dre, omega):

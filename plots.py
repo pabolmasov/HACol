@@ -4,6 +4,7 @@ from matplotlib import axes
 from numpy import *
 from pylab import *
 from scipy.integrate import cumtrapz
+import glob
 
 #Uncomment the following if you want to use LaTeX in figures 
 rc('font',**{'family':'serif'})
@@ -68,6 +69,7 @@ def vplot(x, v, cs, name='outplot'):
     legend()
     savefig(name+'.png')
     close()
+
 def splot(x, y, name='outplot'):
     '''
     so far plots some quantity S(R) 
@@ -118,7 +120,7 @@ def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None):
     savefig(outfile+'.png')
     close()
 
-####################
+#############################################
 def quasi2d(hname, n1, n2):
     '''
     makes quasi-2D Rt plots
@@ -136,13 +138,26 @@ def quasi2d(hname, n1, n2):
         tar[k+1] = t
     nv=30
     vlev=linspace(var.min(), var.max(), nv)
+    # velocity
     clf()
     fig=figure()
     contourf(r, tar*tscale, var, levels=vlev,cmap='hot')
     colorbar()
     xscale('log') ;  xlabel(r'$r$') ; ylabel(r'$t$')
     fig.set_size_inches(4, 6)
-    savefig('q2d.png')
+    savefig('q2d_v.png')
+    close('all')
+    # internal energy density
+    umagtar = umag * (1.+3.*(1.-sth**2))/4. * (rstar/r)**6
+    lurel = log10(u/umagtar)
+    lulev = linspace(lurel.min(), lurel.max(), 20)
+    clf()
+    fig=figure()
+    contourf(r, tar*tscale, lurel, levels=lulev,cmap='hot')
+    colorbar()
+    xscale('log') ;  xlabel(r'$r$') ; ylabel(r'$t$')
+    fig.set_size_inches(4, 6)
+    savefig('q2d_u.png')
     close('all')
 
 def postplot(hname, nentry):
@@ -161,6 +176,27 @@ def multiplots(hname, n1, n2):
     for k in arange(n2-n1)+n1:
         postplot(hname, k)
 
+#####################################
+def curvestack(n1, n2, step, prefix = "tireout", postfix = ".dat"):
+    '''
+    plots a series of U/Umag curves from the ascii output
+    '''
+    clf()
+    for k in arange(n1,n2,step):
+        fname = prefix + hdf.entryname(k, ndig=5) + postfix
+        print(fname)
+        lines = loadtxt(fname, comments="#")
+        print(shape(lines))
+        r = lines[:,0] ; urel = lines[:,3]
+        plot(r, urel, label = str(k))
+    plot(r, (r/r.max())**(-10./3.+6.), ':k')
+    legend()
+    xscale('log') ; yscale('log')
+    xlabel(r'$R/R_*$') ; ylabel(r'$U/U_{\rm mag}$')
+    savefig("curvestack.png")
+    close('all')
+
+#########################################
 def energytest(fluxfile='flux', totfile='totals'):
     lines = loadtxt(fluxfile+".dat", comments="#", delimiter=" ", unpack=False)
     tflux = lines[:,0]/tscale ; flu=lines[:,1]
