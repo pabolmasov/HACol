@@ -189,11 +189,38 @@ def curvestack(n1, n2, step, prefix = "tireout", postfix = ".dat"):
         print(shape(lines))
         r = lines[:,0] ; urel = lines[:,3]
         plot(r, urel, label = str(k))
+    plot(r, r*0.+1., linestyle='dotted', color='gray')
     plot(r, (r/r.max())**(-10./3.+6.), ':k')
     legend()
     xscale('log') ; yscale('log')
     xlabel(r'$R/R_*$') ; ylabel(r'$U/U_{\rm mag}$')
     savefig("curvestack.png")
+    close('all')
+
+def Vcurvestack(n1, n2, step, prefix = "tireout", postfix = ".dat"):
+    '''
+    plots a series of velocity curves from the ascii output
+    '''
+    vmin=0. ; vmax=0.
+    clf()
+    for k in arange(n1,n2,step):
+        fname = prefix + hdf.entryname(k, ndig=5) + postfix
+        print(fname)
+        lines = loadtxt(fname, comments="#")
+        print(shape(lines))
+        r = lines[:,0] ; v = lines[:,2]
+        plot(r, v, label = str(k))
+        if(v.min()<vmin):
+            vmin = v.min()
+        if(v.max()>vmax):
+            vmax = v.max()
+    plot(r, -1./sqrt(r*rstar), '--k', label='virial')
+    plot(r, -1./7./sqrt(r*rstar), ':k', label=r'$\frac{1}{7}$ virial')
+    legend()
+    xscale('log')
+    ylim(vmin, vmax)
+    xlabel(r'$R/R_*$') ; ylabel(r'$v/c$')
+    savefig("Vcurvestack.png")
     close('all')
 
 #########################################
