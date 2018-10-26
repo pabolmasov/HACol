@@ -139,14 +139,20 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
     m1[0] = m[0] + (-(s_half[0]-(-mdot0))/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero through the inner boundary
     m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot (global)
     s1[0] = -mdot0
-    s1[-1] = -mdot
+    s1[-1] = -mdot # if I fix s1[-1], this results in v=vout effectively fixed at the boundary
     vout_current = s1[-1]/m1[-1]
-    edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]-4.*re*dre*afac*vout_current*umagout # energy flux from the right boundary
     if galyamode:
         e1[0] = across[0] * umag + m1[0] * (-1./r[0]) # *(u+rho*(v**2/2.- 1./r - 0.5*(omega*r*sth)**2))*across
     else:
-        e1[0] = e[0] + (-(fe_half[0]-edot0)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
-    e1[-1] = e[-1]  + (-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
+        if coolNS:
+            e1[0] = - (m1/r)[0]
+        else:
+            e1[0] = e[0] + (-(fe_half[0]-edot0)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
+    if ufixed:
+        e1[-1] = (m1*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)+3.*across*umagout)[-1] # fixing internal energy at the outer rim
+    else:
+        edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*across[-1]*vout_current*umagout # energy flux from the right boundary
+        e1[-1] = e[-1]  + (-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     return m1, s1, e1
 
@@ -159,7 +165,7 @@ def alltire():
     
     sthd=1./sqrt(1.+(dre/re)**2) # initial sin(theta)
     rmax=re*sthd # slightly less then re 
-    r=(((rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
+    r=((2.*(rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
     sth, cth, sina, cosa, across, l = geometry(r) # radial-equidistant mesh
     l += r.min() # we are starting from a finite radius
     if(logmesh):
@@ -169,9 +175,9 @@ def alltire():
     l -= r.min() ; luni -= r.min()
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
-    #  print("r = "+str(r))
-    #  print("l = "+str(l))
-    #  print("luni = "+str(luni))
+    #    print("r = "+str(r))
+    #    print("l = "+str(l))
+    #    print("luni = "+str(luni))
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     sth, cth, sina, cosa, across, l = geometry(rnew, writeout='geo.dat') # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
@@ -184,10 +190,13 @@ def alltire():
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
     vinit=vout*(r-rstar)/(r+rstar)*sqrt(re/r) # initial velocity
-    m=mdot/(abs(vout)+abs(vinit)) # mass distribution
+    m=mdot/(abs(vout)+abs(vinit))*(r/re)**2 # mass distribution
     m0=m 
     s+=vinit*m
-    e+=umagout*across[-1]+(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m
+    e+=(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m+3.*umagout*across
+
+    # magnetic field energy density:
+    umagtar = umag * (1.+3.*cth**2)/4. * (rstar/r)**6
     
     dlmin=(l[1:]-l[:-1]).min()/2.
     dt = dlmin*0.25
@@ -284,10 +293,10 @@ def alltire():
                     # ascii output:
                     fname='tireout{:05d}'.format(nout)+'.dat'
                     fstream=open(fname, 'w')
-                    fstream.write('# t = '+str(t)+'\n')
-                    fstream.write('# format: r -- rho -- v -- u\n')
+                    fstream.write('# t = '+str(t*tscale)+'s\n')
+                    fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
                     for k in arange(nx):
-                        fstream.write(str(r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umag*(r[k]/rstar)**6)+'\n')
+                        fstream.write(str(r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
                     fstream.close()
                 #print simulation run-time statistics
             timer.stop("io")
