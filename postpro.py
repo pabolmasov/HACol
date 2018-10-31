@@ -16,7 +16,7 @@ def pds(infile='flux', binning=None, binlogscale=False):
     t=lines[:,0] ; l=lines[:,1]
     # remove linear trend!
     linfit = polyfit(t, l, 1)
-    f=fft.rfft((l-linfit[0]*t-linfit[1])/l.std())
+    f=fft.rfft((l-linfit[0]*t-linfit[1])/l.std(), norm="ortho")
     freq=fft.rfftfreq(size(t),t[1]-t[0])
     
     pds=abs(f)**2
@@ -72,7 +72,7 @@ def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
     for kt in arange(ntimes):
         wt=(t<tbin[kt+1]) & (t>=tbin[kt])
         lt=l[wt]
-        fsp=fft.rfft((lt-lt.mean())/lt.std())
+        fsp=fft.rfft((lt-lt.mean())/lt.std(), norm="ortho")
         nt=size(lt)
         freq = fft.rfftfreq(nt, (t[wt].max()-t[wt].min())/double(nt))
         pds=abs(fsp*freq)**2
@@ -89,3 +89,26 @@ def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
     fdyns.close()
     print(t2.max())
     plots.dynspec(t2,binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)
+
+#############################################
+def fhist(infile = "flux"):
+    '''
+    histogram of flux distribution (reads a two-column ascii file)
+    '''
+    lines = loadtxt(infile+".dat", comments="#", delimiter=" ", unpack=False)
+    t=lines[:,0] ; l=lines[:,1]
+    nsize=size(t)
+    fn, binedges = histogram(l, bins=100)
+    binc = (binedges[1:]+binedges[:-1])/2.
+    bins = (binedges[1:]-binedges[:-1])/2.
+    dfn = sqrt(fn)
+
+    medianl = median(l)
+    significant = (fn > (dfn*3.)) # only high signal-to-noize points
+    w = significant * (binc>(medianl*1.))
+    p = polyfit(log(binc[w]), log(fn[w]), 1, w = 1./dfn[w])
+    print("median flux = "+str(medianl))
+    print("best-fit slope "+str(p[0]))
+                
+    plots.binplot(binedges, fn, dfn, fname=infile+"_hist", fit = exp(p[0]*log(binedges)+p[1]))
+

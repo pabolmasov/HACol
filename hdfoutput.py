@@ -15,8 +15,8 @@ def init(hname, l, r, sth, cth): # , m1, mdot, eta, afac, re, dre, omega):
     glo.attrs['mdot']      = mdot
     glo.attrs['eta']      = eta
     glo.attrs['afac']      = afac
-    glo.attrs['re']      = re
-    glo.attrs['dre']      = dre
+    glo.attrs['re']      = r_e
+    glo.attrs['dre']      = dr_e
     glo.attrs['omega']      = omega
     glo.attrs['rstar']      = rstar
 

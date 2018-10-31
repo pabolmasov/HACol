@@ -23,10 +23,10 @@ def geometry(r, writeout=None):
     and l (zero at the surface, growing with radius)
     adding nontrivial writeout key allows to write the geometry to an ascii file 
     '''
-    #    theta=arcsin(sqrt(r/re))
+    #    theta=arcsin(sqrt(r/r_e))
     #    sth=sin(theta) ; cth=cos(theta)
-    sth=sqrt(r/re) ; cth=sqrt(1.-r/re) # OK
-    across=4.*pi*afac*dre*re*sth**3/sqrt(1.+3.*cth**2) # OK 
+    sth=sqrt(r/r_e) ; cth=sqrt(1.-r/r_e) # OK
+    across=4.*pi*afac*dr_e*r_e*sth**3/sqrt(1.+3.*cth**2) # OK 
     alpha=arctan((cth**2-1./3.)/sth/cth) # Galja's formula (3)
     sina=sin(alpha) ; cosa=cos(alpha)
     l=cumtrapz(sqrt(1.+3.*cth**2)/2./cth, x=r, initial=0.) # coordinate along the field line
@@ -99,7 +99,12 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     tau = rho*across/(4.*pi*r*sth*afac)
     taufac = 1.-exp(-tau)
-    gamedd = eta * ltot / (tau+1.) 
+    gamefac = taufac/tau
+    # transparent regions
+    wtrans=where(tau < taumin)
+    taufac[wtrans] = (tau + abs(tau))[wtrans]/2.
+    gamefac[wtrans] = 1.
+    gamedd = eta * ltot * gamefac 
     force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across*taufac
     qloss = u/(xirad*tau+1.)*4.*pi*r*sth*afac*taufac # optically thick regime
     #    qloss*=0.       
@@ -163,8 +168,8 @@ def alltire():
     '''
     timer.start("total")
     
-    sthd=1./sqrt(1.+(dre/re)**2) # initial sin(theta)
-    rmax=re*sthd # slightly less then re 
+    sthd=1./sqrt(1.+(dr_e/r_e)**2) # initial sin(theta)
+    rmax=r_e*sthd # slightly less then r_e 
     r=((2.*(rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
     sth, cth, sina, cosa, across, l = geometry(r) # radial-equidistant mesh
     l += r.min() # we are starting from a finite radius
@@ -175,9 +180,9 @@ def alltire():
     l -= r.min() ; luni -= r.min()
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
-    #    print("r = "+str(r))
-    #    print("l = "+str(l))
-    #    print("luni = "+str(luni))
+    print("r = "+str(r))
+    print("l = "+str(l))
+    print("luni = "+str(luni))
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     sth, cth, sina, cosa, across, l = geometry(rnew, writeout='geo.dat') # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
@@ -189,8 +194,8 @@ def alltire():
     #    ii=input("r")
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-    vinit=vout*(r-rstar)/(r+rstar)*sqrt(re/r) # initial velocity
-    m=mdot/(abs(vout)+abs(vinit))*(r/re)**2 # mass distribution
+    vinit=vout*(r-rstar)/(r+rstar)*sqrt(r_e/r) # initial velocity
+    m=mdot/(abs(vout)+abs(vinit))*(r/r_e)**2 # mass distribution
     m0=m 
     s+=vinit*m
     e+=(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m+3.*umagout*across
@@ -315,5 +320,3 @@ def alltire():
 # if you want to make a movie of how the velocity changes with time:
 # ffmpeg -f image2 -r 35 -pattern_type glob -i 'vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
 # alltire()
-
-# index "4" is currently for xirad=0.25

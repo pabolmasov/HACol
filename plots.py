@@ -5,6 +5,7 @@ from numpy import *
 from pylab import *
 from scipy.integrate import cumtrapz
 import glob
+import re
 
 #Uncomment the following if you want to use LaTeX in figures 
 rc('font',**{'family':'serif'})
@@ -100,7 +101,7 @@ def binplot(freq, dfreq, pds, dpds, outfile='binnedpds'):
     savefig(outfile+'.png')
     close()
     
-def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None):
+def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
 
     nbin0=2
     
@@ -110,14 +111,17 @@ def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None):
     fmin=binfreqc[nbin>nbin0].min()
     fmax=binfreqc[nbin>nbin0].max()
     clf()
-    pcolor(t2, binfreq2, lpds, cmap='jet', vmin=lmin, vmax=lmax)
+    pcolormesh(t2, binfreq2, pds2, cmap='hot_r', vmin=10.**lmin, vmax=10.**lmax)
     colorbar()
+    if omega != None:
+        plot([t2.min(), t2.max()], [omega/2./pi, omega/2./pi], color='k')
     xlim(t2.min(), t2.max())
     ylim(fmin, fmax)
     yscale('log')
     xlabel(r'$t$, s')
     ylabel('$f$, Hz')
     savefig(outfile+'.png')
+    savefig(outfile+'.eps')
     close()
 
 #############################################
@@ -130,34 +134,61 @@ def quasi2d(hname, n1, n2):
     entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1)
     nr=size(r)
     var = zeros([nt, nr], dtype=double)
+    uar = zeros([nt, nr], dtype=double)
+    lurel = zeros([nt, nr], dtype=double)
     tar = zeros(nt, dtype=double)
-    var[0,:] = v[:] ; tar[0] = t
+    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
     for k in arange(n2-n1-1):
         entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1+k+1)
         var[k+1, :] = v[:]
+        uar[k+1, :] = u[:]
         tar[k+1] = t
     nv=30
     vlev=linspace(var.min(), var.max(), nv)
+    varmean = var.mean(axis=0)
+    varstd = var.std(axis=0)
     # velocity
     clf()
     fig=figure()
     contourf(r, tar*tscale, var, levels=vlev,cmap='hot')
     colorbar()
-    xscale('log') ;  xlabel(r'$r$') ; ylabel(r'$t$')
+    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
+    fig.tight_layout()
     savefig('q2d_v.png')
+    savefig('q2d_v.eps')
     close('all')
-    # internal energy density
-    umagtar = umag * (1.+3.*(1.-sth**2))/4. * (rstar/r)**6
-    lurel = log10(u/umagtar)
-    lulev = linspace(lurel.min(), lurel.max(), 20)
     clf()
     fig=figure()
-    contourf(r, tar*tscale, lurel, levels=lulev,cmap='hot')
+    plot(r, -sqrt(1./rstar/r), ':k')
+    plot(r, r*0., '--k')
+    plot(r, varmean, '-k')
+    plot(r, varmean+varstd, color='gray')
+    plot(r, varmean-varstd, color='gray')
+    ylim((varmean-varstd*2.).min(), (varmean+varstd*2.).max())
+    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14)
+    ylabel(r'$\langle v\rangle /c$', fontsize=14)
+    fig.set_size_inches(3.35, 2.)
+    fig.tight_layout()
+    savefig('q2d_vmean.png')
+    savefig('q2d_vmean.eps')
+    close('all')
+    
+    # internal energy density
+    umagtar = umag * (1.+3.*(1.-sth**2))/4. * (rstar/r)**6
+    #    print(umag)
+    for k in arange(nr):
+        lurel[:,k] = log10(uar[:,k]/umagtar[k])
+    lulev = linspace(lurel[isfinite(lurel)].min()-0.1, lurel[isfinite(lurel)].max()+0.1, 20, endpoint=True)
+    clf()
+    fig=figure()
+    contourf(r, tar*tscale, lurel, levels=lulev, cmap='hot')
     colorbar()
-    xscale('log') ;  xlabel(r'$r$') ; ylabel(r'$t$')
+    contour(r, tar*tscale, lurel, levels=[0.], colors='k')
+    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     savefig('q2d_u.png')
+    savefig('q2d_u.eps')
     close('all')
 
 def postplot(hname, nentry):
@@ -197,10 +228,12 @@ def curvestack(n1, n2, step, prefix = "tireout", postfix = ".dat"):
     savefig("curvestack.png")
     close('all')
 
-def Vcurvestack(n1, n2, step, prefix = "tireout", postfix = ".dat"):
+def Vcurvestack(n1, n2, step, prefix = "tireout", postfix = ".dat", plot2d=False):
     '''
     plots a series of velocity curves from the ascii output
     '''
+    if(plot2d):
+        kctr = 0
     vmin=0. ; vmax=0.
     clf()
     for k in arange(n1,n2,step):
@@ -214,6 +247,18 @@ def Vcurvestack(n1, n2, step, prefix = "tireout", postfix = ".dat"):
             vmin = v.min()
         if(v.max()>vmax):
             vmax = v.max()
+        if plot2d & (kctr==0):
+            nt = int(floor((n2-n1)/step)) ; nr = size(r)
+            tar = zeros(nt, dtype=double)
+            v2 = zeros([nt, nr], dtype=double)
+        if(plot2d):
+            ff=open(fname)
+            stime = ff.readline()
+            ff.close()
+            tar[kctr] = double(''.join(re.findall("\d+[.]\d+", stime)))
+            #            print(stime+": "+str(tar[kctr]))
+            v2[kctr,:] = v[:]
+            kctr += 1
     plot(r, -1./sqrt(r*rstar), '--k', label='virial')
     plot(r, -1./7./sqrt(r*rstar), ':k', label=r'$\frac{1}{7}$ virial')
     legend()
@@ -221,7 +266,18 @@ def Vcurvestack(n1, n2, step, prefix = "tireout", postfix = ".dat"):
     ylim(vmin, vmax)
     xlabel(r'$R/R_*$') ; ylabel(r'$v/c$')
     savefig("Vcurvestack.png")
+    if(plot2d):
+        nv=20
+        clf()
+        fig=figure()
+        contourf(r, tar, v2, levels=(arange(nv+1)-0.5)/double(nv)*(vmax-vmin)+vmin, cmap='hot')
+        colorbar()
+        xscale('log')
+        xlabel(r'$R/R_*$') ; ylabel(r'$t$, s')
+        fig.set_size_inches(4, 6)
+        savefig("Vcurvestack_2d.png")
     close('all')
+        
 
 #########################################
 def energytest(fluxfile='flux', totfile='totals'):
@@ -241,3 +297,16 @@ def energytest(fluxfile='flux', totfile='totals'):
     ylabel('energy')
     savefig('energytest.png')
     close()
+
+###########################
+def binplot(xe, f, df, fname = "binplot", fit = 0):
+
+    xc = (xe[1:]+xe[:-1])/2. ; xs = abs(-xe[1:]+xe[:-1])/2.
+    clf()
+    errorbar(xc, f, xerr=xs, yerr=df, fmt='.-',
+             linestyle='None', mec='k', mfc='k')
+    if size(fit)>0 :
+        plot(xe, fit, color='r')
+    xscale('log') ; yscale('log') ; xlabel('$L/L^*$')
+    savefig(fname+".png")
+    close("all")
