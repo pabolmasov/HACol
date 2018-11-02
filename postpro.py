@@ -98,17 +98,17 @@ def fhist(infile = "flux"):
     lines = loadtxt(infile+".dat", comments="#", delimiter=" ", unpack=False)
     t=lines[:,0] ; l=lines[:,1]
     nsize=size(t)
-    fn, binedges = histogram(l, bins=100)
+    fn, binedges = histogram(l, bins='auto')
     binc = (binedges[1:]+binedges[:-1])/2.
     bins = (binedges[1:]-binedges[:-1])/2.
     dfn = sqrt(fn)
 
     medianl = median(l)
     significant = (fn > (dfn*3.)) # only high signal-to-noize points
-    w = significant * (binc>(medianl*1.))
-    p = polyfit(log(binc[w]), log(fn[w]), 1, w = 1./dfn[w])
+    w = significant * (binc>(medianl*3.))
+    p, cov = polyfit(log(binc[w]), log(fn[w]), 1, w = 1./dfn[w], cov=True)
     print("median flux = "+str(medianl))
-    print("best-fit slope "+str(p[0]))
+    print("best-fit slope "+str(p[0])+"+/-"+str(sqrt(cov[0,0])))
                 
     plots.binplot(binedges, fn, dfn, fname=infile+"_hist", fit = exp(p[0]*log(binedges)+p[1]))
 

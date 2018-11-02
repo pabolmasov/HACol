@@ -80,7 +80,24 @@ def splot(x, y, name='outplot'):
     xscale('log') ; yscale('log')
     xlabel(r'$r$') ; ylabel(r'$S(R)$')
     savefig(name+'.png')
-    
+
+def someplots(x, ys, name='outplot', ytitle='', ylog = False):
+    '''
+    plots a series of curves  
+    '''
+    ny=shape(ys)[0]
+    colorsequence = ['k', 'r', 'b']
+    sc=size(colorsequence)
+
+    clf()
+    for k in arange(ny):
+        plot(x, ys[k], 'k', color=colorsequence[k % sc])
+    xscale('log')
+    if(ylog):
+        yscale('log')
+    xlabel(r'$r$') ; ylabel(ytitle)
+    savefig(name+'.png')
+  
 #########################################################################
 # post-processing PDS plot:
 
@@ -232,8 +249,7 @@ def Vcurvestack(n1, n2, step, prefix = "tireout", postfix = ".dat", plot2d=False
     '''
     plots a series of velocity curves from the ascii output
     '''
-    if(plot2d):
-        kctr = 0
+    kctr = 0
     vmin=0. ; vmax=0.
     clf()
     for k in arange(n1,n2,step):
@@ -303,10 +319,16 @@ def binplot(xe, f, df, fname = "binplot", fit = 0):
 
     xc = (xe[1:]+xe[:-1])/2. ; xs = abs(-xe[1:]+xe[:-1])/2.
     clf()
-    errorbar(xc, f, xerr=xs, yerr=df, fmt='.-',
+    fig=figure()
+    errorbar(xc, f*xc, xerr=xs, yerr=df, fmt='.-',
              linestyle='None', mec='k', mfc='k')
     if size(fit)>0 :
-        plot(xe, fit, color='r')
-    xscale('log') ; yscale('log') ; xlabel('$L/L^*$')
+        plot(xe, fit*xe, color='r')
+    xscale('log') ; yscale('log') ; xlabel('$L/L^*$', fontsize=14)
+    ylabel('$LdN/dL$')
+    ylim(((f*xc)[f>df]).min(), (f*xc).max()*1.5)
+    fig.set_size_inches(4, 3)
+    fig.tight_layout()
     savefig(fname+".png")
+    savefig(fname+".eps")
     close("all")

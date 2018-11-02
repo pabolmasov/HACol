@@ -2,14 +2,14 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=3000 # the actual number of points in use
+nx=100 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
-logmesh=False
+logmesh=True
 
 # physical parameters:
 mu30 = 1. # magnetic moment, 1e30 units
 m1=1.4
-mdot = 10. * 4.*pi
+mdot = 0.1 * 4.*pi
 # 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
 mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 6291.12*4.*pi/m1
@@ -17,6 +17,8 @@ mdotsink = 0. # mass sink rate at the inner edge
 rstar=6.8/m1 # GM/c**2 units
 # 10km --> 6.77159 for 1Msun
 b12=2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+mow = 0.6 # molecular weight
+betacoeff = 1.788e-5 * (m1)**(-0.25)/mow # coefficient used to calculate gas-to-total pressure ratio
 
 # BC modes:
 galyamode = False # if on, sets the internal energy density to MF energy density at the inner boundary
@@ -27,13 +29,14 @@ ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fix
 xirad = 0.2 # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 
-eta=0.1 # self-illumination efficiency 
-mfloor=1e-15  # crash floor for mass per unit length
-rhofloor=1e-15 # crash floor for density
-ufloor=1e-15 # crash floor for energy density
-afac=0.5 # part of the longitudes subtended by the flow
+eta = 0.1 # self-illumination efficiency 
+heatingeff = 0.5 # part of illuminating flux contributing to heating
+mfloor = 1e-15  # crash floor for mass per unit length
+rhofloor = 1e-15 # crash floor for density
+ufloor = 1e-15 # crash floor for energy density
+afac = 0.5 # part of the longitudes subtended by the flow
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) # magnetospheric radius
-dr_e=minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
+dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
 print("magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
 print("Delta re = "+str(dr_e))
 
@@ -50,7 +53,7 @@ tmax=1000./tscale # maximal time in tscales
 dtout=0.01/tscale # output time step in tscales
 omega=sqrt(0.6)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
-umag=b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretor
+umag=b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout=0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
 vout=-1./sqrt(r_e) * 1./15. # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 

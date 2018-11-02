@@ -15,6 +15,28 @@ from timer import Timer
 timer = Timer(["total", "step", "io"],
               ["main", "flux", "solver", "toprim", "velocity", "sources"])
 
+# pressure ratios:
+def Fbeta(rho, u):
+    '''
+    calculated F(beta) = pg/p as a function of rho and u (dimensionless units)
+    F(beta) itself is F = beta / (1-beta)**0.25 / (1-beta/2)**0.75
+    '''
+    return betacoeff * rho / u**0.75
+
+def betafun_define():
+    '''
+    defines the function to calculate beta as a function of rho/u**0.75
+    '''
+    bepsilon = 1e-8 ; nb = 1e4
+    b1 = 0. ; b2 = 1.-bepsilon
+    b = (b2-b1)*arange(nb+1)/double(nb)+b1
+    fb = b / (1.-b)**0.25 / (1.-b/2.)**0.75
+    bfun = interp1d(fb, b, kind='linear', bounds_error=False, fill_value=1.)
+    return bfun
+
+# define once and globally
+betafun = betafun_define() # defines the interpolated function for beta
+
 ###########################################################################################
 def geometry(r, writeout=None):
     '''
@@ -57,8 +79,10 @@ def fluxes(rho, v, u, across, r, sth):
     radiation diffusion flux is not included, as it is calculated at halfpoints
     '''
     s=rho*v*across # mass flux (identical to momentum per unit length -- can we use it?)
-    p=across*(rho*v**2+u/3.) # momentum flux (radiation-dominated case)
-    fe=across*v*(4./3.*u+(v**2/2.-1./r-0.5*(omega*r*sth)**2)*rho)
+    beta = betafun(Fbeta(rho, u))
+    press = u/3./(1.-beta/2.)
+    p=across*(rho*v**2+press) # momentum flux (radiation-dominated case)
+    fe=across*v*(u+press+(v**2/2.-1./r-0.5*(omega*r*sth)**2)*rho)
     # flux limiters:
     #    s[0]=0. ; p[0]=u[0]/3.*across[0]; fe[0]=0.
     return s, p, fe
@@ -102,14 +126,17 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     gamefac = taufac/tau
     # transparent regions
     wtrans=where(tau < taumin)
-    taufac[wtrans] = (tau + abs(tau))[wtrans]/2.
+    taufac[wtrans] = 0. # (tau + abs(tau))[wtrans]/2.
     gamefac[wtrans] = 1.
     gamedd = eta * ltot * gamefac 
     force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across*taufac
-    qloss = u/(xirad*tau+1.)*4.*pi*r*sth*afac*taufac # optically thick regime
+    beta = betafun(Fbeta(rho, u))
+    qloss = u * (1.-beta)/(1.-beta/2.)/(xirad*tau+1.)*4.*pi*r*sth*afac*taufac # optically thick regime
+    irradheating = heatingeff * gamedd * (sina*cth+cosa*sth)/r**2 # photons absorbed by the matter also heat it
+    #    qloss[wtrans] = (u * (1.-beta)/(1.-beta/2.) * taufac *4.*pi*r*sth*afac)[wtrans]
     #    qloss*=0.       
     #    work=v*force
-    return rho*0., force, v*force-qloss, qloss
+    return rho*0., force, v*force-qloss+irradheating, qloss
 
 def toprim(m, s, e, across, r, sth):
     '''
@@ -120,7 +147,8 @@ def toprim(m, s, e, across, r, sth):
     v[rho>rhofloor]=(s/m)[rho>rhofloor]
     u=(e-m*(v**2/2.-1./r-0.5*(r*sth*omega)**2))/across
     u[u<=ufloor]=0.
-    return rho, v, u
+    beta = betafun(Fbeta(rho, u))
+    return rho, v, u, u*(1.-beta)/(1.-beta/2.)
 
 def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, across):
     '''
@@ -154,9 +182,9 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         else:
             e1[0] = e[0] + (-(fe_half[0]-edot0)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
     if ufixed:
-        e1[-1] = (m1*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)+3.*across*umagout)[-1] # fixing internal energy at the outer rim
+        e1[-1] = (m1*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)+3.*across*umagout)[-1] # fixing internal energy at the outer rim (!!!assumed radiation domination)
     else:
-        edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*across[-1]*vout_current*umagout # energy flux from the right boundary
+        edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*across[-1]*vout_current*umagout # energy flux from the right boundary(!!!assumed radiation domination)
         e1[-1] = e[-1]  + (-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     return m1, s1, e1
@@ -167,6 +195,7 @@ def alltire():
     the main routine bringing all together.
     '''
     timer.start("total")
+
     
     sthd=1./sqrt(1.+(dr_e/r_e)**2) # initial sin(theta)
     rmax=r_e*sthd # slightly less then r_e 
@@ -222,15 +251,15 @@ def alltire():
         # first make a preliminary half-step
         timer.start_comp("toprim")
         mprev=m ; sprev=s ; eprev=e
-        rho, v, u = toprim(m, s, e, across, r, sth) # primitive from conserved
+        rho, v, u, urad = toprim(m, s, e, across, r, sth) # primitive from conserved
         timer.stop_comp("toprim")
         timer.start_comp("flux")
         rho_half = (rho[1:]+rho[:-1])/2. ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2. 
-        dul_half = across_half/(rho_half+1.)*(u[1:]-u[:-1])/(l[1:]-l[:-1])/3. # radial diffusion
+        dul_half = across_half/(rho_half+1.)*(urad[1:]-urad[:-1])/(l[1:]-l[:-1])/3. # radial diffusion
         dul = rho*0. # just setting the size of the array
         dul[1:-1]=(dul_half[1:]+dul_half[:-1])/2. # we need to smooth it for stability
         s, p, fe = fluxes(rho, v, u, across, r, sth)
-        fe+=-dul # adding diffusive flux !!!
+        fe+=-dul # adding diffusive flux 
         timer.stop_comp("flux")
         timer.start_comp("velocity")
         #        wpos=where((rho>rhofloor)&(u>ufloor))
@@ -282,7 +311,9 @@ def alltire():
             if ifplot & (nout%plotalias == 0):
                 plots.uplot(r, u, rho, sth, v, name='utie{:05d}'.format(nout))
                 plots.vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
-                plots.splot(r, u/rho**(4./3.), name='entropy{:05d}'.format(nout))
+                plots.someplots(r, [u/rho**(4./3.)], name='entropy{:05d}'.format(nout), ytitle=r'$S$', ylog=True)
+                plots.someplots(r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
+                                name='beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
             mtot=simps(m[1:-1], x=l[1:-1])
             etot=simps(e[1:-1], x=l[1:-1])
             print("mass = "+str(mtot))
