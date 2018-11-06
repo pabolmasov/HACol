@@ -4,6 +4,7 @@ from matplotlib import axes
 from numpy import *
 from pylab import *
 from scipy.integrate import cumtrapz
+from scipy.interpolate import interp1d
 import glob
 import re
 
@@ -150,25 +151,34 @@ def quasi2d(hname, n1, n2):
     # first frame
     entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1)
     nr=size(r)
-    var = zeros([nt, nr], dtype=double)
-    uar = zeros([nt, nr], dtype=double)
-    lurel = zeros([nt, nr], dtype=double)
+    nrnew = 500 # radial mesh interpolated to nrnew
+    rnew = (r.max()/r.min())**(arange(nrnew)/double(nrnew-1))*r.min()
+    sthfun = interp1d(r, sth)
+    sthnew = sthfun(rnew)
+    var = zeros([nt, nrnew], dtype=double)
+    uar = zeros([nt, nrnew], dtype=double)
+    lurel = zeros([nt, nrnew], dtype=double)
     tar = zeros(nt, dtype=double)
-    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
-    for k in arange(n2-n1-1):
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1+k+1)
-        var[k+1, :] = v[:]
-        uar[k+1, :] = u[:]
-        tar[k+1] = t
+    #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
+    for k in arange(n2-n1):
+        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1+k)
+        vfun = interp1d(r, v, kind = 'linear')
+        var[k, :] = vfun(rnew)
+        ufun = interp1d(r, u, kind = 'linear')
+        uar[k, :] = ufun(rnew)
+        tar[k] = t
     nv=30
-    vlev=linspace(var.min(), var.max(), nv)
+    vlev=linspace(var.min(), var.max(), nv, endpoint=True)
+    print(var.min())
+    print(var.max())
     varmean = var.mean(axis=0)
     varstd = var.std(axis=0)
     # velocity
     clf()
     fig=figure()
-    contourf(r, tar*tscale, var, levels=vlev,cmap='hot')
+    pcolormesh(rnew, tar*tscale, var, vmin=var.min(), vmax=var.max(),cmap='hot')
     colorbar()
+    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
@@ -177,11 +187,11 @@ def quasi2d(hname, n1, n2):
     close('all')
     clf()
     fig=figure()
-    plot(r, -sqrt(1./rstar/r), ':k')
-    plot(r, r*0., '--k')
-    plot(r, varmean, '-k')
-    plot(r, varmean+varstd, color='gray')
-    plot(r, varmean-varstd, color='gray')
+    plot(rnew, -sqrt(1./rstar/rnew), ':k')
+    plot(rnew, rnew*0., '--k')
+    plot(rnew, varmean, '-k')
+    plot(rnew, varmean+varstd, color='gray')
+    plot(rnew, varmean-varstd, color='gray')
     ylim((varmean-varstd*2.).min(), (varmean+varstd*2.).max())
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14)
     ylabel(r'$\langle v\rangle /c$', fontsize=14)
@@ -192,16 +202,17 @@ def quasi2d(hname, n1, n2):
     close('all')
     
     # internal energy density
-    umagtar = umag * (1.+3.*(1.-sth**2))/4. * (rstar/r)**6
+    umagtar = umag * (1.+3.*(1.-sthnew**2))/4. / (rnew)**6 # r is already in rstar units
     #    print(umag)
-    for k in arange(nr):
+    for k in arange(nrnew):
         lurel[:,k] = log10(uar[:,k]/umagtar[k])
-    lulev = linspace(lurel[isfinite(lurel)].min()-0.1, lurel[isfinite(lurel)].max()+0.1, 20, endpoint=True)
+    lulev = linspace(lurel[uar>0.].min(), lurel[uar>0.].max(), 20, endpoint=True)
+    print(lulev)
     clf()
     fig=figure()
-    contourf(r, tar*tscale, lurel, levels=lulev, cmap='hot')
+    contourf(rnew, tar*tscale, lurel, cmap='hot_r', levels=lulev)
     colorbar()
-    contour(r, tar*tscale, lurel, levels=[0.], colors='k')
+    contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     savefig('q2d_u.png')
@@ -286,7 +297,7 @@ def Vcurvestack(n1, n2, step, prefix = "tireout", postfix = ".dat", plot2d=False
         nv=20
         clf()
         fig=figure()
-        contourf(r, tar, v2, levels=(arange(nv+1)-0.5)/double(nv)*(vmax-vmin)+vmin, cmap='hot')
+        pcolormesh(r, tar, v2, cmap='hot', vmin=vmin, vmax=vmax) #, levels=(arange(nv+1)-0.5)/double(nv)*(vmax-vmin)+vmin, cmap='hot')
         colorbar()
         xscale('log')
         xlabel(r'$R/R_*$') ; ylabel(r'$t$, s')

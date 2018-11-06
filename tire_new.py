@@ -21,7 +21,11 @@ def Fbeta(rho, u):
     calculated F(beta) = pg/p as a function of rho and u (dimensionless units)
     F(beta) itself is F = beta / (1-beta)**0.25 / (1-beta/2)**0.75
     '''
-    return betacoeff * rho / u**0.75
+    beta = rho*0.+1.
+    wpos=where(u>ufloor)
+    if(size(wpos)>0):
+        beta[wpos]=betacoeff * rho[wpos] / u[wpos]**0.75
+    return beta 
 
 def betafun_define():
     '''
@@ -209,9 +213,9 @@ def alltire():
     l -= r.min() ; luni -= r.min()
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
-    print("r = "+str(r))
-    print("l = "+str(l))
-    print("luni = "+str(luni))
+    #    print("r = "+str(r))
+    #    print("l = "+str(l))
+    #    print("luni = "+str(luni))
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     sth, cth, sina, cosa, across, l = geometry(rnew, writeout='geo.dat') # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
@@ -221,6 +225,10 @@ def alltire():
     #    print("halfstep l correction "+str((l_half-luni_half).std())+"\n")
     #    print("r mesh: "+str(r))
     #    ii=input("r")
+    #    print("r step "+str(r[1:]-r[:-1]))
+    #    print("l step "+str(l[1:]-l[:-1]))
+    #    ii=input("r")
+   
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
     vinit=vout*(r-rstar)/(r+rstar)*sqrt(r_e/r) # initial velocity
@@ -232,8 +240,8 @@ def alltire():
     # magnetic field energy density:
     umagtar = umag * (1.+3.*cth**2)/4. * (rstar/r)**6
     
-    dlmin=(l[1:]-l[:-1]).min()/2.
-    dt = dlmin*0.25
+    dlmin=(l[1:]-l[:-1]).min()
+    dt = dlmin*0.5
     print("dt = "+str(dt))
     #    ti=input("dt")
     
