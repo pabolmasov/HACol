@@ -15,6 +15,20 @@ from timer import Timer
 timer = Timer(["total", "step", "io"],
               ["main", "flux", "solver", "toprim", "velocity", "sources"])
 
+# smooth factor for optical depth
+def taufun(tau):
+    wtrans = where(tau<taumin)
+    wopaq = where(tau>taumax)
+    wmed = where((tau>=taumin) & (tau<=taumax))
+    tt = tau*0.
+    if(size(wtrans)>0):
+        tt[wtrans] = (tau[wtrans]+abs(tau[wtrans]))/2.
+    if(size(wopaq)>0):
+        tt[wopaq] = 1.
+    if(size(wmed)>0):
+        tt[wmed] = 1. - exp(-tau[wmed])
+    return tt
+
 # pressure ratios:
 def Fbeta(rho, u):
     '''
@@ -91,6 +105,21 @@ def fluxes(rho, v, u, across, r, sth):
     #    s[0]=0. ; p[0]=u[0]/3.*across[0]; fe[0]=0.
     return s, p, fe
 
+def solver_hll(fs, qs, sl, sr):
+    '''
+    makes a proxy for a half-step flux, HLL-like (without right-only and left-only regimes, like in HLLE)
+    flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
+    '''
+    #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
+    f1,f2,f3 = fs  ;  q1,q2,q3 = qs
+    ds=sr[1:]-sl[:-1]
+    fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
+    fhalf1 = ((sr[1:]*f1[:-1]-sl[:-1]*f1[1:]+sl[:-1]*sr[1:]*(q1[1:]-q1[:-1]))/ds)
+    fhalf2 = ((sr[1:]*f2[:-1]-sl[:-1]*f2[1:]+sl[:-1]*sr[1:]*(q2[1:]-q2[:-1]))/ds)
+    fhalf3 = ((sr[1:]*f3[:-1]-sl[:-1]*f3[1:]+sl[:-1]*sr[1:]*(q3[1:]-q3[:-1]))/ds)
+    return fhalf1, fhalf2, fhalf3
+    
+
 def solver_hlle(fs, qs, sl, sr):
     '''
     makes a proxy for a half-step flux, HLLE-like
@@ -126,12 +155,8 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     '''
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     tau = rho*across/(4.*pi*r*sth*afac)
-    taufac = 1.-exp(-tau)
+    taufac = taufun(tau)    # 1.-exp(-tau)
     gamefac = taufac/tau
-    # transparent regions
-    wtrans=where(tau < taumin)
-    taufac[wtrans] = 0. # (tau + abs(tau))[wtrans]/2.
-    gamefac[wtrans] = 1.
     gamedd = eta * ltot * gamefac 
     force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across*taufac
     beta = betafun(Fbeta(rho, u))
@@ -154,13 +179,15 @@ def toprim(m, s, e, across, r, sth):
     beta = betafun(Fbeta(rho, u))
     return rho, v, u, u*(1.-beta)/(1.-beta/2.)
 
-def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, across):
+def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, across, dlleft, dlright):
     '''
     main advance in a dt step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
     output: three new densities
     includes boundary conditions!
     '''
+    #    dlleft = l_half[1]-l_half[0]
+    #    dlright = l_half[-1]-l_half[-2]
     nl=size(m)
     m1=zeros(nl) ; s1=zeros(nl); e1=zeros(nl)
     m1[1:-1] = m[1:-1]+ (-(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm[1:-1]) * dt
@@ -173,8 +200,8 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
     else:
         mdot0 = 0.
         edot0 = 0.
-    m1[0] = m[0] + (-(s_half[0]-(-mdot0))/(l_half[1]-l_half[0])+dm[0]) * dt # mass flux is zero through the inner boundary
-    m1[-1] = m[-1] + (-(-mdot-s_half[-1])/(l_half[-1]-l_half[-2])+dm[-1]) * dt  # inflow set to mdot (global)
+    m1[0] = m[0] + (-(s_half[0]-(-mdot0))/dlleft+dm[0]) * dt # mass flux is zero through the inner boundary
+    m1[-1] = m[-1] + (-(-mdot-s_half[-1])/dlright+dm[-1]) * dt  # inflow set to mdot (global)
     s1[0] = -mdot0
     s1[-1] = -mdot # if I fix s1[-1], this results in v=vout effectively fixed at the boundary
     vout_current = s1[-1]/m1[-1]
@@ -184,13 +211,29 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         if coolNS:
             e1[0] = - (m1/r)[0]
         else:
-            e1[0] = e[0] + (-(fe_half[0]-edot0)/(l_half[1]-l_half[0])) * dt #  energy flux is zero
+            e1[0] = e[0] + (-(fe_half[0]-edot0)/dlleft) * dt #  energy flux is zero
     if ufixed:
         e1[-1] = (m1*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)+3.*across*umagout)[-1] # fixing internal energy at the outer rim (!!!assumed radiation domination)
     else:
         edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*across[-1]*vout_current*umagout # energy flux from the right boundary(!!!assumed radiation domination)
-        e1[-1] = e[-1]  + (-(edot-fe_half[-1])/(l_half[-1]-l_half[-2])) * dt  # enegry inlow
+        e1[-1] = e[-1]  + (-(edot-fe_half[-1])/dlright) * dt  # enegry inlow
     #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
+    # what if we get negative mass?
+    wneg=where(m1<mfloor)
+    #    wneg=where(m1>mfloor)
+    if(size(wneg)>0):
+        print(wneg)
+        print((r)[wneg])
+        print((m)[wneg])
+        print((m1)[wneg])
+        print((-(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm[1:-1]))
+        print(dt)
+        m1[wneg] = 0.
+        s1[wneg] = 0.
+        e1[wneg] = 0.
+        print(str(size(wneg))+" negative points!")
+        input("m1")
+
     return m1, s1, e1
 
 #########################################################################################
@@ -200,7 +243,6 @@ def alltire():
     '''
     timer.start("total")
 
-    
     sthd=1./sqrt(1.+(dr_e/r_e)**2) # initial sin(theta)
     rmax=r_e*sthd # slightly less then r_e 
     r=((2.*(rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
@@ -212,7 +254,13 @@ def alltire():
         luni=linspace(l.min(), l.max(), nx, endpoint=False)
     l -= r.min() ; luni -= r.min()
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
+    dlleft = 2.*(luni_half[1]-luni_half[0])-(luni_half[2]-luni_half[1])
+    dlright = 2.*(luni_half[-1]-luni_half[-2])-(luni_half[-2]-luni_half[3])
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
+    print(dlleft)
+    print(luni_half[1]-luni_half[0])
+    print(luni_half[2]-luni_half[1])
+    input("l")
     #    print("r = "+str(r))
     #    print("l = "+str(l))
     #    print("luni = "+str(luni))
@@ -232,15 +280,15 @@ def alltire():
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
     vinit=vout*(r-rstar)/(r+rstar)*sqrt(r_e/r) # initial velocity
-    m=mdot/(abs(vout)+abs(vinit))*(r/r_e)**2 # mass distribution
+    m=mdot/(abs(vout)*2.+abs(vinit))*(r/r_e)**2 # mass distribution
     m0=m 
     s+=vinit*m
-    e+=(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m+3.*umagout*across
+    e+=(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m+3.*umagout*across*(r_e/r)**(-10./3.)
 
     # magnetic field energy density:
     umagtar = umag * (1.+3.*cth**2)/4. * (rstar/r)**6
     
-    dlmin=(l[1:]-l[:-1]).min()
+    dlmin=(l_half[1:]-l_half[:-1]).min()
     dt = dlmin*0.5
     print("dt = "+str(dt))
     #    ti=input("dt")
@@ -277,14 +325,14 @@ def alltire():
         timer.stop_comp("velocity")
         timer.start_comp("solver")
         #        print(sum(rho>rhofloor))
-        s_half, p_half, fe_half = solver_hlle([s, p, fe], [m, s, e], vl, vr)
+        s_half, p_half, fe_half = solver_hll([s, p, fe], [m, s, e], vl, vr)
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
         ltot=simps(flux[1:-1], x=l[1:-1])
         timer.stop_comp("sources")
         timer.start_comp("main")
-        m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth, across)
+        m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth, across, dlleft, dlright)
         timer.stop_comp("main")
         timer.lap("step")
         t+=dt

@@ -2,7 +2,7 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=100 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
 logmesh=True
 
@@ -28,6 +28,7 @@ ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fix
 # radiation transfer treatment:
 xirad = 0.2 # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
+taumax = 1e2 # maximal optical depth
 
 eta = 0.0 # self-illumination efficiency 
 heatingeff = 0.5 # part of illuminating flux contributing to heating
