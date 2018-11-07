@@ -39,15 +39,15 @@ def pds(infile='flux', binning=None, binlogscale=False):
         binfreqc=(binfreq[1:]+binfreq[:-1])/2. # bin center
         binfreqs=(binfreq[1:]-binfreq[:-1])/2. # bin size
         for k in arange(binning):
-            win=((freq<binfreq[k+1]) & (freq>binfreq[k]))
-            binflux[k]=pds[win].mean() ; dbinflux[k]=pds[win].std()
+            win=((freq<binfreq[k+1]) & (freq>=binfreq[k]))
+            binflux[k]=pds[win].mean() ; dbinflux[k]=pds[win].std()/sqrt(double(win.sum()))
 
         fpds=open(infile+'_pdsbinned.dat', 'w')
         for k in arange(binning):
             fpds.write(str(binfreq[k])+' '+str(binfreq[k+1])+' '+str(binflux[k])+' '+str(dbinflux[k])+'\n')
         fpds.close()
         if ifplot:
-            plots.binplot(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
+            plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
 def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
     '''

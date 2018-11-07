@@ -110,11 +110,16 @@ def pdsplot(freq, pds, outfile='pds'):
     savefig(outfile+'.png')
     close()
 
-def binplot(freq, dfreq, pds, dpds, outfile='binnedpds'):
-    
+def binplot_short(freq, dfreq, pds, dpds, outfile='binnedpds'):
+
+    nf=1000
+    ftmp=(freq.max()/freq.min())**(arange(nf+1)/double(nf))*freq.min()
+    w=where(pds>dpds)
     clf()
     errorbar(freq, pds, xerr=dfreq, yerr=dpds, fmt='.k')
+    plot(ftmp, 3./sqrt(1.+ftmp**2)/ftmp, color='r')
     xscale('log') ; yscale('log')
+    ylim(((pds-dpds)[w]).min(), ((pds+dpds)[w]).max())
     ylabel('PDS') ; xlabel('$f$, Hz')
     savefig(outfile+'.png')
     close()
