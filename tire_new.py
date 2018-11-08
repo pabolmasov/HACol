@@ -118,7 +118,6 @@ def solver_hll(fs, qs, sl, sr):
     fhalf2 = ((sr[1:]*f2[:-1]-sl[:-1]*f2[1:]+sl[:-1]*sr[1:]*(q2[1:]-q2[:-1]))/ds)
     fhalf3 = ((sr[1:]*f3[:-1]-sl[:-1]*f3[1:]+sl[:-1]*sr[1:]*(q3[1:]-q3[:-1]))/ds)
     return fhalf1, fhalf2, fhalf3
-    
 
 def solver_hlle(fs, qs, sl, sr):
     '''
@@ -128,7 +127,9 @@ def solver_hlle(fs, qs, sl, sr):
     #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
     f1,f2,f3 = fs  ;  q1,q2,q3 = qs
     ds=sr[1:]-sl[:-1]
-    wreg=where((sr[1:]>0.)&(sl[:-1]<0.))
+#    print(ds)
+#    i = input("ds")
+    wreg = where((sr[1:]>=0.)&(sl[:-1]<=0.)&(ds>0.))
     wleft=where(sr[1:]<0.) ; wright=where(sl[:-1]>0.)
     fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
     if(size(wreg)>0):
@@ -136,13 +137,13 @@ def solver_hlle(fs, qs, sl, sr):
         fhalf2[wreg] = ((sr[1:]*f2[:-1]-sl[:-1]*f2[1:]+sl[:-1]*sr[1:]*(q2[1:]-q2[:-1]))/ds)[wreg] # classic HLLE
         fhalf3[wreg] = ((sr[1:]*f3[:-1]-sl[:-1]*f3[1:]+sl[:-1]*sr[1:]*(q3[1:]-q3[:-1]))/ds)[wreg] # classic HLLE
     if(size(wleft)>0):
-        fhalf1[wleft]=(f1[:-1])[wleft]
-        fhalf2[wleft]=(f2[:-1])[wleft]
-        fhalf3[wleft]=(f3[:-1])[wleft]
+        fhalf1[wleft]=(f1[1:])[wleft]
+        fhalf2[wleft]=(f2[1:])[wleft]
+        fhalf3[wleft]=(f3[1:])[wleft]
     if(size(wright)>0):
-        fhalf1[wright]=(f1[1:])[wright]
-        fhalf2[wright]=(f2[1:])[wright]
-        fhalf3[wright]=(f3[1:])[wright]
+        fhalf1[wright]=(f1[:-1])[wright]
+        fhalf2[wright]=(f2[:-1])[wright]
+        fhalf3[wright]=(f3[:-1])[wright]
     return fhalf1, fhalf2, fhalf3
 
 def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
@@ -213,11 +214,11 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         else:
             e1[0] = e[0] + (-(fe_half[0]-edot0)/dlleft) * dt #  energy flux is zero
     if ufixed:
-        e1[-1] = (m1*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)+3.*across*umagout)[-1] # fixing internal energy at the outer rim (!!!assumed radiation domination)
+        e1[-1] = (m1*(-1./r-0.5*(r*sth*omega)**2)+3.*across*umagout)[-1] # fixing internal energy at the outer rim (!!!assumed radiation domination)
     else:
-        edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*across[-1]*vout_current*umagout # energy flux from the right boundary(!!!assumed radiation domination)
-        e1[-1] = e[-1]  + (-(edot-fe_half[-1])/dlright) * dt  # enegry inlow
-    #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
+        edot = -mdot*(-1./r-0.5*(r*sth*omega)**2)[-1]+4.*across[-1]*vout_current*umagout # energy flux from the right boundary(!!!assumed radiation domination)
+        e1[-1] = e[-1]  + (-(edot-fe_half[-1])/dlright) * dt  # energy inlow
+        #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     # what if we get negative mass?
     wneg=where(m1<mfloor)
     #    wneg=where(m1>mfloor)
@@ -254,8 +255,6 @@ def alltire():
         luni=linspace(l.min(), l.max(), nx, endpoint=False)
     l -= r.min() ; luni -= r.min()
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
-    dlleft = 2.*(luni_half[1]-luni_half[0])-(luni_half[2]-luni_half[1])
-    dlright = 2.*(luni_half[-1]-luni_half[-2])-(luni_half[-2]-luni_half[3])
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
     #    print(dlleft)
     #    print(luni_half[1]-luni_half[0])
@@ -276,11 +275,13 @@ def alltire():
     #    print("r step "+str(r[1:]-r[:-1]))
     #    print("l step "+str(l[1:]-l[:-1]))
     #    ii=input("r")
+    dlleft = 2.*(l_half[1]-l_half[0])-(l_half[2]-l_half[1])
+    dlright = 2.*(l_half[-1]-l_half[-2])-(l_half[-2]-l_half[3])
    
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
     vinit=vout*(r-rstar)/(r+rstar)*sqrt(r_e/r) # initial velocity
-    m=mdot/(abs(vout)*2.+abs(vinit))*(r/r_e)**2 # mass distribution
+    m=mdot/(fabs(vout)*2.+fabs(vinit))*(r/r_e)**2 # mass distribution
     m0=m 
     s+=vinit*m
     e+=(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m+3.*umagout*across*(r_e/r)**(-10./3.)
@@ -318,8 +319,10 @@ def alltire():
         fe+=-dul # adding diffusive flux 
         timer.stop_comp("flux")
         timer.start_comp("velocity")
-        #        wpos=where((rho>rhofloor)&(u>ufloor))
-        vr=v+1. ; vl=v-1. ; cs=v*0.+1.
+        wpos=where((rho>rhofloor)&(u>ufloor))
+        vr=v+1. ; vl=v-1.
+        #        vr[wpos]=v[wpos]+1. ; vl[wpos]=v[wpos]-1.
+        # cs = v*0.
         #        cs[wpos]=sqrt(4./3.*u[wpos]/rho[wpos])
         #        vr[wpos]=(v+cs)[wpos] ; vl[wpos]=(v-cs)[wpos]
         timer.stop_comp("velocity")
