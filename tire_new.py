@@ -66,7 +66,7 @@ def geometry(r, writeout=None):
     #    theta=arcsin(sqrt(r/r_e))
     #    sth=sin(theta) ; cth=cos(theta)
     sth=sqrt(r/r_e) ; cth=sqrt(1.-r/r_e) # OK
-    across=4.*pi*afac*dr_e*r_e*sth**3/sqrt(1.+3.*cth**2) # OK 
+    across=4.*pi*afac*dr_e*r_e*sth**3/sqrt(1.+3.*cth**2) # OK  (two sides)
     alpha=arctan((cth**2-1./3.)/sth/cth) # Galja's formula (3)
     sina=sin(alpha) ; cosa=cos(alpha)
     l=cumtrapz(sqrt(1.+3.*cth**2)/2./cth, x=r, initial=0.) # coordinate along the field line
@@ -99,8 +99,8 @@ def fluxes(rho, v, u, across, r, sth):
     s=rho*v*across # mass flux (identical to momentum per unit length -- can we use it?)
     beta = betafun(Fbeta(rho, u))
     press = u/3./(1.-beta/2.)
-    p=across*(rho*v**2+press) # momentum flux (radiation-dominated case)
-    fe=across*v*(u+press+(v**2/2.-1./r-0.5*(omega*r*sth)**2)*rho)
+    p=across*(rho*v**2+press) # momentum flux
+    fe=across*v*(u+press+(v**2/2.-1./r-0.5*(omega*r*sth)**2)*rho) # energy flux without diffusion
     # flux limiters:
     #    s[0]=0. ; p[0]=u[0]/3.*across[0]; fe[0]=0.
     return s, p, fe
@@ -161,7 +161,7 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     gamedd = eta * ltot * gamefac 
     force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across*taufac
     beta = betafun(Fbeta(rho, u))
-    qloss = u * (1.-beta)/(1.-beta/2.)/(xirad*tau+1.)*4.*pi*r*sth*afac*taufac # optically thick regime
+    qloss = u * (1.-beta)/(1.-beta/2.)/(xirad*tau+1.)*8.*pi*r*sth*afac*taufac # diffusion approximations; energy lost from 4 sides
     irradheating = heatingeff * gamedd * (sina*cth+cosa*sth)/r**2 # photons absorbed by the matter also heat it
     #    qloss[wtrans] = (u * (1.-beta)/(1.-beta/2.) * taufac *4.*pi*r*sth*afac)[wtrans]
     #    qloss*=0.       
@@ -214,10 +214,10 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         else:
             e1[0] = e[0] + (-(fe_half[0]-edot0)/dlleft) * dt #  energy flux is zero
     if ufixed:
-        e1[-1] = (m1*(-1./r-0.5*(r*sth*omega)**2)+3.*across*umagout)[-1] # fixing internal energy at the outer rim (!!!assumed radiation domination)
+        e1[-1] = (m1*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)+3.*across*umagout)[-1] # fixing internal energy at the outer rim (!!!assumed radiation domination) leads to -1 velocity at the outer boundary; can we just use vout here?
     else:
-        edot = -mdot*(-1./r-0.5*(r*sth*omega)**2)[-1]+4.*across[-1]*vout_current*umagout # energy flux from the right boundary(!!!assumed radiation domination)
-        e1[-1] = e[-1]  + (-(edot-fe_half[-1])/dlright) * dt  # energy inlow
+        edot = -mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*across[-1]*vout*umagout # energy flux from the right boundary (!!!assumed radiation domination)
+        e1[-1] = e[-1] + (-(edot-fe_half[-1])/dlright) * dt  # energy inlow
         #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     # what if we get negative mass?
     wneg=where(m1<mfloor)
@@ -322,9 +322,9 @@ def alltire():
         wpos=where((rho>rhofloor)&(u>ufloor))
         vr=v+1. ; vl=v-1.
         #        vr[wpos]=v[wpos]+1. ; vl[wpos]=v[wpos]-1.
-        # cs = v*0.
-        #        cs[wpos]=sqrt(4./3.*u[wpos]/rho[wpos])
-        #        vr[wpos]=(v+cs)[wpos] ; vl[wpos]=(v-cs)[wpos]
+        cs = v*0.
+        cs[wpos]=sqrt(5./3.*u[wpos]/rho[wpos]) # slightly over-estimating the SOS to get stable signal velocities; exact for gas-dominated
+        vr[wpos]=(v+cs)[wpos] ; vl[wpos]=(v-cs)[wpos]
         timer.stop_comp("velocity")
         timer.start_comp("solver")
         #        print(sum(rho>rhofloor))
@@ -332,7 +332,8 @@ def alltire():
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
-        ltot=simps(flux[1:-1], x=l[1:-1])
+        #        ltot=simps(flux[1:-1], x=l[1:-1])
+        ltot=trapz(flux[1:-1], x=l[1:-1]) # no difference
         timer.stop_comp("sources")
         timer.start_comp("main")
         m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth, across, dlleft, dlright)
