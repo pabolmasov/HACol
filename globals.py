@@ -2,15 +2,14 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=3000 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
 logmesh=False
 
 # physical parameters:
-mu30 = 1. # magnetic moment, 1e30 units
+mu30 = 130. # magnetic moment, 1e30 units
 m1=1.4
-mdot = 10. * 4.*pi
-# 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
+mdot = 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
 mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 6291.12*4.*pi/m1
 # acc=True # true if we are going to zero the mass and energy fluxes through the outer boundary in actual equations
@@ -36,8 +35,10 @@ mfloor = 1e-15  # crash floor for mass per unit length
 rhofloor = 1e-15 # crash floor for density
 ufloor = 1e-15 # crash floor for energy density
 afac = 0.5 # part of the longitudes subtended by the flow
-r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) # magnetospheric radius
+xifac = 0.5 # magnetospheric radius in Alfven units
+r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
 dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
+print("Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
 print("magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
 print("Delta re = "+str(dr_e))
 

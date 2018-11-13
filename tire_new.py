@@ -2,6 +2,7 @@ from scipy.integrate import *
 from scipy.interpolate import *
 
 import numpy.random
+from numpy.random import rand
 # import time
 import os
 import os.path
@@ -126,24 +127,34 @@ def solver_hlle(fs, qs, sl, sr):
     '''
     #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
     f1,f2,f3 = fs  ;  q1,q2,q3 = qs
-    ds=sr[1:]-sl[:-1]
-#    print(ds)
-#    i = input("ds")
-    wreg = where((sr[1:]>=0.)&(sl[:-1]<=0.)&(ds>0.))
-    wleft=where(sr[1:]<0.) ; wright=where(sl[:-1]>0.)
+    sl1 = minimum(sl, 0.) ; sr1 = maximum(sr, 0.)
+    ds=sr1[1:]-sl1[:-1] # see Einfeldt et al. 1991 eq. 4.4
+    #    print(ds)
+    #    i = input("ds")
+    # wreg = where((sr[1:]>=0.)&(sl[:-1]<=0.)&(ds>0.))
+    wreg = where(ds>0.)
+    #    wleft=where(sr[1:]<0.) ; wright=where(sl[:-1]>0.)
     fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
     if(size(wreg)>0):
-        fhalf1[wreg] = ((sr[1:]*f1[:-1]-sl[:-1]*f1[1:]+sl[:-1]*sr[1:]*(q1[1:]-q1[:-1]))/ds)[wreg] # classic HLLE
-        fhalf2[wreg] = ((sr[1:]*f2[:-1]-sl[:-1]*f2[1:]+sl[:-1]*sr[1:]*(q2[1:]-q2[:-1]))/ds)[wreg] # classic HLLE
-        fhalf3[wreg] = ((sr[1:]*f3[:-1]-sl[:-1]*f3[1:]+sl[:-1]*sr[1:]*(q3[1:]-q3[:-1]))/ds)[wreg] # classic HLLE
-    if(size(wleft)>0):
-        fhalf1[wleft]=(f1[1:])[wleft]
-        fhalf2[wleft]=(f2[1:])[wleft]
-        fhalf3[wleft]=(f3[1:])[wleft]
-    if(size(wright)>0):
-        fhalf1[wright]=(f1[:-1])[wright]
-        fhalf2[wright]=(f2[:-1])[wright]
-        fhalf3[wright]=(f3[:-1])[wright]
+        fhalf1[wreg] = ((sr1[1:]*f1[:-1]-sl1[:-1]*f1[1:]+sl1[:-1]*sr1[1:]*(q1[1:]-q1[:-1]))/ds)[wreg] # classic HLLE
+        fhalf2[wreg] = ((sr1[1:]*f2[:-1]-sl1[:-1]*f2[1:]+sl1[:-1]*sr1[1:]*(q2[1:]-q2[:-1]))/ds)[wreg] # classic HLLE
+        fhalf3[wreg] = ((sr1[1:]*f3[:-1]-sl1[:-1]*f3[1:]+sl1[:-1]*sr1[1:]*(q3[1:]-q3[:-1]))/ds)[wreg] # classic HLLE
+    #    if(size(wleft)>0):
+    #        fhalf1[wleft]=(f1[1:])[wleft]
+    #        fhalf2[wleft]=(f2[1:])[wleft]
+    #        fhalf3[wleft]=(f3[1:])[wleft]
+    #    if(size(wright)>0):
+    #        fhalf1[wright]=(f1[:-1])[wright]
+    #        fhalf2[wright]=(f2[:-1])[wright]
+    #        fhalf3[wright]=(f3[:-1])[wright]
+    return fhalf1, fhalf2, fhalf3
+
+def solver_godunov(fs):
+    '''
+    simplified Godunov-type solver 
+    '''
+    f1,f2,f3 = fs
+    fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
     return fhalf1, fhalf2, fhalf3
 
 def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
@@ -278,16 +289,15 @@ def alltire():
     dlleft = 2.*(l_half[1]-l_half[0])-(l_half[2]-l_half[1])
     dlright = 2.*(l_half[-1]-l_half[-2])-(l_half[-2]-l_half[3])
    
-    # initial conditions:
-    m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-    vinit=vout*(r-rstar)/(r+rstar)*sqrt(r_e/r) # initial velocity
-    m=mdot/(fabs(vout)*2.+fabs(vinit))*(r/r_e)**2 # mass distribution
-    m0=m 
-    s+=vinit*m
-    e+=(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m+3.*umagout*across*(r_e/r)**(-10./3.)
-
     # magnetic field energy density:
     umagtar = umag * (1.+3.*cth**2)/4. * (rstar/r)**6
+    # initial conditions:
+    m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
+    vinit=vout*((r-rstar)/(r+rstar))*sqrt(r_e/r) # initial velocity
+    m=mdot/fabs(vout*sqrt(r_e/r)) # mass distribution
+    m0=m 
+    s+=vinit*m
+    e+=(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m+3.*umagout*across*(r_e/r)**(-10./3.) * (1.+0.01*rand(size(r)))
     
     dlmin=(l_half[1:]-l_half[:-1]).min()
     dt = dlmin*0.5
@@ -323,12 +333,13 @@ def alltire():
         vr=v+1. ; vl=v-1.
         #        vr[wpos]=v[wpos]+1. ; vl[wpos]=v[wpos]-1.
         cs = v*0.
-        cs[wpos]=sqrt(5./3.*u[wpos]/rho[wpos]) # slightly over-estimating the SOS to get stable signal velocities; exact for gas-dominated
+        cs[wpos]=sqrt(4.*u[wpos]/(rho[wpos]+u[wpos])) # slightly over-estimating the SOS to get stable signal velocities; exact for radiation-dominated
         vr[wpos]=(v+cs)[wpos] ; vl[wpos]=(v-cs)[wpos]
         timer.stop_comp("velocity")
         timer.start_comp("solver")
         #        print(sum(rho>rhofloor))
         s_half, p_half, fe_half = solver_hlle([s, p, fe], [m, s, e], vl, vr)
+        # solver_godunov([s, p, fe]) 
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
