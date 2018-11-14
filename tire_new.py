@@ -3,12 +3,33 @@ from scipy.interpolate import *
 
 import numpy.random
 from numpy.random import rand
+from numpy import *
 # import time
 import os
 import os.path
+import imp
+import sys
 
 import hdfoutput as hdf
+
+'''
+we need the option of using an arbitrary configuration file
+'''
+if(size(sys.argv)>1):
+    print("launched with arguments "+str(', '.join(sys.argv)))
+    # new conf file
+    conf=sys.argv[1]
+else:
+    conf = 'globals'
+'''
+A trick (borrowed from where???) that allows to load an arbitrary configuration file instead of the standard "globals.py"
+'''
+fp, pathname, description = imp.find_module(conf)
+imp.load_module('globals', fp, pathname, description)
+fp.close()
+
 from globals import *
+
 if ifplot:
     import plots
 
@@ -255,6 +276,10 @@ def alltire():
     '''
     timer.start("total")
 
+    # if the outpur directory does not exist:
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
+
     sthd=1./sqrt(1.+(dr_e/r_e)**2) # initial sin(theta)
     rmax=r_e*sthd # slightly less then r_e 
     r=((2.*(rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
@@ -275,7 +300,7 @@ def alltire():
     #    print("l = "+str(l))
     #    print("luni = "+str(luni))
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
-    sth, cth, sina, cosa, across, l = geometry(rnew, writeout='geo.dat') # all the geometric quantities for the l-equidistant mesh
+    sth, cth, sina, cosa, across, l = geometry(rnew, writeout=outdir+'/geo.dat') # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
     r_half=rfun(luni_half) # half-step radial coordinates
     sth_half, cth_half, sina_half, cosa_half, across_half, l_half = geometry(r_half) # mid-step geometry in r
@@ -307,10 +332,10 @@ def alltire():
     t=0.;  tstore=0.  ; nout=0
 
     ltot=0. # estimated total luminosity
-    fflux=open('flux.dat', 'w')
-    ftot=open('totals.dat', 'w')
+    fflux=open(outdir+'/'+'flux.dat', 'w')
+    ftot=open(outdir+'/'+'totals.dat', 'w')
     if(ifhdf):
-        hname = 'tireout.hdf5'
+        hname = outdir+'/'+'tireout.hdf5'
         hfile = hdf.init(hname, l, r, sth, cth) # , m1, mdot, eta, afac, re, dre, omega)
     
     timer.start("total")
@@ -378,13 +403,13 @@ def alltire():
             print("t = "+str(t*tscale)+"s")
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
             fflux.flush()
-            #            oneplot(r, rho, name='rhotie{:05d}'.format(nout))
+            #            oneplot(r, rho, name=outdir+'/rhotie{:05d}'.format(nout))
             if ifplot & (nout%plotalias == 0):
-                plots.uplot(r, u, rho, sth, v, name='utie{:05d}'.format(nout))
-                plots.vplot(r, v, sqrt(4./3.*u/rho), name='vtie{:05d}'.format(nout))
-                plots.someplots(r, [u/rho**(4./3.)], name='entropy{:05d}'.format(nout), ytitle=r'$S$', ylog=True)
+                plots.uplot(r, u, rho, sth, v, name=outdir+'/utie{:05d}'.format(nout))
+                plots.vplot(r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
+                plots.someplots(r, [u/rho**(4./3.)], name=outdir+'/entropy{:05d}'.format(nout), ytitle=r'$S$', ylog=True)
                 plots.someplots(r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
-                                name='beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
+                                name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
             mtot=simps(m[1:-1], x=l[1:-1])
             etot=simps(e[1:-1], x=l[1:-1])
             print("mass = "+str(mtot))
@@ -398,7 +423,7 @@ def alltire():
                 hdf.dump(hfile, nout, t, rho, v, u)
             if not(ifhdf) or (nout%ascalias == 0):
                     # ascii output:
-                    fname='tireout{:05d}'.format(nout)+'.dat'
+                    fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
                     fstream=open(fname, 'w')
                     fstream.write('# t = '+str(t*tscale)+'s\n')
                     fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
