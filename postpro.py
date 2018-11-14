@@ -3,6 +3,7 @@ from scipy.integrate import *
 from scipy.interpolate import *
 
 from globals import ifplot
+import hdfoutput as hdf
 if ifplot:
     import plots
 
@@ -14,7 +15,10 @@ def pds(infile='flux', binning=None, binlogscale=False):
     '''
     lines = loadtxt(infile+".dat", comments="#", delimiter=" ", unpack=False)
     t=lines[:,0] ; l=lines[:,1]
-    f=fft.rfft((l-l.mean())/l.std())
+    print("mean flux "+str(l.mean())+"+/-"+str(l.std()))
+    # remove linear trend!
+    linfit = polyfit(t, l, 1)
+    f=fft.rfft((l-linfit[0]*t-linfit[1])/l.std(), norm="ortho")
     freq=fft.rfftfreq(size(t),t[1]-t[0])
     
     pds=abs(f)**2
@@ -37,15 +41,15 @@ def pds(infile='flux', binning=None, binlogscale=False):
         binfreqc=(binfreq[1:]+binfreq[:-1])/2. # bin center
         binfreqs=(binfreq[1:]-binfreq[:-1])/2. # bin size
         for k in arange(binning):
-            win=((freq<binfreq[k+1]) & (freq>binfreq[k]))
-            binflux[k]=pds[win].mean() ; dbinflux[k]=pds[win].std()
+            win=((freq<binfreq[k+1]) & (freq>=binfreq[k]))
+            binflux[k]=pds[win].mean() ; dbinflux[k]=pds[win].std()/sqrt(double(win.sum()))
 
         fpds=open(infile+'_pdsbinned.dat', 'w')
         for k in arange(binning):
             fpds.write(str(binfreq[k])+' '+str(binfreq[k+1])+' '+str(binflux[k])+' '+str(dbinflux[k])+'\n')
         fpds.close()
         if ifplot:
-            plots.binplot(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
+            plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
 def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
     '''
@@ -70,7 +74,7 @@ def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
     for kt in arange(ntimes):
         wt=(t<tbin[kt+1]) & (t>=tbin[kt])
         lt=l[wt]
-        fsp=fft.rfft((lt-lt.mean())/lt.std())
+        fsp=fft.rfft((lt-lt.mean())/lt.std(), norm="ortho")
         nt=size(lt)
         freq = fft.rfftfreq(nt, (t[wt].max()-t[wt].min())/double(nt))
         pds=abs(fsp*freq)**2
@@ -87,3 +91,52 @@ def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
     fdyns.close()
     print(t2.max())
     plots.dynspec(t2,binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)
+
+#############################################
+def fhist(infile = "flux"):
+    '''
+    histogram of flux distribution (reads a two-column ascii file)
+    '''
+    lines = loadtxt(infile+".dat", comments="#", delimiter=" ", unpack=False)
+    t=lines[:,0] ; l=lines[:,1]
+    nsize=size(t)
+    fn, binedges = histogram(l, bins='auto')
+    binc = (binedges[1:]+binedges[:-1])/2.
+    bins = (binedges[1:]-binedges[:-1])/2.
+    dfn = sqrt(fn)
+
+    medianl = median(l)
+    significant = (fn > (dfn*3.)) # only high signal-to-noize points
+    w = significant * (binc>(medianl*3.))
+    p, cov = polyfit(log(binc[w]), log(fn[w]), 1, w = 1./dfn[w], cov=True)
+    print("median flux = "+str(medianl))
+    print("best-fit slope "+str(p[0])+"+/-"+str(sqrt(cov[0,0])))
+                
+    plots.binplot(binedges, fn, dfn, fname=infile+"_hist", fit = exp(p[0]*log(binedges)+p[1]))
+
+#####################################################################
+def shock_hdf(n, infile = "tireout.hdf5"):
+    '''
+    finds the position of the shock in a given entry of the infile
+    '''
+    entryname, t, l, r, sth, rho, u, v = hdf.read(infile, n)
+
+    #find maximal compression:
+    dvdl = (v[1:]-v[:-1])/(l[1:]-l[:-1])
+    wcomp = (dvdl).argmin()
+    print("maximal compression found at r="+str(r[wcomp]))
+    return r[wcomp]
+
+def shock_dat(n, prefix = "tireout"):
+    '''
+    finds the position of the shock from a given dat-file ID
+    '''
+    fname = prefix + hdf.entryname(n, ndig=5) + ".dat"
+    lines = loadtxt(fname, comments="#")
+    r = lines[:,0] ; v = lines[:,2]
+    #find maximal compression:
+    dvdl = (v[1:]-v[:-1])/(r[1:]-r[:-1])
+    wcomp = (dvdl).argmin()
+    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
+    return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.
+    

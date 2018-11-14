@@ -1,8 +1,8 @@
 import h5py
 from globals import *
 
-def entryname(n):
-    entry = str(n).rjust(6, '0') # allows for 6 positions (hundreds of thousand of entries)
+def entryname(n, ndig = 6):
+    entry = str(n).rjust(ndig, '0') # allows for 6 positions (hundreds of thousand of entries)
     return entry
 
 def init(hname, l, r, sth, cth): # , m1, mdot, eta, afac, re, dre, omega):
@@ -15,8 +15,8 @@ def init(hname, l, r, sth, cth): # , m1, mdot, eta, afac, re, dre, omega):
     glo.attrs['mdot']      = mdot
     glo.attrs['eta']      = eta
     glo.attrs['afac']      = afac
-    glo.attrs['re']      = re
-    glo.attrs['dre']      = dre
+    glo.attrs['re']      = r_e
+    glo.attrs['dre']      = dr_e
     glo.attrs['omega']      = omega
     glo.attrs['rstar']      = rstar
 
@@ -72,7 +72,17 @@ def toasc(hname='tireout.hdf5', nentry=0):
     nr=size(r)
     # write an ascii file
     fout = open(hname+'_'+entry, 'w')
+    fout.write('# t = '+str(t)+'\n')
+    fout.write('# format: l -- rho -- v -- u\n')
     for k in arange(nr):
         fout.write(str(r[k])+" "+str(rho[k])+" "+str(v[k])+" "+str(u[k])+"\n")
     fout.close()
+    
+def multitoasc(n1, n2, no,hname='tireout.hdf5'):
+    '''
+    running toasc for a set of frames
+    '''
+    for k in linspace(n1,n2, num=no, dtype=int):
+        toasc(hname=hname, nentry=k)
+        print(k)
     
