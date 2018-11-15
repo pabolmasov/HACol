@@ -152,6 +152,8 @@ def quasi2d(hname, n1, n2):
     '''
     makes quasi-2D Rt plots
     '''
+    outdir = os.path.dirname(hname)
+    
     nt=n2-n1
     # first frame
     entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1)
@@ -187,8 +189,8 @@ def quasi2d(hname, n1, n2):
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
-    savefig('q2d_v.png')
-    savefig('q2d_v.eps')
+    savefig(outdir+'/q2d_v.png')
+    savefig(outdir+'/q2d_v.eps')
     close('all')
     clf()
     fig=figure()
@@ -202,8 +204,8 @@ def quasi2d(hname, n1, n2):
     ylabel(r'$\langle v\rangle /c$', fontsize=14)
     fig.set_size_inches(3.35, 2.)
     fig.tight_layout()
-    savefig('q2d_vmean.png')
-    savefig('q2d_vmean.eps')
+    savefig(outdir+'/q2d_vmean.png')
+    savefig(outdir+'/q2d_vmean.eps')
     close('all')
     
     # internal energy density
@@ -220,8 +222,8 @@ def quasi2d(hname, n1, n2):
     contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
-    savefig('q2d_u.png')
-    savefig('q2d_u.eps')
+    savefig(outdir+'/q2d_u.png')
+    savefig(outdir+'/q2d_u.eps')
     close('all')
 
 def postplot(hname, nentry):
@@ -241,7 +243,7 @@ def multiplots(hname, n1, n2):
         postplot(hname, k)
 
 #####################################
-def curvestack(n1, n2, step, prefix = "tireout", postfix = ".dat"):
+def curvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat"):
     '''
     plots a series of U/Umag curves from the ascii output
     '''
@@ -261,7 +263,7 @@ def curvestack(n1, n2, step, prefix = "tireout", postfix = ".dat"):
     savefig("curvestack.png")
     close('all')
 
-def Vcurvestack(n1, n2, step, prefix = "tireout", postfix = ".dat", plot2d=False):
+def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=False):
     '''
     plots a series of velocity curves from the ascii output
     '''

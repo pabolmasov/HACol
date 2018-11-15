@@ -235,6 +235,9 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         edot0 = 0.
     m1[0] = m[0] + (-(s_half[0]-(-mdot0))/dlleft+dm[0]) * dt # mass flux is zero through the inner boundary
     m1[-1] = m[-1] + (-(-mdot-s_half[-1])/dlright+dm[-1]) * dt  # inflow set to mdot (global)
+    # this effectively limits the outer velocity from above
+    if(m1[-1]< (mdot / abs(vout))):
+        m1[-1] = mdot / abs(vout)
     s1[0] = -mdot0
     s1[-1] = -mdot # if I fix s1[-1], this results in v=vout effectively fixed at the boundary
     vout_current = s1[-1]/m1[-1]
@@ -253,20 +256,11 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     # what if we get negative mass?
     wneg=where(m1<mfloor)
-    #    wneg=where(m1>mfloor)
+    m1 = maximum(m1, mfloor)
     if(size(wneg)>0):
-        print(wneg)
-        print((r)[wneg])
-        print((m)[wneg])
-        print((m1)[wneg])
-        print((-(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm[1:-1]))
-        print(dt)
-        m1[wneg] = 0.
-        s1[wneg] = 0.
-        e1[wneg] = 0.
-        print(str(size(wneg))+" negative points!")
-        input("m1")
-
+        s1[wneg] = (m1 * s/m)[wneg]
+        e1[wneg] = (e1 * e/m)[wneg]
+    
     return m1, s1, e1
 
 #########################################################################################

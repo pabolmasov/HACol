@@ -3,11 +3,12 @@ from scipy.integrate import *
 from scipy.interpolate import *
 
 from globals import ifplot
+
 import hdfoutput as hdf
 if ifplot:
     import plots
 
-def pds(infile='flux', binning=None, binlogscale=False):
+def pds(infile='out/flux', binning=None, binlogscale=False):
     '''
     makes a power spectrum plot;
     input infile+'.dat' is an ascii, 2+column dat-file with an optional comment sign of #
@@ -51,7 +52,7 @@ def pds(infile='flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
+def dynspec(infile='out/flux', ntimes=10, nbins=10, binlogscale=False):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
     '''
@@ -93,7 +94,7 @@ def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
     plots.dynspec(t2,binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)
 
 #############################################
-def fhist(infile = "flux"):
+def fhist(infile = "out/flux"):
     '''
     histogram of flux distribution (reads a two-column ascii file)
     '''
@@ -115,7 +116,7 @@ def fhist(infile = "flux"):
     plots.binplot(binedges, fn, dfn, fname=infile+"_hist", fit = exp(p[0]*log(binedges)+p[1]))
 
 #####################################################################
-def shock_hdf(n, infile = "tireout.hdf5"):
+def shock_hdf(n, infile = "out/tireout.hdf5"):
     '''
     finds the position of the shock in a given entry of the infile
     '''
@@ -127,7 +128,7 @@ def shock_hdf(n, infile = "tireout.hdf5"):
     print("maximal compression found at r="+str(r[wcomp]))
     return r[wcomp]
 
-def shock_dat(n, prefix = "tireout"):
+def shock_dat(n, prefix = "out/tireout"):
     '''
     finds the position of the shock from a given dat-file ID
     '''
