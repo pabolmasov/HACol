@@ -1,5 +1,6 @@
 
 INSTALLATION AND RUNNING
+
 To run the code, make sure you have python3 (checked for python3.6) and preferrably ipython. The main file is tire_new.py, and the main procedure is alltire(). Tune all the global parameters in globals.py and then run your ipython or python. From ipython, compile the code
 > %run tire_new
 and then run the main routine
