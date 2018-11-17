@@ -2,14 +2,15 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=100 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
 logmesh=True
 
 # physical parameters:
-mu30 = 130. # magnetic moment, 1e30 units
+mu30 = 1. # magnetic moment, 1e30 units
 m1=1.4
-mdot = 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
+mdot = 10. * 4. * pi
+# 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
 mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 6291.12*4.*pi/m1
 # acc=True # true if we are going to zero the mass and energy fluxes through the outer boundary in actual equations
@@ -52,7 +53,7 @@ lscale=1.13685e37*m1 # G Msun c / kappa luminosity scale
 massscale=6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 #
 tmax=1000./tscale # maximal time in tscales
-dtout=0.01/tscale # output time step in tscales
+dtout=0.001/tscale # output time step in tscales
 omega=sqrt(0.6)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag=b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png

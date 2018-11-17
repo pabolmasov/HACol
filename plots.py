@@ -7,6 +7,7 @@ from scipy.integrate import cumtrapz
 from scipy.interpolate import interp1d
 import glob
 import re
+import os
 
 #Uncomment the following if you want to use LaTeX in figures 
 rc('font',**{'family':'serif'})
@@ -72,16 +73,17 @@ def vplot(x, v, cs, name='outplot'):
     savefig(name+'.png')
     close()
 
-def splot(x, y, name='outplot'):
+def splot(x, y, name='outplot', fmt='.k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     '''
     so far plots some quantity S(R) 
     '''
     clf()
-    plot(x, y, 'k')
+    plot(x, y, fmt)
     xscale('log') ; yscale('log')
-    xlabel(r'$r$') ; ylabel(r'$S(R)$')
+    xlabel(xtitle) ; ylabel(ytitle)
     savefig(name+'.png')
-
+    close('all')
+    
 def someplots(x, ys, name='outplot', ytitle='', ylog = False):
     '''
     plots a series of curves  

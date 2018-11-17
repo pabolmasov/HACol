@@ -4,7 +4,7 @@ from numpy import *
 
 nx=1000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
-logmesh=False
+logmesh=True
 
 # physical parameters:
 mu30 = 130. # magnetic moment, 1e30 units

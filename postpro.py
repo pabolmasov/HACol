@@ -1,6 +1,7 @@
 from numpy import *
 from scipy.integrate import *
 from scipy.interpolate import *
+import os
 
 from globals import ifplot
 
@@ -126,7 +127,7 @@ def shock_hdf(n, infile = "out/tireout.hdf5"):
     dvdl = (v[1:]-v[:-1])/(l[1:]-l[:-1])
     wcomp = (dvdl).argmin()
     print("maximal compression found at r="+str(r[wcomp]))
-    return r[wcomp]
+    return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.
 
 def shock_dat(n, prefix = "out/tireout"):
     '''
@@ -138,6 +139,35 @@ def shock_dat(n, prefix = "out/tireout"):
     #find maximal compression:
     dvdl = (v[1:]-v[:-1])/(r[1:]-r[:-1])
     wcomp = (dvdl).argmin()
-    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
+    #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
     return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.
     
+def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
+    '''
+    draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
+    '''
+    
+    n=arange(n1, n2, dn, dtype=int)
+    s=arange(size(n), dtype=double)
+    ds=arange(size(n), dtype=double)
+    print(size(n))
+    outdir = os.path.dirname(prefix)
+    fluxlines = loadtxt(outdir+"/flux.dat", comments="#", delimiter=" ", unpack=False)
+    t=fluxlines[:,0] ; f=fluxlines[:,1]
+    for k in arange(size(n)):
+        if(dat):
+            stmp, dstmp = shock_dat(k, prefix=prefix)
+        else:
+            stmp, dstmp = shock_hdf(k, infile = prefix+".hdf5")
+        s[k] = stmp ; ds[k] = dstmp
+
+    if(ifplot):
+        plots.splot(t[n], s, name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$')
+        plots.splot(f[n], s, name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$')
+    else:
+        # ascii output
+        fout = open(outdir+'/sfront.dat', 'w')
+        for k in arange(size(n)):
+            fout.write(str(t[n[k]])+" "+str(s[k])+" "+str(ds[k])+"\n")
+        fout.close()
+        
