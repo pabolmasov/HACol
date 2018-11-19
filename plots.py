@@ -73,7 +73,7 @@ def vplot(x, v, cs, name='outplot'):
     savefig(name+'.png')
     close()
 
-def splot(x, y, name='outplot', fmt='.k', xtitle=r'$r$', ytitle=r'$S(R)$'):
+def splot(x, y, name='outplot', fmt='-k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     '''
     so far plots some quantity S(R) 
     '''
@@ -310,6 +310,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         colorbar()
         xscale('log')
         xlabel(r'$R/R_*$') ; ylabel(r'$t$, s')
+        ylim(tar.min(), tar.max())
         fig.set_size_inches(4, 6)
         savefig("Vcurvestack_2d.png")
     close('all')

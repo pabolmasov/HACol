@@ -11,6 +11,7 @@ import imp
 import sys
 
 import hdfoutput as hdf
+import bassun as bs
 
 '''
 we need the option of using an arbitrary configuration file
@@ -88,7 +89,7 @@ def geometry(r, writeout=None):
     #    theta=arcsin(sqrt(r/r_e))
     #    sth=sin(theta) ; cth=cos(theta)
     sth=sqrt(r/r_e) ; cth=sqrt(1.-r/r_e) # OK
-    across=4.*pi*afac*dr_e*r_e*sth**3/sqrt(1.+3.*cth**2) # OK  (two sides)
+    across=8.*pi*afac*dr_e*r_e*sth**6*cth/sqrt(1.+3.*cth**2) # check!!!
     alpha=arctan((cth**2-1./3.)/sth/cth) # Galja's formula (3)
     sina=sin(alpha) ; cosa=cos(alpha)
     l=cumtrapz(sqrt(1.+3.*cth**2)/2./cth, x=r, initial=0.) # coordinate along the field line
@@ -263,7 +264,7 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
     
     return m1, s1, e1
 
-#########################################################################################
+################################################################################
 def alltire():
     '''
     the main routine bringing all together.
@@ -286,28 +287,29 @@ def alltire():
     l -= r.min() ; luni -= r.min()
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
-    #    print(dlleft)
-    #    print(luni_half[1]-luni_half[0])
-    #    print(luni_half[2]-luni_half[1])
-    #    input("l")
-    #    print("r = "+str(r))
-    #    print("l = "+str(l))
-    #    print("luni = "+str(luni))
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     sth, cth, sina, cosa, across, l = geometry(rnew, writeout=outdir+'/geo.dat') # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
     r_half=rfun(luni_half) # half-step radial coordinates
     sth_half, cth_half, sina_half, cosa_half, across_half, l_half = geometry(r_half) # mid-step geometry in r
     l_half+=l[1]/2. # mid-step mesh starts halfstep later
-    #    print("halfstep l correction "+str((l_half-luni_half).std())+"\n")
-    #    print("r mesh: "+str(r))
-    #    ii=input("r")
-    #    print("r step "+str(r[1:]-r[:-1]))
-    #    print("l step "+str(l[1:]-l[:-1]))
-    #    ii=input("r")
     dlleft = 2.*(l_half[1]-l_half[0])-(l_half[2]-l_half[1])
     dlright = 2.*(l_half[-1]-l_half[-2])-(l_half[-2]-l_half[3])
-   
+
+    # testing bassun.py
+    BSgamma = rstar**2/mdot/across[0]/afac**2
+    BSd0 = (across/4./pi/rstar/sth)[0]
+    BSeta = (8./21./sqrt(2.)*umag*sqrt(rstar)*BSd0**2)**0.25
+    print("BS parameters:")
+    print("   gamma = "+str(BSgamma))
+    print("   d0 = "+str(BSd0))
+    print("   eta = "+str(BSeta))
+    x1 = 1. ; x2 = 1000. ; nxx=1000
+    xtmp=(x2/x1)**(arange(nxx)/double(nxx))*x1
+    plots.someplots(xtmp, [bs.fxis(xtmp, BSgamma, BSeta, 3.)], name='fxis', ytitle=r'$F(x)$')
+    xs = bs.xis(BSgamma, BSeta)
+    print("   xi_s = "+str(xs))
+    #    input("BS")
     # magnetic field energy density:
     umagtar = umag * (1.+3.*cth**2)/4. * (rstar/r)**6
     # initial conditions:
@@ -363,7 +365,8 @@ def alltire():
         timer.start_comp("sources")
         dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
         #        ltot=simps(flux[1:-1], x=l[1:-1])
-        ltot=trapz(flux[1:-1], x=l[1:-1]) # no difference
+        #        ltot=trapz(flux[1:-1], x=l[1:-1]) # 
+        ltot=simps(flux, x=l) # no difference
         timer.stop_comp("sources")
         timer.start_comp("main")
         m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth, across, dlleft, dlright)
