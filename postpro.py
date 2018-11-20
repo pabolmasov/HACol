@@ -1,13 +1,15 @@
 from numpy import *
 from scipy.integrate import *
 from scipy.interpolate import *
+import os
 
 from globals import ifplot
+
 import hdfoutput as hdf
 if ifplot:
     import plots
 
-def pds(infile='flux', binning=None, binlogscale=False):
+def pds(infile='out/flux', binning=None, binlogscale=False):
     '''
     makes a power spectrum plot;
     input infile+'.dat' is an ascii, 2+column dat-file with an optional comment sign of #
@@ -51,7 +53,7 @@ def pds(infile='flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
+def dynspec(infile='out/flux', ntimes=10, nbins=10, binlogscale=False):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
     '''
@@ -93,7 +95,7 @@ def dynspec(infile='flux', ntimes=10, nbins=10, binlogscale=False):
     plots.dynspec(t2,binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)
 
 #############################################
-def fhist(infile = "flux"):
+def fhist(infile = "out/flux"):
     '''
     histogram of flux distribution (reads a two-column ascii file)
     '''
@@ -115,7 +117,7 @@ def fhist(infile = "flux"):
     plots.binplot(binedges, fn, dfn, fname=infile+"_hist", fit = exp(p[0]*log(binedges)+p[1]))
 
 #####################################################################
-def shock_hdf(n, infile = "tireout.hdf5"):
+def shock_hdf(n, infile = "out/tireout.hdf5"):
     '''
     finds the position of the shock in a given entry of the infile
     '''
@@ -125,9 +127,9 @@ def shock_hdf(n, infile = "tireout.hdf5"):
     dvdl = (v[1:]-v[:-1])/(l[1:]-l[:-1])
     wcomp = (dvdl).argmin()
     print("maximal compression found at r="+str(r[wcomp]))
-    return r[wcomp]
+    return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.
 
-def shock_dat(n, prefix = "tireout"):
+def shock_dat(n, prefix = "out/tireout"):
     '''
     finds the position of the shock from a given dat-file ID
     '''
@@ -137,6 +139,35 @@ def shock_dat(n, prefix = "tireout"):
     #find maximal compression:
     dvdl = (v[1:]-v[:-1])/(r[1:]-r[:-1])
     wcomp = (dvdl).argmin()
-    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
+    #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
     return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.
     
+def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
+    '''
+    draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
+    '''
+    
+    n=arange(n1, n2, dn, dtype=int)
+    s=arange(size(n), dtype=double)
+    ds=arange(size(n), dtype=double)
+    print(size(n))
+    outdir = os.path.dirname(prefix)
+    fluxlines = loadtxt(outdir+"/flux.dat", comments="#", delimiter=" ", unpack=False)
+    t=fluxlines[:,0] ; f=fluxlines[:,1]
+    for k in arange(size(n)):
+        if(dat):
+            stmp, dstmp = shock_dat(k, prefix=prefix)
+        else:
+            stmp, dstmp = shock_hdf(k, infile = prefix+".hdf5")
+        s[k] = stmp ; ds[k] = dstmp
+
+    if(ifplot):
+        plots.splot(t[n], s, name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', fmt=',k')
+        plots.splot(f[n], s, name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', fmt=',k')
+    else:
+        # ascii output
+        fout = open(outdir+'/sfront.dat', 'w')
+        for k in arange(size(n)):
+            fout.write(str(t[n[k]])+" "+str(s[k])+" "+str(ds[k])+"\n")
+        fout.close()
+        

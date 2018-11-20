@@ -11,6 +11,7 @@ import imp
 import sys
 
 import hdfoutput as hdf
+import bassun as bs
 
 '''
 we need the option of using an arbitrary configuration file
@@ -88,7 +89,7 @@ def geometry(r, writeout=None):
     #    theta=arcsin(sqrt(r/r_e))
     #    sth=sin(theta) ; cth=cos(theta)
     sth=sqrt(r/r_e) ; cth=sqrt(1.-r/r_e) # OK
-    across=4.*pi*afac*dr_e*r_e*sth**3/sqrt(1.+3.*cth**2) # OK  (two sides)
+    across=8.*pi*afac*dr_e*r_e*(r/r_e)**3*cth/sqrt(1.+3.*cth**2) # follows from Galja's formula (17)
     alpha=arctan((cth**2-1./3.)/sth/cth) # Galja's formula (3)
     sina=sin(alpha) ; cosa=cos(alpha)
     l=cumtrapz(sqrt(1.+3.*cth**2)/2./cth, x=r, initial=0.) # coordinate along the field line
@@ -235,6 +236,9 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         edot0 = 0.
     m1[0] = m[0] + (-(s_half[0]-(-mdot0))/dlleft+dm[0]) * dt # mass flux is zero through the inner boundary
     m1[-1] = m[-1] + (-(-mdot-s_half[-1])/dlright+dm[-1]) * dt  # inflow set to mdot (global)
+    # this effectively limits the outer velocity from above
+    if(m1[-1]< (mdot / abs(vout))):
+        m1[-1] = mdot / abs(vout)
     s1[0] = -mdot0
     s1[-1] = -mdot # if I fix s1[-1], this results in v=vout effectively fixed at the boundary
     vout_current = s1[-1]/m1[-1]
@@ -253,23 +257,14 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     # what if we get negative mass?
     wneg=where(m1<mfloor)
-    #    wneg=where(m1>mfloor)
+    m1 = maximum(m1, mfloor)
     if(size(wneg)>0):
-        print(wneg)
-        print((r)[wneg])
-        print((m)[wneg])
-        print((m1)[wneg])
-        print((-(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm[1:-1]))
-        print(dt)
-        m1[wneg] = 0.
-        s1[wneg] = 0.
-        e1[wneg] = 0.
-        print(str(size(wneg))+" negative points!")
-        input("m1")
-
+        s1[wneg] = (m1 * s/m)[wneg]
+        e1[wneg] = (e1 * e/m)[wneg]
+    
     return m1, s1, e1
 
-#########################################################################################
+################################################################################
 def alltire():
     '''
     the main routine bringing all together.
@@ -292,28 +287,31 @@ def alltire():
     l -= r.min() ; luni -= r.min()
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
-    #    print(dlleft)
-    #    print(luni_half[1]-luni_half[0])
-    #    print(luni_half[2]-luni_half[1])
-    #    input("l")
-    #    print("r = "+str(r))
-    #    print("l = "+str(l))
-    #    print("luni = "+str(luni))
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     sth, cth, sina, cosa, across, l = geometry(rnew, writeout=outdir+'/geo.dat') # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
     r_half=rfun(luni_half) # half-step radial coordinates
     sth_half, cth_half, sina_half, cosa_half, across_half, l_half = geometry(r_half) # mid-step geometry in r
     l_half+=l[1]/2. # mid-step mesh starts halfstep later
-    #    print("halfstep l correction "+str((l_half-luni_half).std())+"\n")
-    #    print("r mesh: "+str(r))
-    #    ii=input("r")
-    #    print("r step "+str(r[1:]-r[:-1]))
-    #    print("l step "+str(l[1:]-l[:-1]))
-    #    ii=input("r")
     dlleft = 2.*(l_half[1]-l_half[0])-(l_half[2]-l_half[1])
     dlright = 2.*(l_half[-1]-l_half[-2])-(l_half[-2]-l_half[3])
-   
+
+    # testing bassun.py
+    print("dtheta = "+str((across/(4.*pi*afac*r**2*sth))[0]))
+    print("dtheta = "+str((2.*sth*cth*dr_e/r_e/(1.+3.*cth**2))[0]/afac))
+    BSgamma = ((4.*pi*afac*sth)**2*r**3/across)[0]/mdot
+    BSd0 = (across/4./pi/rstar/sth)[0]
+    BSeta = (8./21./sqrt(2.)*umag*sqrt(rstar)*BSd0**2)**0.25
+    print("BS parameters:")
+    print("   gamma = "+str(BSgamma))
+    print("   d0 = "+str(BSd0))
+    print("   eta = "+str(BSeta))
+    x1 = 1. ; x2 = 1000. ; nxx=1000
+    xtmp=(x2/x1)**(arange(nxx)/double(nxx))*x1
+    plots.someplots(xtmp, [bs.fxis(xtmp, BSgamma, BSeta, 3.)], name='fxis', ytitle=r'$F(x)$')
+    xs = bs.xis(BSgamma, BSeta)
+    print("   xi_s = "+str(xs))
+    input("BS")
     # magnetic field energy density:
     umagtar = umag * (1.+3.*cth**2)/4. * (rstar/r)**6
     # initial conditions:
@@ -369,7 +367,8 @@ def alltire():
         timer.start_comp("sources")
         dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
         #        ltot=simps(flux[1:-1], x=l[1:-1])
-        ltot=trapz(flux[1:-1], x=l[1:-1]) # no difference
+        #        ltot=trapz(flux[1:-1], x=l[1:-1]) # 
+        ltot=simps(flux, x=l) # no difference
         timer.stop_comp("sources")
         timer.start_comp("main")
         m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth, across, dlleft, dlright)
@@ -445,5 +444,5 @@ def alltire():
     if(ifhdf):
         hdf.close(hfile)
 # if you want to make a movie of how the velocity changes with time:
-# ffmpeg -f image2 -r 35 -pattern_type glob -i 'vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
+# ffmpeg -f image2 -r 15 -pattern_type glob -i 'out/vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
 # alltire()

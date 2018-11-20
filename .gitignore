@@ -1,7 +1,12 @@
 *.png
+*.eps
+*.fig
 *.dat
 *.mp4
 *.pdf
 *.log
 *.aux
 *.hdf5
+*.hdf5_*
+out*/
+globals_*.py

@@ -2,9 +2,9 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=10000 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
-logmesh=False
+logmesh=True
 
 # physical parameters:
 mu30 = 130. # magnetic moment, 1e30 units
@@ -61,10 +61,10 @@ vout=-1./sqrt(r_e) * 1./15. # initial poloidal velocity at the outer boundary ; 
 
 # plotting options:
 ifplot = True
-plotalias = 1 # plot every Nth output step 
-ascalias = 1 # make an ascii file every Nth output step
+plotalias = 10 # plot every Nth output step 
+ascalias = 10 # make an ascii file every Nth output step
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
-outdir = "out/"
+outdir = "out_galya/"
 print("loaded from outside")
