@@ -100,6 +100,7 @@ def someplots(x, ys, name='outplot', ytitle='', ylog = False):
         yscale('log')
     xlabel(r'$r$') ; ylabel(ytitle)
     savefig(name+'.png')
+    close('all')
   
 #########################################################################
 # post-processing PDS plot:

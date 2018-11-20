@@ -16,6 +16,8 @@ def xis(gamma, eta, n=3):
     (gamma = rstar**2/mdot/across[0]/afac**2)
     (eta = (8/21/sqrt(2)))**0.25 (umag*sqrt(rstar)*d0**2)**0.25, where d0 = (across/4./pi/rstar/sin(theta))[0]
     '''
-    x = fsolve(fxis, 20., args=(gamma, eta, n))
+    if((eta*gamma**0.25)<1.) | (gamma>100.):
+        return nan
+    x = fsolve(fxis, 2., args=(gamma, eta, n))
     #    print(fxis(x, gamma, eta, n))
     return x

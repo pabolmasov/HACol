@@ -89,7 +89,7 @@ def geometry(r, writeout=None):
     #    theta=arcsin(sqrt(r/r_e))
     #    sth=sin(theta) ; cth=cos(theta)
     sth=sqrt(r/r_e) ; cth=sqrt(1.-r/r_e) # OK
-    across=8.*pi*afac*dr_e*r_e*sth**6*cth/sqrt(1.+3.*cth**2) # check!!!
+    across=8.*pi*afac*dr_e*r_e*(r/r_e)**3*cth/sqrt(1.+3.*cth**2) # follows from Galja's formula (17)
     alpha=arctan((cth**2-1./3.)/sth/cth) # Galja's formula (3)
     sina=sin(alpha) ; cosa=cos(alpha)
     l=cumtrapz(sqrt(1.+3.*cth**2)/2./cth, x=r, initial=0.) # coordinate along the field line
@@ -297,7 +297,9 @@ def alltire():
     dlright = 2.*(l_half[-1]-l_half[-2])-(l_half[-2]-l_half[3])
 
     # testing bassun.py
-    BSgamma = rstar**2/mdot/across[0]/afac**2
+    print("dtheta = "+str((across/(4.*pi*afac*r**2*sth))[0]))
+    print("dtheta = "+str((2.*sth*cth*dr_e/r_e/(1.+3.*cth**2))[0]/afac))
+    BSgamma = ((4.*pi*afac*sth)**2*r**3/across)[0]/mdot
     BSd0 = (across/4./pi/rstar/sth)[0]
     BSeta = (8./21./sqrt(2.)*umag*sqrt(rstar)*BSd0**2)**0.25
     print("BS parameters:")
@@ -309,7 +311,7 @@ def alltire():
     plots.someplots(xtmp, [bs.fxis(xtmp, BSgamma, BSeta, 3.)], name='fxis', ytitle=r'$F(x)$')
     xs = bs.xis(BSgamma, BSeta)
     print("   xi_s = "+str(xs))
-    #    input("BS")
+    input("BS")
     # magnetic field energy density:
     umagtar = umag * (1.+3.*cth**2)/4. * (rstar/r)**6
     # initial conditions:

@@ -66,5 +66,5 @@ ascalias = 10 # make an ascii file every Nth output step
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
-outdir = "out/"
+outdir = "out_galya/"
 print("loaded from outside")

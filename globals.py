@@ -2,14 +2,14 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=3000 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
-logmesh=False
+logmesh=True
 
 # physical parameters:
 mu30 = 1. # magnetic moment, 1e30 units
 m1=1.4
-mdot = 1. * 4. * pi
+mdot = 10. * 4. * pi
 # 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
 mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 6291.12*4.*pi/m1
