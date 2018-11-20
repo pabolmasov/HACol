@@ -7,7 +7,7 @@ from scipy.special import expn
 def fxis(x, gamma, eta, n):
     return 1.+exp(gamma*x)*(x*expn(2,gamma)-expn(2,gamma*x)) - eta * gamma**0.25 * x**((n+0.5)/4.)
 
-def xis(gamma, eta, n=3):
+def xis(gamma, eta, n=3, x0=20.):
     '''
     solves equation (34) from Basko&Sunyaev (1976)
     arguments: 
@@ -18,6 +18,6 @@ def xis(gamma, eta, n=3):
     '''
     if((eta*gamma**0.25)<1.) | (gamma>100.):
         return nan
-    x = fsolve(fxis, 2., args=(gamma, eta, n))
+    x = fsolve(fxis, x0, args=(gamma, eta, n))
     #    print(fxis(x, gamma, eta, n))
     return x

@@ -162,8 +162,8 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
         s[k] = stmp ; ds[k] = dstmp
 
     if(ifplot):
-        plots.splot(t[n], s, name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', fmt=',k')
-        plots.splot(f[n], s, name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', fmt=',k')
+        plots.splot(t[n], s, name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', fmt='.k')
+        plots.splot(f[n], s, name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', fmt='.k')
     else:
         # ascii output
         fout = open(outdir+'/sfront.dat', 'w')
