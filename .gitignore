@@ -8,5 +8,6 @@
 *.aux
 *.hdf5
 *.hdf5_*
+forpaper
 out*/
 globals_*.py
