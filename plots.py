@@ -84,7 +84,7 @@ def splot(x, y, name='outplot', fmt='-k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     savefig(name+'.png')
     close('all')
     
-def someplots(x, ys, name='outplot', ytitle='', ylog = False):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle=''):
     '''
     plots a series of curves  
     '''
@@ -95,7 +95,8 @@ def someplots(x, ys, name='outplot', ytitle='', ylog = False):
     clf()
     for k in arange(ny):
         plot(x, ys[k], 'k', color=colorsequence[k % sc])
-    xscale('log')
+    if(xlog):
+        xscale('log')
     if(ylog):
         yscale('log')
     xlabel(r'$r$') ; ylabel(ytitle)
