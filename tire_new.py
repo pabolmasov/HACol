@@ -302,8 +302,8 @@ def alltire():
     print("delta = "+str((across/(4.*pi*afac*r*sth))[0]))
     print("delta = "+str((sth*r/sqrt(1.+3.*cth**2))[0] * dr_e/r_e))
     print("delta = "+str(delta[0]))
-    BSgamma = (across/delta)[0]/mdot/rstar
-    BSeta = (8./21./sqrt(2.)*umag*rstar**1.5)**0.25*sqrt(delta[0])
+    BSgamma = (across/delta**2)[0]/mdot*rstar
+    BSeta = (8./21./sqrt(2.)*umag)**0.25*sqrt(delta[0])/(rstar)**0.125
     print("BS parameters:")
     print("   gamma = "+str(BSgamma))
     print("   eta = "+str(BSeta))
