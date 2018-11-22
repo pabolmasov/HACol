@@ -6,6 +6,7 @@ import os
 from globals import ifplot
 
 import hdfoutput as hdf
+import bassun as bs
 if ifplot:
     import plots
 
@@ -153,7 +154,14 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     print(size(n))
     outdir = os.path.dirname(prefix)
     fluxlines = loadtxt(outdir+"/flux.dat", comments="#", delimiter=" ", unpack=False)
+    geometry = loadtxt(outdir+"/geo.dat", comments="#", delimiter=" ", unpack=False)
     t=fluxlines[:,0] ; f=fluxlines[:,1]
+    across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
+    rstar = 6.8/1.4 ; mdot = 4.*pi * 10. ; umag=2.29e6*1.4  # temporary!!! need to save this info somehow
+    BSgamma = (across0/delta0**2)/mdot*rstar
+    BSeta = (8./21./sqrt(2.)*umag)**0.25*sqrt(delta0)/(rstar)**0.125
+    xs = bs.xis(BSgamma, BSeta, x0=20.)
+
     for k in arange(size(n)):
         if(dat):
             stmp, dstmp = shock_dat(k, prefix=prefix)
@@ -162,12 +170,11 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
         s[k] = stmp ; ds[k] = dstmp
 
     if(ifplot):
-        plots.splot(t[n], s, name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', fmt='.k')
-        plots.splot(f[n], s, name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', fmt='.k')
-    else:
-        # ascii output
-        fout = open(outdir+'/sfront.dat', 'w')
-        for k in arange(size(n)):
-            fout.write(str(t[n[k]])+" "+str(s[k])+" "+str(ds[k])+"\n")
-        fout.close()
+        plots.someplots(t[n], [s, s*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False)
+        plots.someplots(f[n], [s, s*0.+xs], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False)
+    # ascii output
+    fout = open(outdir+'/sfront.dat', 'w')
+    for k in arange(size(n)):
+        fout.write(str(t[n[k]])+" "+str(s[k])+" "+str(ds[k])+"\n")
+    fout.close()
         

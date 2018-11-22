@@ -89,22 +89,23 @@ def geometry(r, writeout=None):
     #    theta=arcsin(sqrt(r/r_e))
     #    sth=sin(theta) ; cth=cos(theta)
     sth=sqrt(r/r_e) ; cth=sqrt(1.-r/r_e) # OK
-    across=8.*pi*afac*dr_e*r_e*(r/r_e)**3*cth/sqrt(1.+3.*cth**2) # follows from Galja's formula (17)
+    across=4.*pi*afac*dr_e*r_e*(r/r_e)**3/sqrt(1.+3.*cth**2) # follows from Galja's formula (17)
     alpha=arctan((cth**2-1./3.)/sth/cth) # Galja's formula (3)
     sina=sin(alpha) ; cosa=cos(alpha)
     l=cumtrapz(sqrt(1.+3.*cth**2)/2./cth, x=r, initial=0.) # coordinate along the field line
-    dtheta = 2.*sth*cth / (1.+3.*cth**2) * (dr_e/r_e) / afac # transverse thickness of the flow (Galya's formula 16)
+    delta = r * sth/sqrt(1.+3.*cth**2) * dr_e/r_e
+    # transverse thickness of the flow (Galya's formula 17)
     # dl diverges near R=Re, hence the maximal radius should be smaller than Re
     # ascii output:
     if(writeout != None):
         theta=arctan(sth/cth)
         fgeo=open(writeout, 'w')
-        fgeo.write('# format: r -- theta -- alpha -- across -- l\n')
+        fgeo.write('# format: r -- theta -- alpha -- across -- l -- delta \n')
         for k in arange(size(l)):
-            fgeo.write(str(r[k])+' '+str(theta[k])+' '+str(alpha[k])+' '+str(across[k])+' '+str(l[k])+'\n')
+            fgeo.write(str(r[k])+' '+str(theta[k])+' '+str(alpha[k])+' '+str(across[k])+' '+str(l[k])+' '+str(delta[k])+'\n')
         fgeo.close()
     
-    return sth, cth, sina, cosa, across, l, dtheta
+    return sth, cth, sina, cosa, across, l, delta
 
 def cons(rho, v, u, across, r, sth):
     '''
@@ -279,7 +280,7 @@ def alltire():
     sthd=1./sqrt(1.+(dr_e/r_e)**2) # initial sin(theta)
     rmax=r_e*sthd # slightly less then r_e 
     r=((2.*(rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
-    sth, cth, sina, cosa, across, l, dth = geometry(r) # radial-equidistant mesh
+    sth, cth, sina, cosa, across, l, delta = geometry(r) # radial-equidistant mesh
     l += r.min() # we are starting from a finite radius
     if(logmesh):
         luni=exp(linspace(log(l.min()), log(l.max()), nx, endpoint=False)) # log(l)-equidistant mesh
@@ -289,20 +290,20 @@ def alltire():
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(l,r, kind='linear') # interpolation function mapping l to r
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
-    sth, cth, sina, cosa, across, l, dth = geometry(rnew, writeout=outdir+'/geo.dat') # all the geometric quantities for the l-equidistant mesh
+    sth, cth, sina, cosa, across, l, delta = geometry(rnew, writeout=outdir+'/geo.dat') # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
     r_half=rfun(luni_half) # half-step radial coordinates
-    sth_half, cth_half, sina_half, cosa_half, across_half, l_half, dth_half = geometry(r_half) # mid-step geometry in r
+    sth_half, cth_half, sina_half, cosa_half, across_half, l_half, delta_half = geometry(r_half) # mid-step geometry in r
     l_half+=l[1]/2. # mid-step mesh starts halfstep later
     dlleft = 2.*(l_half[1]-l_half[0])-(l_half[2]-l_half[1])
     dlright = 2.*(l_half[-1]-l_half[-2])-(l_half[-2]-l_half[3])
 
     # testing bassun.py
-    print("dtheta = "+str((across/(4.*pi*afac*r**2*sth))[0]))
-    print("dtheta = "+str((2.*sth*cth*dr_e/r_e/(1.+3.*cth**2))[0]/afac))
-    print("dtheta = "+str(dth[0]))
-    BSgamma = (across/dth)[0]/mdot/rstar
-    BSeta = (8./21./sqrt(2.)*umag*rstar**1.5)**0.25*sqrt(dth[0])
+    print("delta = "+str((across/(4.*pi*afac*r*sth))[0]))
+    print("delta = "+str((sth*r/sqrt(1.+3.*cth**2))[0] * dr_e/r_e))
+    print("delta = "+str(delta[0]))
+    BSgamma = (across/delta**2)[0]/mdot*rstar
+    BSeta = (8./21./sqrt(2.)*umag)**0.25*sqrt(delta[0])/(rstar)**0.125
     print("BS parameters:")
     print("   gamma = "+str(BSgamma))
     print("   eta = "+str(BSeta))
