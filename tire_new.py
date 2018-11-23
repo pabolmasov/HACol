@@ -10,8 +10,6 @@ import os.path
 import imp
 import sys
 
-import hdfoutput as hdf
-import bassun as bs
 
 '''
 we need the option of using an arbitrary configuration file
@@ -31,8 +29,13 @@ fp.close()
 
 from globals import *
 
+# loading local modules:
 if ifplot:
     import plots
+if(ifhdf):
+    import hdfoutput as hdf
+import bassun as bs
+#
 
 from timer import Timer
 timer = Timer(["total", "step", "io"],
@@ -322,14 +325,31 @@ def alltire():
     m0=m 
     s+=vinit*m
     e+=(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m+3.*umagout*across*(r_e/r)**(-10./3.) * (1.+0.01*rand(size(r)))
-    
+
+    t=0.;  tstore=0.  ; nout=0
+
+    # if we want to restart from a stored configuration
+    # works so far correctly ONLY if the mesh is identical!
+    if(ifrestart):
+        if(ifhdf):
+            # restarting from a HDF5 file
+            entryname, t, l, r, sth, rho, u, v = hdf.read(restartfile, restartn)
+            print("restarted from file "+restartfile+", entry "+entryname)
+        else:
+            # restarting from an ascii output
+            ascrestartname = restartprefix + hdf.entryname(restartn, ndig=5) + ".dat"
+            lines = loadtxt(ascrestartname, comments="#")
+            rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3] * umagtar
+            print("restarted from ascii output "+ascrestartname)
+        r *= rstar
+        m, s, e = cons(rho, v, u, across, r, sth)
+        nout = restartn
+        
     dlmin=(l_half[1:]-l_half[:-1]).min()
     dt = dlmin*0.5
     print("dt = "+str(dt))
     #    ti=input("dt")
     
-    t=0.;  tstore=0.  ; nout=0
-
     ltot=0. # estimated total luminosity
     fflux=open(outdir+'/'+'flux.dat', 'w')
     ftot=open(outdir+'/'+'totals.dat', 'w')
