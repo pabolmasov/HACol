@@ -5,7 +5,7 @@ To run the code, make sure you have python3 (checked for python3.6) and preferra
 > %run tire_new
 and then run the main routine
 > alltire()
-if everything is fine, the "out/" directory (or the output directory set by "outdir" in the "globals" configuration file) should immediately (unless you turned the graphical output off by setting ifplot = False in globals.py) start filling with files like tireout..png containing the snapshots of the simulation. Also, current total flux (namely, luminosity in L_Edd/4\pi units) will be written to "flux.dat". The main output is either tireout.hdf5 (if "ifhdf" flag is True in globals.py) or, alternatively, a series of ..dat files with snapshots. 
+if everything is fine, the "out/" directory (or the output directory set by "outdir" in the "globals" configuration file) should immediately (unless you turned the graphical output off by setting ifplot = False in globals.py) start filling with files like vtie..png and tireout..dat containing the snapshots of your simulation. Also, current total flux (namely, luminosity in L_Edd/4\pi units) will be written to "flux.dat". The main output is either tireout.hdf5 (if "ifhdf" flag is True in globals.py) or, alternatively, a series of ..dat files with snapshots. 
 
 The core also supports running with an arbitrary configuration file (useful if you want to run several simulations simultaneously). Just make your own version of globals.py, make a fancy name for it (say, myglobals.py), and compile the code as
 > %run tire_new myglobals
@@ -31,6 +31,5 @@ As the code produces a lot of individual output files, you may encounter problem
 The code is designed in a way to make the results accessable as soon as possible. You do not need to wait until the simulation ends to read and reduce the output entries. If you need to kill the code during the simulation, all the results would be saved. However, the output files are not accessable for reading from the same ipython session then. 
 
 TODO: 
-0) do conservation laws work?
-1) restart mode
-2) neutrino losses
+0) 2X or not 2X? 
+1) how fine the resolution should be?
