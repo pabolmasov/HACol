@@ -63,14 +63,14 @@ vout=-1./sqrt(r_e) * 1./15. # initial poloidal velocity at the outer boundary ; 
 # plotting options:
 ifplot = True
 plotalias = 10 # plot every Nth output step 
-ascalias = 1 # make an ascii file every Nth output step
+ascalias = 10 # make an ascii file every Nth output step
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
 outdir = "out/"
 
 # restart options
-ifrestart = True
+ifrestart = False
 restartfile = outdir + 'tireout1.hdf5'
 restartn = 4756
 restartprefix = outdir+'tireout' # used if we restart from ascii output

@@ -10,7 +10,6 @@ import os.path
 import imp
 import sys
 
-
 '''
 we need the option of using an arbitrary configuration file
 '''
@@ -32,8 +31,7 @@ from globals import *
 # loading local modules:
 if ifplot:
     import plots
-if(ifhdf):
-    import hdfoutput as hdf
+import hdfoutput as hdf
 import bassun as bs
 #
 
@@ -197,7 +195,7 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     taufac = taufun(tau)    # 1.-exp(-tau)
     gamefac = taufac/tau
     gamedd = eta * ltot * gamefac 
-    force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across*taufac
+    force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across #*taufac
     beta = betafun(Fbeta(rho, u))
     qloss = u * (1.-beta)/(1.-beta/2.)/(xirad*tau+1.)*8.*pi*r*sth*afac*taufac # diffusion approximations; energy lost from 4 sides
     irradheating = heatingeff * gamedd * (sina*cth+cosa*sth)/r**2 # photons absorbed by the matter also heat it
@@ -300,7 +298,8 @@ def alltire():
     l_half+=l[1]/2. # mid-step mesh starts halfstep later
     dlleft = 2.*(l_half[1]-l_half[0])-(l_half[2]-l_half[1])
     dlright = 2.*(l_half[-1]-l_half[-2])-(l_half[-2]-l_half[3])
-
+    dl=l[1:]-l[:-1] # cell sizes 
+    
     # testing bassun.py
     print("delta = "+str((across/(4.*pi*afac*r*sth))[0]))
     print("delta = "+str((sth*r/sqrt(1.+3.*cth**2))[0] * dr_e/r_e))
@@ -334,12 +333,14 @@ def alltire():
         if(ifhdf):
             # restarting from a HDF5 file
             entryname, t, l, r, sth, rho, u, v = hdf.read(restartfile, restartn)
+            tstore = t
             print("restarted from file "+restartfile+", entry "+entryname)
         else:
             # restarting from an ascii output
             ascrestartname = restartprefix + hdf.entryname(restartn, ndig=5) + ".dat"
             lines = loadtxt(ascrestartname, comments="#")
             rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3] * umagtar
+            # what about t??
             print("restarted from ascii output "+ascrestartname)
         r *= rstar
         m, s, e = cons(rho, v, u, across, r, sth)
@@ -351,8 +352,8 @@ def alltire():
     #    ti=input("dt")
     
     ltot=0. # estimated total luminosity
-    fflux=open(outdir+'/'+'flux.dat', 'w')
-    ftot=open(outdir+'/'+'totals.dat', 'w')
+    fflux=open(outdir+'/'+'flux.dat', 'a')
+    ftot=open(outdir+'/'+'totals.dat', 'a')
     if(ifhdf):
         hname = outdir+'/'+'tireout.hdf5'
         hfile = hdf.init(hname, l, r, sth, cth) # , m1, mdot, eta, afac, re, dre, omega)
@@ -365,12 +366,15 @@ def alltire():
         rho, v, u, urad = toprim(m, s, e, across, r, sth) # primitive from conserved
         timer.stop_comp("toprim")
         timer.start_comp("flux")
-        rho_half = (rho[1:]+rho[:-1])/2. ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2. 
-        dul_half = across_half/(rho_half+1.)*(urad[1:]-urad[:-1])/(l[1:]-l[:-1])/3. # radial diffusion
+        rho_half = (rho[1:]+rho[:-1])/2. ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
+        rtau_left = rho[1:] * dl # optical depths along the field line, to the left of the cell boundaries
+        rtau_right = rho[:-1] * dl # -- " -- to the right -- " --
+        dul_half = across_half*((urad/(rho+1.))[1:]*(1.-exp(-rtau_left/2.))-(urad/(rho+1.))[:-1]*(1.-exp(-rtau_right/2.)))/(l[1:]-l[:-1])/3. # radial diffusion
+        # introducing exponential factors helps reduce the numerical noise from rho variations
         dul = rho*0. # just setting the size of the array
         dul[1:-1]=(dul_half[1:]+dul_half[:-1])/2. # we need to smooth it for stability
         s, p, fe = fluxes(rho, v, u, across, r, sth)
-        fe+=-dul # adding diffusive flux 
+        fe += -dul # adding diffusive flux 
         timer.stop_comp("flux")
         timer.start_comp("velocity")
         wpos=where((rho>rhofloor)&(u>ufloor))
@@ -390,6 +394,7 @@ def alltire():
         #        ltot=simps(flux[1:-1], x=l[1:-1])
         #        ltot=trapz(flux[1:-1], x=l[1:-1]) # 
         ltot=simps(flux, x=l) # no difference
+        heat=simps(de+flux, x=l) # no difference
         timer.stop_comp("sources")
         timer.start_comp("main")
         m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth, across, dlleft, dlright)
@@ -421,10 +426,11 @@ def alltire():
             timer.start("io")
             tstore+=dtout
             print("t = "+str(t*tscale)+"s")
-            fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
+            fflux.write(str(t*tscale)+' '+str(ltot)+' '+str(heat)+'\n')
             fflux.flush()
             #            oneplot(r, rho, name=outdir+'/rhotie{:05d}'.format(nout))
             if ifplot & (nout%plotalias == 0):
+                print("plotting")
                 plots.uplot(r, u, rho, sth, v, name=outdir+'/utie{:05d}'.format(nout))
                 plots.vplot(r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
                 plots.someplots(r, [u/rho**(4./3.)], name=outdir+'/entropy{:05d}'.format(nout), ytitle=r'$S$', ylog=True)
@@ -442,22 +448,23 @@ def alltire():
             if(ifhdf):
                 hdf.dump(hfile, nout, t, rho, v, u)
             if not(ifhdf) or (nout%ascalias == 0):
-                    # ascii output:
-                    fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
-                    fstream=open(fname, 'w')
-                    fstream.write('# t = '+str(t*tscale)+'s\n')
-                    fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
-                    for k in arange(nx):
-                        fstream.write(str(r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
-                    fstream.close()
+                # ascii output:
+                print(nout)
+                fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
+                fstream=open(fname, 'w')
+                fstream.write('# t = '+str(t*tscale)+'s\n')
+                fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
+                for k in arange(nx):
+                    fstream.write(str(r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
+                fstream.close()
                 #print simulation run-time statistics
             timer.stop("io")
-            timer.stats("step")
-            timer.stats("io")
-            timer.comp_stats()
-
-            timer.start("step") #refresh lap counter (avoids IO profiling)
-            timer.purge_comps()
+            if(nout%ascalias == 0):
+                timer.stats("step")
+                timer.stats("io")
+                timer.comp_stats()
+                timer.start("step") #refresh lap counter (avoids IO profiling)
+                timer.purge_comps()
    
             nout+=1
     fflux.close()

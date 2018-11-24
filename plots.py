@@ -319,7 +319,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         
 
 #########################################
-def energytest(fluxfile='flux', totfile='totals'):
+def energytest(fluxfile='out/flux', totfile='out/totals'):
     lines = loadtxt(fluxfile+".dat", comments="#", delimiter=" ", unpack=False)
     tflux = lines[:,0]/tscale ; flu=lines[:,1]
     lines = loadtxt(totfile+".dat", comments="#", delimiter=" ", unpack=False)
@@ -328,10 +328,10 @@ def energytest(fluxfile='flux', totfile='totals'):
     Neff=1./rstar
     clf()
     plot(tflux*tscale, enlost, color='k')
-    plot(tene*tscale, ene, color='r')
+    plot(tene*tscale, ene-ene[0], color='r')
     plot(tene*tscale, (mass-mass[0])*Neff, color='g')
-    plot(tene*tscale, tene*mdot*Neff, color='g', linestyle='dotted')
-    ylim(ene.min(), ene.max()+enlost.max())
+    plot(tene*tscale, (tene-tene[0])*mdot*Neff, color='g', linestyle='dotted')
+    #    ylim(ene.min(), ene.max()+enlost.max())
     xlabel('t') 
     ylabel('energy')
     savefig('energytest.png')
