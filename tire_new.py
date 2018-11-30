@@ -117,6 +117,19 @@ def cons(rho, v, u, across, r, sth):
     e=(u+rho*(v**2/2.- 1./r - 0.5*(omega*r*sth)**2))*across  # total energy (thermal + mechanic) per unit length
     return m, s, e
 
+def diffuse(rho, urad, dl, across_half):
+    '''
+    radial energy diffusion
+    '''
+    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
+    rtau_left = rho[1:] * dl # optical depths along the field line, to the left of the cell boundaries
+    rtau_right = rho[:-1] * dl # -- " -- to the right -- " --
+    dul_half = across_half*((urad/(rho+1.))[1:]*(1.-exp(-rtau_left/2.))-(urad/(rho+1.))[:-1]*(1.-exp(-rtau_right/2.)))/dl/3. # radial diffusion
+    # introducing exponential factors helps reduce the numerical noise from rho variations
+    dul = rho*0. # just setting the size of the array
+    dul[1:-1]=(dul_half[1:]+dul_half[:-1])/2. # we need to smooth it for stability
+    return dul
+
 def fluxes(rho, v, u, across, r, sth):
     '''
     computes the fluxes of conserved quantities, given primitives; 
@@ -164,14 +177,6 @@ def solver_hlle(fs, qs, sl, sr):
         fhalf1[wreg] = ((sr1[1:]*f1[:-1]-sl1[:-1]*f1[1:]+sl1[:-1]*sr1[1:]*(q1[1:]-q1[:-1]))/ds)[wreg] # classic HLLE
         fhalf2[wreg] = ((sr1[1:]*f2[:-1]-sl1[:-1]*f2[1:]+sl1[:-1]*sr1[1:]*(q2[1:]-q2[:-1]))/ds)[wreg] # classic HLLE
         fhalf3[wreg] = ((sr1[1:]*f3[:-1]-sl1[:-1]*f3[1:]+sl1[:-1]*sr1[1:]*(q3[1:]-q3[:-1]))/ds)[wreg] # classic HLLE
-    #    if(size(wleft)>0):
-    #        fhalf1[wleft]=(f1[1:])[wleft]
-    #        fhalf2[wleft]=(f2[1:])[wleft]
-    #        fhalf3[wleft]=(f3[1:])[wleft]
-    #    if(size(wright)>0):
-    #        fhalf1[wright]=(f1[:-1])[wright]
-    #        fhalf2[wright]=(f2[:-1])[wright]
-    #        fhalf3[wright]=(f3[:-1])[wright]
     return fhalf1, fhalf2, fhalf3
 
 def solver_godunov(fs):
@@ -311,10 +316,11 @@ def alltire():
     print("   eta = "+str(BSeta))
     x1 = 1. ; x2 = 1000. ; nxx=1000
     xtmp=(x2/x1)**(arange(nxx)/double(nxx))*x1
-    plots.someplots(xtmp, [bs.fxis(xtmp, BSgamma, BSeta, 3.)], name='fxis', ytitle=r'$F(x)$')
+    if(ifplot):
+        plots.someplots(xtmp, [bs.fxis(xtmp, BSgamma, BSeta, 3.)], name='fxis', ytitle=r'$F(x)$')
     xs = bs.xis(BSgamma, BSeta)
     print("   xi_s = "+str(xs))
-    input("BS")
+    # input("BS")
     # magnetic field energy density:
     umagtar = umag * (1.+3.*cth**2)/4. * (rstar/r)**6
     # initial conditions:
@@ -352,8 +358,13 @@ def alltire():
     #    ti=input("dt")
     
     ltot=0. # estimated total luminosity
-    fflux=open(outdir+'/'+'flux.dat', 'a')
-    ftot=open(outdir+'/'+'totals.dat', 'a')
+    if(ifrestart):
+        fflux=open(outdir+'/'+'flux.dat', 'a')
+        ftot=open(outdir+'/'+'totals.dat', 'a')
+    else:
+        fflux=open(outdir+'/'+'flux.dat', 'w')
+        ftot=open(outdir+'/'+'totals.dat', 'w')
+
     if(ifhdf):
         hname = outdir+'/'+'tireout.hdf5'
         hfile = hdf.init(hname, l, r, sth, cth) # , m1, mdot, eta, afac, re, dre, omega)
@@ -364,40 +375,55 @@ def alltire():
         timer.start_comp("toprim")
         mprev=m ; sprev=s ; eprev=e
         rho, v, u, urad = toprim(m, s, e, across, r, sth) # primitive from conserved
+        wneg = (rho<rhofloor) | (u<ufloor)
+        rho[wneg] = rhofloor ; u[wneg] = ufloor
         timer.stop_comp("toprim")
         timer.start_comp("flux")
-        rho_half = (rho[1:]+rho[:-1])/2. ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
-        rtau_left = rho[1:] * dl # optical depths along the field line, to the left of the cell boundaries
-        rtau_right = rho[:-1] * dl # -- " -- to the right -- " --
-        dul_half = across_half*((urad/(rho+1.))[1:]*(1.-exp(-rtau_left/2.))-(urad/(rho+1.))[:-1]*(1.-exp(-rtau_right/2.)))/(l[1:]-l[:-1])/3. # radial diffusion
-        # introducing exponential factors helps reduce the numerical noise from rho variations
-        dul = rho*0. # just setting the size of the array
-        dul[1:-1]=(dul_half[1:]+dul_half[:-1])/2. # we need to smooth it for stability
+        dul = diffuse(rho, urad, dl, across_half)
         s, p, fe = fluxes(rho, v, u, across, r, sth)
         fe += -dul # adding diffusive flux 
         timer.stop_comp("flux")
         timer.start_comp("velocity")
-        wpos=where((rho>rhofloor)&(u>ufloor))
-        vr=v+1. ; vl=v-1.
-        #        vr[wpos]=v[wpos]+1. ; vl[wpos]=v[wpos]-1.
-        cs = v*0.
-        cs[wpos]=sqrt(4.*u[wpos]/(rho[wpos]+u[wpos])) # slightly over-estimating the SOS to get stable signal velocities; exact for radiation-dominated
-        vr[wpos]=(v+cs)[wpos] ; vl[wpos]=(v-cs)[wpos]
+        cs=sqrt(4.*u/(rho+u)) # slightly over-estimating the SOS to get stable signal velocities; exact for radiation-dominated
+        vr=(v+cs) ; vl=(v-cs)
         timer.stop_comp("velocity")
         timer.start_comp("solver")
-        #        print(sum(rho>rhofloor))
         s_half, p_half, fe_half = solver_hlle([s, p, fe], [m, s, e], vl, vr)
-        # solver_godunov([s, p, fe]) 
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
-        #        ltot=simps(flux[1:-1], x=l[1:-1])
-        #        ltot=trapz(flux[1:-1], x=l[1:-1]) # 
         ltot=simps(flux, x=l) # no difference
-        heat=simps(de+flux, x=l) # no difference
+        heat=simps(de+flux, x=l)
         timer.stop_comp("sources")
         timer.start_comp("main")
-        m,s,e=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt, r, sth, across, dlleft, dlright)
+        m1,s1,e1=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt/2., r, sth, across, dlleft, dlright)
+        timer.stop_comp("main")
+        timer.lap("step")
+        # second take, real step
+        timer.start_comp("toprim")
+        rho1, v1, u1, urad1 = toprim(m1, s1, e1, across, r, sth) # primitive from conserved
+        wneg = (rho1<rhofloor) | (u1<ufloor)
+        rho1[wneg] = rhofloor ; u1[wneg] = ufloor
+        timer.stop_comp("toprim")
+        timer.start_comp("flux")
+        dul1 = diffuse(rho1, urad1, dl, across_half)
+        s1, p1, fe1 = fluxes(rho1, v1, u1, across, r, sth)
+        fe1 += -dul # adding diffusive flux 
+        timer.stop_comp("flux")
+        timer.start_comp("velocity")
+        cs=sqrt(4.*u1/(rho1+u1)) # slightly over-estimating the SOS to get stable signal velocities; exact for radiation-dominated
+        vr=(v1+cs) ; vl=(v1-cs)
+        timer.stop_comp("velocity")
+        timer.start_comp("solver")
+        s_half1, p_half1, fe_half1 = solver_hlle([s1, p1, fe1], [m1, s1, e1], vl, vr)
+        timer.stop_comp("solver")
+        timer.start_comp("sources")
+        dm1, ds1, de1, flux1 = sources(rho1, v1, u1, across, r, sth, cth, sina, cosa,ltot=ltot)
+        ltot=simps(flux1, x=l) # no difference
+        heat=simps(de1+flux1, x=l)
+        timer.stop_comp("sources")
+        timer.start_comp("main")
+        m, s, e = main_step(m, s, e, l_half, s_half1, p_half1, fe_half1, dm1, ds1, de1, dt, r, sth, across, dlleft, dlright)
         timer.stop_comp("main")
         timer.lap("step")
         t+=dt

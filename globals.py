@@ -2,9 +2,9 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=10000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
-logmesh=True
+logmesh=False
 
 # physical parameters:
 mu30 = 1. # magnetic moment, 1e30 units
@@ -14,9 +14,9 @@ mdot = 10. * 4. * pi
 mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 6291.12*4.*pi/m1
 # acc=True # true if we are going to zero the mass and energy fluxes through the outer boundary in actual equations
-rstar=6.8/m1 # GM/c**2 units
+rstar = 6.8/m1 # GM/c**2 units
 # 10km --> 6.77159 for 1Msun
-b12=2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
 mow = 0.6 # molecular weight
 betacoeff = 1.788e-5 * (m1)**(-0.25)/mow # coefficient used to calculate gas-to-total pressure ratio
 
@@ -44,21 +44,21 @@ print("magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radi
 print("Delta re = "+str(dr_e))
 
 # conversion to CGS units:
-tscale=4.92594e-06*m1 # GMsun/c**3
-rscale=1.47676e5*m1 # GMsun/c**2
-rhoscale=1.93474e-05/m1 # c**2 / GMsun kappa, for kappa=0.35 (Solar metallicity, complete ionization)
-uscale=1.73886e16/m1 # c**4/GMsun kappa
-mdotscale=1.26492e16*m1 # G Msun / c kappa
-lscale=1.13685e37*m1 # G Msun c / kappa luminosity scale
-massscale=6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
+tscale = 4.92594e-06*m1 # GMsun/c**3
+rscale = 1.47676e5*m1 # GMsun/c**2
+rhoscale = 1.93474e-05/m1 # c**2 / GMsun kappa, for kappa=0.35 (Solar metallicity, complete ionization)
+uscale = 1.73886e16/m1 # c**4/GMsun kappa
+mdotscale = 1.26492e16*m1 # G Msun / c kappa
+lscale = 1.13685e37*m1 # G Msun c / kappa luminosity scale
+massscale = 6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 #
-tmax=1000./tscale # maximal time in tscales
-dtout=0.001/tscale # output time step in tscales
-omega=sqrt(0.6)*r_e**(-1.5) # in Keplerian units on the outer rim
+tmax = 1000./tscale # maximal time in tscales
+dtout = 0.001/tscale # output time step in tscales
+omega = sqrt(0.9)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
-umag=b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
-umagout=0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
-vout=-1./sqrt(r_e) * 1./15. # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
+umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
+vout = -1./sqrt(r_e) * 1./15. # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 # plotting options:
 ifplot = True

@@ -99,7 +99,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         xscale('log')
     if(ylog):
         yscale('log')
-    xlabel(r'$r$') ; ylabel(ytitle)
+    xlabel(xtitle) ; ylabel(ytitle)
     savefig(name+'.png')
     close('all')
   

@@ -39,7 +39,7 @@ def pds(infile='out/flux', binning=None, binlogscale=False):
             binfreq=(freq.max()/freq[freq>0.].min())**(arange(binning+1)/double(binning))*freq[freq>0.].min()
             binfreq[0]=0.
         else:
-            binfreq=linspace(freq.min(), freq.max(), binning+1)
+            binfreq=linspace(freq[freq>0.].min(), freq.max(), binning+1)
         binflux=zeros(binning) ; dbinflux=zeros(binning)
         binfreqc=(binfreq[1:]+binfreq[:-1])/2. # bin center
         binfreqs=(binfreq[1:]-binfreq[:-1])/2. # bin size
@@ -54,7 +54,7 @@ def pds(infile='out/flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='out/flux', ntimes=10, nbins=10, binlogscale=False):
+def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
     '''
@@ -164,9 +164,9 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
 
     for k in arange(size(n)):
         if(dat):
-            stmp, dstmp = shock_dat(k, prefix=prefix)
+            stmp, dstmp = shock_dat(n[k], prefix=prefix)
         else:
-            stmp, dstmp = shock_hdf(k, infile = prefix+".hdf5")
+            stmp, dstmp = shock_hdf(n[k], infile = prefix+".hdf5")
         s[k] = stmp ; ds[k] = dstmp
 
     if(ifplot):
