@@ -138,7 +138,7 @@ def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     fmin=binfreqc[nbin>nbin0].min()
     fmax=binfreqc[nbin>nbin0].max()
     clf()
-    pcolormesh(t2, binfreq2, pds2, cmap='hot_r', vmin=10.**lmin, vmax=10.**lmax)
+    pcolormesh(t2, binfreq2, pds2, cmap='hot_r') #, vmin=10.**lmin, vmax=10.**lmax)
     colorbar()
     if omega != None:
         plot([t2.min(), t2.max()], [omega/2./pi, omega/2./pi], color='k')

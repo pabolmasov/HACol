@@ -77,14 +77,14 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False):
     for kt in arange(ntimes):
         wt=(t<tbin[kt+1]) & (t>=tbin[kt])
         lt=l[wt]
-        fsp=fft.rfft((lt-lt.mean())/lt.std(), norm="ortho")
+        fsp=fft.rfft((lt-lt.mean())/l.std(), norm="ortho")
         nt=size(lt)
         freq = fft.rfftfreq(nt, (t[wt].max()-t[wt].min())/double(nt))
         pds=abs(fsp*freq)**2
         t2[kt,:]=tbin[kt] ; t2[kt+1,:]=tbin[kt+1] 
         binfreq2[kt,:]=binfreq[:] ; binfreq2[kt+1,:]=binfreq[:] 
         for kb in arange(nbins):
-            wb=((freq>binfreq[kb]) & (freq<binfreq[kb+1]))
+            wb=((freq>binfreq[kb]) & (freq<=binfreq[kb+1]))
             nbin[kt,kb] = size(pds[wb])
             #            print("size(f) = "+str(size(freq)))
             #            print("size(pds) = "+str(size(pds)))
@@ -93,7 +93,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False):
             fdyns.write(str(tcenter[kt])+' '+str(binfreq[kb])+' '+str(binfreq[kb+1])+' '+str(pds2[kt,kb])+' '+str(dpds2[kt,kb])+" "+str(nbin[kt,kb])+"\n")
     fdyns.close()
     print(t2.max())
-    plots.dynspec(t2,binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)
+    plots.dynspec(t2,binfreq2, log10(pds2), outfile=infile+'_dyns', nbin=nbin)
 
 #############################################
 def fhist(infile = "out/flux"):

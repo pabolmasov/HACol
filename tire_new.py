@@ -353,7 +353,7 @@ def alltire():
         nout = restartn
         
     dlmin=(l_half[1:]-l_half[:-1]).min()
-    dt = dlmin*0.5
+    dt = dlmin*0.25
     print("dt = "+str(dt))
     #    ti=input("dt")
     
