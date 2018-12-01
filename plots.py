@@ -99,7 +99,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         xscale('log')
     if(ylog):
         yscale('log')
-    xlabel(r'$r$') ; ylabel(ytitle)
+    xlabel(xtitle) ; ylabel(ytitle)
     savefig(name+'.png')
     close('all')
   
@@ -138,7 +138,7 @@ def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     fmin=binfreqc[nbin>nbin0].min()
     fmax=binfreqc[nbin>nbin0].max()
     clf()
-    pcolormesh(t2, binfreq2, pds2, cmap='hot_r', vmin=10.**lmin, vmax=10.**lmax)
+    pcolormesh(t2, binfreq2, pds2, cmap='hot_r') #, vmin=10.**lmin, vmax=10.**lmax)
     colorbar()
     if omega != None:
         plot([t2.min(), t2.max()], [omega/2./pi, omega/2./pi], color='k')
@@ -319,7 +319,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         
 
 #########################################
-def energytest(fluxfile='flux', totfile='totals'):
+def energytest(fluxfile='out/flux', totfile='out/totals'):
     lines = loadtxt(fluxfile+".dat", comments="#", delimiter=" ", unpack=False)
     tflux = lines[:,0]/tscale ; flu=lines[:,1]
     lines = loadtxt(totfile+".dat", comments="#", delimiter=" ", unpack=False)
@@ -328,10 +328,10 @@ def energytest(fluxfile='flux', totfile='totals'):
     Neff=1./rstar
     clf()
     plot(tflux*tscale, enlost, color='k')
-    plot(tene*tscale, ene, color='r')
+    plot(tene*tscale, ene-ene[0], color='r')
     plot(tene*tscale, (mass-mass[0])*Neff, color='g')
-    plot(tene*tscale, tene*mdot*Neff, color='g', linestyle='dotted')
-    ylim(ene.min(), ene.max()+enlost.max())
+    plot(tene*tscale, (tene-tene[0])*mdot*Neff, color='g', linestyle='dotted')
+    #    ylim(ene.min(), ene.max()+enlost.max())
     xlabel('t') 
     ylabel('energy')
     savefig('energytest.png')

@@ -39,7 +39,7 @@ def pds(infile='out/flux', binning=None, binlogscale=False):
             binfreq=(freq.max()/freq[freq>0.].min())**(arange(binning+1)/double(binning))*freq[freq>0.].min()
             binfreq[0]=0.
         else:
-            binfreq=linspace(freq.min(), freq.max(), binning+1)
+            binfreq=linspace(freq[freq>0.].min(), freq.max(), binning+1)
         binflux=zeros(binning) ; dbinflux=zeros(binning)
         binfreqc=(binfreq[1:]+binfreq[:-1])/2. # bin center
         binfreqs=(binfreq[1:]-binfreq[:-1])/2. # bin size
@@ -54,7 +54,7 @@ def pds(infile='out/flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='out/flux', ntimes=10, nbins=10, binlogscale=False):
+def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
     '''
@@ -77,14 +77,14 @@ def dynspec(infile='out/flux', ntimes=10, nbins=10, binlogscale=False):
     for kt in arange(ntimes):
         wt=(t<tbin[kt+1]) & (t>=tbin[kt])
         lt=l[wt]
-        fsp=fft.rfft((lt-lt.mean())/lt.std(), norm="ortho")
+        fsp=fft.rfft((lt-lt.mean())/l.std(), norm="ortho")
         nt=size(lt)
         freq = fft.rfftfreq(nt, (t[wt].max()-t[wt].min())/double(nt))
         pds=abs(fsp*freq)**2
         t2[kt,:]=tbin[kt] ; t2[kt+1,:]=tbin[kt+1] 
         binfreq2[kt,:]=binfreq[:] ; binfreq2[kt+1,:]=binfreq[:] 
         for kb in arange(nbins):
-            wb=((freq>binfreq[kb]) & (freq<binfreq[kb+1]))
+            wb=((freq>binfreq[kb]) & (freq<=binfreq[kb+1]))
             nbin[kt,kb] = size(pds[wb])
             #            print("size(f) = "+str(size(freq)))
             #            print("size(pds) = "+str(size(pds)))
@@ -93,7 +93,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=10, binlogscale=False):
             fdyns.write(str(tcenter[kt])+' '+str(binfreq[kb])+' '+str(binfreq[kb+1])+' '+str(pds2[kt,kb])+' '+str(dpds2[kt,kb])+" "+str(nbin[kt,kb])+"\n")
     fdyns.close()
     print(t2.max())
-    plots.dynspec(t2,binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)
+    plots.dynspec(t2,binfreq2, log10(pds2), outfile=infile+'_dyns', nbin=nbin)
 
 #############################################
 def fhist(infile = "out/flux"):
@@ -164,9 +164,9 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
 
     for k in arange(size(n)):
         if(dat):
-            stmp, dstmp = shock_dat(k, prefix=prefix)
+            stmp, dstmp = shock_dat(n[k], prefix=prefix)
         else:
-            stmp, dstmp = shock_hdf(k, infile = prefix+".hdf5")
+            stmp, dstmp = shock_hdf(n[k], infile = prefix+".hdf5")
         s[k] = stmp ; ds[k] = dstmp
 
     if(ifplot):

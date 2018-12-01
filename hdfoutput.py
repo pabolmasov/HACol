@@ -1,5 +1,7 @@
-import h5py
 from globals import *
+
+if(ifhdf):
+    import h5py
 
 def entryname(n, ndig = 6):
     entry = str(n).rjust(ndig, '0') # allows for 6 positions (hundreds of thousand of entries)

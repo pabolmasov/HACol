@@ -52,7 +52,7 @@ lscale=1.13685e37*m1 # G Msun c / kappa luminosity scale
 massscale=6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 #
 tmax=1000./tscale # maximal time in tscales
-dtout=0.01/tscale # output time step in tscales
+dtout=0.001/tscale # output time step in tscales
 omega=sqrt(0.6)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag=b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
@@ -68,3 +68,9 @@ ascalias = 10 # make an ascii file every Nth output step
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
 outdir = "out_galya/"
 print("loaded from outside")
+
+# restart options
+ifrestart = False
+restartfile = outdir + 'tireout1.hdf5'
+restartn = 4756
+restartprefix = outdir+'tireout' # used if we restart from ascii output
