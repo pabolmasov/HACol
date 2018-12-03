@@ -311,7 +311,7 @@ def alltire():
         nout = restartn
         
     dlmin=(l_half[1:]-l_half[:-1]).min()
-    dt = dlmin*0.25
+    dt = dlmin*0.5
     print("dt = "+str(dt))
     #    ti=input("dt")
     
@@ -346,7 +346,7 @@ def alltire():
         vr=(v+cs) ; vl=(v-cs)
         timer.stop_comp("velocity")
         timer.start_comp("solver")
-        s_half, p_half, fe_half = solv.solver_hlle([s, p, fe], [m, s, e], vl, vr)
+        s_half, p_half, fe_half = solv.HLLE([s, p, fe], [m, s, e], vl, vr)
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
@@ -373,7 +373,7 @@ def alltire():
         vr=(v1+cs) ; vl=(v1-cs)
         timer.stop_comp("velocity")
         timer.start_comp("solver")
-        s_half1, p_half1, fe_half1 = solv.solver_hlle([s1, p1, fe1], [m1, s1, e1], vl, vr)
+        s_half1, p_half1, fe_half1 = solv.HLLE([s1, p1, fe1], [m1, s1, e1], vl, vr)
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm1, ds1, de1, flux1 = sources(rho1, v1, u1, across, r, sth, cth, sina, cosa,ltot=ltot)

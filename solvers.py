@@ -1,0 +1,71 @@
+from numpy import *
+
+def HLLE(fs, qs, sl, sr):
+    '''
+    makes a proxy for a half-step flux, HLLE-like
+    flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
+    '''
+    #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
+    f1,f2,f3 = fs  ;  q1,q2,q3 = qs
+    sl1 = minimum(sl, 0.) ; sr1 = maximum(sr, 0.)
+    ds=sr1[1:]-sl1[:-1] # see Einfeldt et al. 1991 eq. 4.4
+    #    print(ds)
+    #    i = input("ds")
+    # wreg = where((sr[1:]>=0.)&(sl[:-1]<=0.)&(ds>0.))
+    wreg = where(ds>0.)
+    #    wleft=where(sr[1:]<0.) ; wright=where(sl[:-1]>0.)
+    fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
+    if(size(wreg)>0):
+        fhalf1[wreg] = ((sr1[1:]*f1[:-1]-sl1[:-1]*f1[1:]+sl1[:-1]*sr1[1:]*(q1[1:]-q1[:-1]))/ds)[wreg] # classic HLLE
+        fhalf2[wreg] = ((sr1[1:]*f2[:-1]-sl1[:-1]*f2[1:]+sl1[:-1]*sr1[1:]*(q2[1:]-q2[:-1]))/ds)[wreg] # classic HLLE
+        fhalf3[wreg] = ((sr1[1:]*f3[:-1]-sl1[:-1]*f3[1:]+sl1[:-1]*sr1[1:]*(q3[1:]-q3[:-1]))/ds)[wreg] # classic HLLE
+    return fhalf1, fhalf2, fhalf3
+
+def HLLC(fs, qs, sl, sr):
+    '''
+    makes a proxy for a half-step flux,
+    following the basic framework of Toro et al. 1994
+    flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right, velocity of the contact discontinuity
+    '''
+    f1,f2,f3 = fs  ;  q1,q2,q3 = qs
+    sll = sl[:-1] ; srr = sr[1:]
+    ds = srr - sll
+    
+    dp = f2[1:] - f1[1:]**2/q1[1:] - f2[:-1] - f1[:-1]**2/q1[:-1]
+    sm = (sl[:-1]+sr[1:])/2. - dp/ds/(q1[:-1]+q1[1:]) # eq. (12) of Toro et al. 1994
+    
+    fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
+
+    qstar1_left = (q2[:-1] - q1[:-1] * sll) / (sm - sll) ;   qstar1_right = (q2[1:] - q1[1:] * srr) / (sm - srr)
+    qstar2_left = qstar1_left * sm ; qstar2_right = qstar1_right * sm
+    p = f2 - f1**2/q1 # is it stable if q1 --> 0
+    pleft = p[:-1] + (q2[:-1]-q1[:-1]*sm)*(q2[:-1]-q1[:-1]*sll)/q1[:-1]
+    pright = p[1:] + (q2[1:]-q1[1:]*sm)*(q2[1:]-q1[1:]*srr)/q1[1:]
+    qstar3_left = (q3[:-1]*(q2[:-1]-q1[:-1]*sll) + pleft * (q2[:-1]-q1[:-1]*sm)-
+                   sm * (q2[:-1]-q1[:-1]*sll) * (q2[:-1]-q1[:-1]*sm))/q1[:-1]/(sm - sll)
+    qstar3_right = (q3[1:]*(q2[1:]-q1[1:]*srr) + pright * (q2[1:]-q1[1:]*sm)-
+                   sm * (q2[1:]-q1[1:]*srr) * (q2[1:]-q1[1:]*sm))/q1[1:]/(sm - srr)
+    
+    wsuperleft = where(srr<0.)
+    wsubleft = where((srr>=0.) & (sm<0.))
+    wsubright = where((sll<=0.) & (sm>0.))
+    wsuperright = where(sll>0.)
+
+    if(size(wsuperleft)>0):
+        fhalf1[wsuperleft] = (f1[:-1])[wsuperleft]
+        fhalf2[wsuperleft] = (f2[:-1])[wsuperleft]
+        fhalf3[wsuperleft] = (f3[:-1])[wsuperleft]
+    if(size(wsuperright)>0):
+        fhalf1[wsuperright] = (f1[1:])[wsuperright]
+        fhalf2[wsuperright] = (f2[1:])[wsuperright]
+        fhalf3[wsuperright] = (f3[1:])[wsuperright]
+    if(size(wsubleft)>0):
+        fhalf1[wsubleft] = (f1[:-1] + sll * (qstar1_left-q1[:-1]))[wsubleft]
+        fhalf2[wsubleft] = (f2[:-1] + sll * (qstar2_left-q2[:-1]))[wsubleft]
+        fhalf3[wsubleft] = (f3[:-1] + sll * (qstar3_left-q3[:-1]))[wsubleft]
+    if(size(wsubright)>0):
+        fhalf1[wsubright] = (f1[1:] + srr * (qstar1_right-q1[1:]))[wsubright]
+        fhalf2[wsubright] = (f2[1:] + srr * (qstar2_right-q2[1:]))[wsubright]
+        fhalf3[wsubright] = (f3[1:] + srr * (qstar3_right-q3[1:]))[wsubright]
+
+    return fhalf1, fhalf2, fhalf3
