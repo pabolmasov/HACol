@@ -33,6 +33,7 @@ if ifplot:
     import plots
 import hdfoutput as hdf
 import bassun as bs
+import solvers as solv
 #
 
 from timer import Timer
@@ -143,49 +144,6 @@ def fluxes(rho, v, u, across, r, sth):
     # flux limiters:
     #    s[0]=0. ; p[0]=u[0]/3.*across[0]; fe[0]=0.
     return s, p, fe
-
-def solver_hll(fs, qs, sl, sr):
-    '''
-    makes a proxy for a half-step flux, HLL-like (without right-only and left-only regimes, like in HLLE)
-    flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
-    '''
-    #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
-    f1,f2,f3 = fs  ;  q1,q2,q3 = qs
-    ds=sr[1:]-sl[:-1]
-    fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
-    fhalf1 = ((sr[1:]*f1[:-1]-sl[:-1]*f1[1:]+sl[:-1]*sr[1:]*(q1[1:]-q1[:-1]))/ds)
-    fhalf2 = ((sr[1:]*f2[:-1]-sl[:-1]*f2[1:]+sl[:-1]*sr[1:]*(q2[1:]-q2[:-1]))/ds)
-    fhalf3 = ((sr[1:]*f3[:-1]-sl[:-1]*f3[1:]+sl[:-1]*sr[1:]*(q3[1:]-q3[:-1]))/ds)
-    return fhalf1, fhalf2, fhalf3
-
-def solver_hlle(fs, qs, sl, sr):
-    '''
-    makes a proxy for a half-step flux, HLLE-like
-    flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
-    '''
-    #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
-    f1,f2,f3 = fs  ;  q1,q2,q3 = qs
-    sl1 = minimum(sl, 0.) ; sr1 = maximum(sr, 0.)
-    ds=sr1[1:]-sl1[:-1] # see Einfeldt et al. 1991 eq. 4.4
-    #    print(ds)
-    #    i = input("ds")
-    # wreg = where((sr[1:]>=0.)&(sl[:-1]<=0.)&(ds>0.))
-    wreg = where(ds>0.)
-    #    wleft=where(sr[1:]<0.) ; wright=where(sl[:-1]>0.)
-    fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
-    if(size(wreg)>0):
-        fhalf1[wreg] = ((sr1[1:]*f1[:-1]-sl1[:-1]*f1[1:]+sl1[:-1]*sr1[1:]*(q1[1:]-q1[:-1]))/ds)[wreg] # classic HLLE
-        fhalf2[wreg] = ((sr1[1:]*f2[:-1]-sl1[:-1]*f2[1:]+sl1[:-1]*sr1[1:]*(q2[1:]-q2[:-1]))/ds)[wreg] # classic HLLE
-        fhalf3[wreg] = ((sr1[1:]*f3[:-1]-sl1[:-1]*f3[1:]+sl1[:-1]*sr1[1:]*(q3[1:]-q3[:-1]))/ds)[wreg] # classic HLLE
-    return fhalf1, fhalf2, fhalf3
-
-def solver_godunov(fs):
-    '''
-    simplified Godunov-type solver 
-    '''
-    f1,f2,f3 = fs
-    fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
-    return fhalf1, fhalf2, fhalf3
 
 def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     '''
@@ -388,7 +346,7 @@ def alltire():
         vr=(v+cs) ; vl=(v-cs)
         timer.stop_comp("velocity")
         timer.start_comp("solver")
-        s_half, p_half, fe_half = solver_hlle([s, p, fe], [m, s, e], vl, vr)
+        s_half, p_half, fe_half = solv.solver_hlle([s, p, fe], [m, s, e], vl, vr)
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
@@ -415,7 +373,7 @@ def alltire():
         vr=(v1+cs) ; vl=(v1-cs)
         timer.stop_comp("velocity")
         timer.start_comp("solver")
-        s_half1, p_half1, fe_half1 = solver_hlle([s1, p1, fe1], [m1, s1, e1], vl, vr)
+        s_half1, p_half1, fe_half1 = solv.solver_hlle([s1, p1, fe1], [m1, s1, e1], vl, vr)
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm1, ds1, de1, flux1 = sources(rho1, v1, u1, across, r, sth, cth, sina, cosa,ltot=ltot)
@@ -466,6 +424,7 @@ def alltire():
             etot=simps(e[1:-1], x=l[1:-1])
             print("mass = "+str(mtot))
             print("ltot = "+str(ltot))
+            print("heat = "+str(heat))
             print("energy = "+str(etot))
             print("momentum = "+str(trapz(s[1:-1], x=l[1:-1])))
             
