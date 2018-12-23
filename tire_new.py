@@ -174,6 +174,7 @@ def toprim(m, s, e, across, r, sth):
     rho=m/across
     v=s*0.
     v[rho>rhofloor]=(s/m)[rho>rhofloor]
+    v=v/sqrt(1.+v**2)
     u=(e-m*(v**2/2.-1./r-0.5*(r*sth*omega)**2))/across
     u[u<=ufloor]=0.
     beta = betafun(Fbeta(rho, u))
@@ -216,7 +217,7 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         else:
             e1[0] = e[0] + (-(fe_half[0]-edot0)/dlleft) * dt #  energy flux is zero
     if ufixed:
-        e1[-1] = (m1*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)+3.*across*umagout)[-1] # fixing internal energy at the outer rim (!!!assumed radiation domination) leads to -1 velocity at the outer boundary; can we just use vout here?
+        e1[-1] = (m1*(-1./r-0.5*(r*sth*omega)**2)+3.*across*umagout)[-1] # fixing internal energy at the outer rim (!!!assumed radiation domination) leads to -1 velocity at the outer boundary; can we just use vout here?
     else:
         edot = -mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+4.*across[-1]*vout*umagout # energy flux from the right boundary (!!!assumed radiation domination)
         e1[-1] = e[-1] + (-(edot-fe_half[-1])/dlright) * dt  # energy inlow
@@ -311,7 +312,7 @@ def alltire():
         nout = restartn
         
     dlmin=(l_half[1:]-l_half[:-1]).min()
-    dt = dlmin*0.5
+    dt = dlmin*0.25
     print("dt = "+str(dt))
     #    ti=input("dt")
     
@@ -339,14 +340,20 @@ def alltire():
         timer.start_comp("flux")
         dul = diffuse(rho, urad, dl, across_half)
         s, p, fe = fluxes(rho, v, u, across, r, sth)
-        fe += -dul # adding diffusive flux 
+        #        fe += -dul # adding diffusive flux 
         timer.stop_comp("flux")
         timer.start_comp("velocity")
         cs=sqrt(4.*u/(rho+u)) # slightly over-estimating the SOS to get stable signal velocities; exact for radiation-dominated
-        vr=(v+cs) ; vl=(v-cs)
+        vstar = (v[1:]+v[:-1])/2. + (cs[:-1]-cs[1:])*3. # estimates for radiation-pressure-dominated case
+        astar = (cs[:-1] + cs[1:])/2. + (v[:-1]-v[1:])/12. # see Toro et al. (1994), eq (10)
+        #        vr=(v+cs) ; vl=(v-cs)
+        vl = minimum((v-cs)[:-1], vstar-astar)
+        vr = maximum((v+cs)[1:], vstar+astar)
         timer.stop_comp("velocity")
         timer.start_comp("solver")
-        s_half, p_half, fe_half = solv.HLLE([s, p, fe], [m, s, e], vl, vr)
+        s_half, p_half, fe_half = solv.HLLC([s, p, fe], [m, s, e], vl, vr, vstar)
+        # solv.HLLE([s, p, fe], [m, s, e], vl, vr)
+        # solv.HLLC([s, p, fe], [m, s, e], vl, vr, vstar)
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
@@ -366,14 +373,18 @@ def alltire():
         timer.start_comp("flux")
         dul1 = diffuse(rho1, urad1, dl, across_half)
         s1, p1, fe1 = fluxes(rho1, v1, u1, across, r, sth)
-        fe1 += -dul # adding diffusive flux 
+        #         fe1 += -dul # adding diffusive flux 
         timer.stop_comp("flux")
         timer.start_comp("velocity")
         cs=sqrt(4.*u1/(rho1+u1)) # slightly over-estimating the SOS to get stable signal velocities; exact for radiation-dominated
-        vr=(v1+cs) ; vl=(v1-cs)
+        vstar = (v1[1:]+v1[:-1])/2. + (cs[:-1]-cs[1:])*3. # estimates for radiation-pressure-dominated case
+        astar = (cs[:-1] + cs[1:])/2. + (v1[:-1]-v1[1:])/12. # see Toro et al. (1994), eq (10)
+        vl = minimum((v1-cs)[:-1], vstar-astar)
+        vr = maximum((v1+cs)[1:], vstar+astar)
         timer.stop_comp("velocity")
         timer.start_comp("solver")
-        s_half1, p_half1, fe_half1 = solv.HLLE([s1, p1, fe1], [m1, s1, e1], vl, vr)
+        s_half1, p_half1, fe_half1 = solv.HLLC([s1, p1, fe1], [m1, s1, e1], vl, vr, vstar)
+        # solv.HLLE([s1, p1, fe1], [m1, s1, e1], vl, vr)
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm1, ds1, de1, flux1 = sources(rho1, v1, u1, across, r, sth, cth, sina, cosa,ltot=ltot)
