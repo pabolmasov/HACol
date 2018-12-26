@@ -40,6 +40,11 @@ from timer import Timer
 timer = Timer(["total", "step", "io"],
               ["main", "flux", "solver", "toprim", "velocity", "sources"])
 
+# speed of sound multiplier (see Chandrasekhar 1967 or Johnson 2008):
+def Gamma1(gamma, beta):
+    g1 = gamma - 1.
+    return beta + 9. * g1 * (beta-4./3.)**2/(beta+12.*g1 * (1.-beta))
+
 # smooth factor for optical depth
 def taufun(tau):
     wtrans = where(tau<taumin)
@@ -178,7 +183,8 @@ def toprim(m, s, e, across, r, sth):
     u=(e-m*(v**2/2.-1./r-0.5*(r*sth*omega)**2))/across
     u[u<=ufloor]=0.
     beta = betafun(Fbeta(rho, u))
-    return rho, v, u, u*(1.-beta)/(1.-beta/2.)
+    press = 3.*(1.-beta/2.) * u
+    return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
 def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, across, dlleft, dlright):
     '''
@@ -333,19 +339,20 @@ def alltire():
         # first make a preliminary half-step
         timer.start_comp("toprim")
         mprev=m ; sprev=s ; eprev=e
-        rho, v, u, urad = toprim(m, s, e, across, r, sth) # primitive from conserved
+        rho, v, u, urad, beta, press = toprim(m, s, e, across, r, sth) # primitive from conserved
         wneg = (rho<rhofloor) | (u<ufloor)
         rho[wneg] = rhofloor ; u[wneg] = ufloor
         timer.stop_comp("toprim")
         timer.start_comp("flux")
         dul = diffuse(rho, urad, dl, across_half)
         s, p, fe = fluxes(rho, v, u, across, r, sth)
-        #        fe += -dul # adding diffusive flux 
+        fe += -dul # adding diffusive flux 
         timer.stop_comp("flux")
         timer.start_comp("velocity")
-        cs=sqrt(4.*u/(rho+u)) # slightly over-estimating the SOS to get stable signal velocities; exact for radiation-dominated
-        vstar = (v[1:]+v[:-1])/2. + (cs[:-1]-cs[1:])*3. # estimates for radiation-pressure-dominated case
-        astar = (cs[:-1] + cs[1:])/2. + (v[:-1]-v[1:])/12. # see Toro et al. (1994), eq (10)
+        g1 = Gamma1(5./3., beta)
+        cs=sqrt(g1*press/(rho+u)) # slightly over-estimating the SOS to get stable signal velocities; exact for radiation-dominated
+        vstar = (v[1:]+v[:-1])/2. + (cs/(g1-1.))[:-1]-(cs/(g1-1.))[1:] # estimates for radiation-pressure-dominated case
+        astar = (cs[:-1] + cs[1:])/2. + ((v*(g1-1.))[:-1]-(v*(g1-1.))[1:])/4. # see Toro et al. (1994), eq (10)
         #        vr=(v+cs) ; vl=(v-cs)
         vl = minimum((v-cs)[:-1], vstar-astar)
         vr = maximum((v+cs)[1:], vstar+astar)
@@ -366,19 +373,20 @@ def alltire():
         timer.lap("step")
         # second take, real step
         timer.start_comp("toprim")
-        rho1, v1, u1, urad1 = toprim(m1, s1, e1, across, r, sth) # primitive from conserved
+        rho1, v1, u1, urad1, beta1, press1 = toprim(m1, s1, e1, across, r, sth) # primitive from conserved
         wneg = (rho1<rhofloor) | (u1<ufloor)
         rho1[wneg] = rhofloor ; u1[wneg] = ufloor
         timer.stop_comp("toprim")
         timer.start_comp("flux")
         dul1 = diffuse(rho1, urad1, dl, across_half)
         s1, p1, fe1 = fluxes(rho1, v1, u1, across, r, sth)
-        #         fe1 += -dul # adding diffusive flux 
+        fe1 += -dul # adding diffusive flux 
         timer.stop_comp("flux")
         timer.start_comp("velocity")
-        cs=sqrt(4.*u1/(rho1+u1)) # slightly over-estimating the SOS to get stable signal velocities; exact for radiation-dominated
-        vstar = (v1[1:]+v1[:-1])/2. + (cs[:-1]-cs[1:])*3. # estimates for radiation-pressure-dominated case
-        astar = (cs[:-1] + cs[1:])/2. + (v1[:-1]-v1[1:])/12. # see Toro et al. (1994), eq (10)
+        g1 = Gamma1(5./3., beta1)
+        cs=sqrt(g1 * press1/(rho1+u)) # slightly over-estimating the SOS to get stable signal velocities; exact for radiation-dominated
+        vstar = (v1[1:]+v1[:-1])/2. + (cs/(g1-1.))[:-1]-(cs/(g1-1.))[1:] # estimates for radiation-pressure-dominated case
+        astar = (cs[:-1] + cs[1:])/2. + ((v1*(g1-1.))[:-1]-(v1*(g1-1.))[1:])/4. # see Toro et al. (1994), eq (10)
         vl = minimum((v1-cs)[:-1], vstar-astar)
         vr = maximum((v1+cs)[1:], vstar+astar)
         timer.stop_comp("velocity")
