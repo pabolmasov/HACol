@@ -1,6 +1,6 @@
 from numpy import *
 
-def HLLE(fs, qs, sl, sr):
+def HLLE(fs, qs, sl, sr, sm):
     '''
     makes a proxy for a half-step flux, HLLE-like
     flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
@@ -29,10 +29,13 @@ def HLLC(fs, qs, sl, sr, sm):
     '''
     f1, f2, f3 = fs  ;  q1, q2, q3 = qs
     ds = sr - sl
+    #    for k in arange(size(sl)):
+    #        print(str(sl[k])+" "+str(sm[k])+" "+str(sr[k])+"\n")
+    #    i=input('r')
     
     fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
 
-    qstar1_left = (q1[:-1] * sl - f1[:-1]) / (sm - sl) ;   qstar1_right = (q1[1:] * sr - f1[1:]) / (sm - sr)
+    qstar1_left = (q1[:-1] * sl - f1[:-1]) / (sl - sm) ;   qstar1_right = (q1[1:] * sr - f1[1:]) / (sr - sm)
     qstar2_left = qstar1_left * sm ; qstar2_right = qstar1_right * sm
     pleft = sm * (sl * q1[:-1] - f1[:-1]) - (q2[:-1]*sl-f2[:-1])
     pright = sm * (sr * q1[1:] - f1[1:]) - (q2[1:]*sr-f2[1:])
@@ -46,10 +49,10 @@ def HLLC(fs, qs, sl, sr, sm):
     fluxright2 = f2[1:] + sr * (qstar2_right-q2[1:])
     fluxright3 = f3[1:] + sr * (qstar3_right-q3[1:])
     
-    wsuperleft = where((sr<0.))
-    wsubleft = where((sr>=0.) & (sm<=0.))
-    wsubright = where((sl<=0.) & (sm>=0.))
-    wsuperright = where((sl>0.))
+    wsuperleft = where((sr<0.) & (ds >0.))
+    wsubleft = where((sr>=0.) & (sm<=0.) & (ds >0.))
+    wsubright = where((sl<=0.) & (sm>=0.) & (ds >0.))
+    wsuperright = where((sl>0.) & (ds >0.))
         
     if(size(wsubleft)>0):
         fhalf1[wsubleft] = fluxleft1[wsubleft]
@@ -85,8 +88,5 @@ def HLLC(fs, qs, sl, sr, sm):
             fhalf1[wcoolleft] = (f1[1:])[wcoolleft]
             fhalf2[wcoolleft] = (f2[1:])[wcoolleft]
             fhalf3[wcoolleft] = (f3[1:])[wcoolleft]
-        for k in arange(size(sl)):
-            print(str(sl[k])+" < "+str(sm[k])+" < "+str(sr[k]))
-        i=input('r')
        
     return fhalf1, fhalf2, fhalf3
