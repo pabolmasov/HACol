@@ -23,7 +23,7 @@ betacoeff = 1.788e-5 * (m1)**(-0.25)/mow # coefficient used to calculate gas-to-
 # BC modes:
 galyamode = False # if on, sets the internal energy density to MF energy density at the inner boundary
 coolNS = False # if on (and galyamode is off), internal energy is kept zero at the surface of the NS
-ufixed = False # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
+ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
 
 # radiation transfer treatment:
 xirad = 0.2 # radiation diffusion scaling

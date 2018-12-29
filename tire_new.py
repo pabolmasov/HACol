@@ -192,7 +192,7 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across #*taufac
     beta = betafun(Fbeta(rho, u))
     qloss = u * (1.-beta)/(1.-beta/2.)/(xirad*tau+1.)*8.*pi*r*sth*afac*taufac  # diffusion approximations; energy lost from 4 sides
-    irradheating = heatingeff * gamedd * (sina*cth+cosa*sth)/r**2 # photons absorbed by the matter also heat it
+    irradheating = heatingeff * gamedd * (sina*cth+cosa*sth)/r**2*8.*pi*r*sth*afac*taufac # photons absorbed by the matter also heat it
     #    qloss[wtrans] = (u * (1.-beta)/(1.-beta/2.) * taufac *4.*pi*r*sth*afac)[wtrans]
     #    qloss*=0.       
     #    work=v*force
@@ -242,8 +242,8 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
     m1[0] = m[0] + (-(s_half[0]-(-mdot0))/dlleft+dm[0]) * dt # mass flux is zero through the inner boundary
     m1[-1] = m[-1] + (-(-mdot-s_half[-1])/dlright+dm[-1]) * dt  # inflow set to mdot (global)
     # this effectively limits the outer velocity from above
-    if(m1[-1]< (mdot / abs(vout))):
-        m1[-1] = mdot / abs(vout)
+    #    if(m1[-1]< (mdot / abs(vout))):
+    #        m1[-1] = mdot / abs(vout)
     s1[0] = -mdot0
     s1[-1] = -mdot # if I fix s1[-1], this results in v=vout effectively fixed at the boundary
     vout_current = s1[-1]/m1[-1]
@@ -253,12 +253,12 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         if coolNS:
             e1[0] = - (m1/r)[0]
         else:
-            e1[0] = e[0] + (-(fe_half[0]-edot0)/dlleft) * dt #  energy flux is zero
+            e1[0] = e[0] + (-(fe_half[0]-edot0)/dlleft+de[0]) * dt #  energy flux is zero
     if ufixed:
-        e1[-1] = (m1*(-1./r-0.5*(r*sth*omega)**2)+across*umagout/(g1-1.))[-1] # fixing internal energy at the outer rim (!!!assumed radiation domination) leads to -1 velocity at the outer boundary; can we just use vout here?
+        e1[-1] = (m1*(vout_current**2-1./r-0.5*(r*sth*omega)**2)+across*umagout/(g1-1.)+de)[-1] # fixing internal energy at the outer rim 
     else:
-        edot = -mdot*(vout**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+across[-1]*vout*umagout * (g1/(g1-1.))[-1] # energy flux from the right boundary (!!!assumed radiation domination)
-        e1[-1] = e[-1] + (-(edot-fe_half[-1])/dlright) * dt  # energy inlow
+        edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+across[-1]*vout_current*umagout * (g1/(g1-1.))[-1] # energy flux from the right boundary 
+        e1[-1] = e[-1] + (-(edot-fe_half[-1])/dlright + de[-1]) * dt  # energy inlow
         #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     # what if we get negative mass?
     wneg=where(m1<mfloor)
@@ -409,7 +409,7 @@ def alltire():
         heat=simps(de+flux, x=l)
         timer.stop_comp("sources")
         timer.start_comp("main")
-        m1,s1,e1=main_step(m,s,e,l_half, s_half,p_half,fe_half, dm, ds, de, dt/2., r, sth, across, dlleft, dlright)
+        m1,s1,e1=main_step(m,s,e,l_half, s_half, p_half,fe_half, dm, ds, de, dt/2., r, sth, across, dlleft, dlright, g1)
         timer.stop_comp("main")
         timer.lap("step")
         # second take, real step
@@ -439,7 +439,7 @@ def alltire():
         heat=simps(de1+flux1, x=l)
         timer.stop_comp("sources")
         timer.start_comp("main")
-        m, s, e = main_step(m, s, e, l_half, s_half1, p_half1, fe_half1, dm1, ds1, de1, dt, r, sth, across, dlleft, dlright)
+        m, s, e = main_step(m, s, e, l_half, s_half1, p_half1, fe_half1, dm1, ds1, de1, dt, r, sth, across, dlleft, dlright, g1)
         timer.stop_comp("main")
         timer.lap("step")
         t+=dt
