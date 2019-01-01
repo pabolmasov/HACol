@@ -10,9 +10,6 @@ import os.path
 import imp
 import sys
 
-'''
-we need the option of using an arbitrary configuration file
-'''
 if(size(sys.argv)>1):
     print("launched with arguments "+str(', '.join(sys.argv)))
     # new conf file
@@ -70,7 +67,38 @@ def sigvel_linearized(v, cs, g1, rho, p):
     vl = minimum((v-cs)[:-1], vstar-astarleft)
     vr = maximum((v+cs)[1:], vstar+astarright)
     return vl, vstar, vr
-    
+
+def sigvel_toro(m, s, e, p, fe, sl, sr, across_half, r_half, sth_half):
+    '''
+    (recursive)
+    making a (spatial-)half-step set of sound velocities
+    '''
+    m_half = (sr * m[1:] - sl * m[:-1] - (s[1:]-s[:-1]))/(sr-sl)
+    s_half = (sr * s[1:] - sl * s[:-1] - (p[1:]-p[:-1]))/(sr-sl)
+    e_half = (sr * e[1:] - sl * e[:-1] - (fe[1:]-fe[:-1]))/(sr-sl)
+    rho_half, v_half, u_half, urad_half, beta_half, press_half = toprim(m_half, s_half, e_half, across_half, r_half, sth_half)
+    if(m_half.min()<mfloor):
+        am = m_half.argmin()
+        print("rho_half.min = " + str(rho_half.min()))
+        print("m_half.min = " + str(m_half.min()))
+        print("(m.min = " + str(m.min())+")")
+        print("sl = "+str(sl[am]))
+        print("sr = "+str(sr[am]))
+        print("m = "+str((m[1:])[am]))
+        print("m = "+str((m[:-1])[am]))
+        print("s = "+str((s[1:])[am]))
+        print("s = "+str((s[:-1])[am]))
+        print("v = "+str((s[1:]/m[1:])[am]))
+        print("v = "+str((s[:-1]/m[:-1])[am]))
+        print("u_half = "+str(u_half[am]))     
+        print(str(((sr * m[1:] - sl * m[:-1] -  (s[1:]-s[:-1]))/(sr-sl))[am]))        
+        exit()
+    g1 = Gamma1(5./3., beta_half)
+    cs=sqrt(g1*press_half/(rho_half)) # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
+    vl = minimum(sl, v_half-cs)
+    vr = maximum(sr, v_half+cs)
+    return vl, v_half, vr
+
 # smooth factor for optical depth
 def taufun(tau):
     wtrans = where(tau<taumin)
@@ -176,13 +204,14 @@ def fluxes(rho, v, u, across, r, sth):
     #    s[0]=0. ; p[0]=u[0]/3.*across[0]; fe[0]=0.
     return s, p, fe
 
-def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
+def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0., dt=0.):
     '''
     computes the RHSs of conservation equations
     no changes in mass
     momentum injection through gravitational and centrifugal forces
     energy losses through the surface
     outputs: dm, ds, de, and separately the amount of energy radiated per unit length per unit time ("flux")
+    additional output: trat = Q dt / U
     '''
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     tau = rho*across/(4.*pi*r*sth*afac)
@@ -191,47 +220,57 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0.):
     gamedd = eta * ltot * gamefac 
     force = (-(sina*cth+cosa*sth)/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across #*taufac
     beta = betafun(Fbeta(rho, u))
-    qloss = u * (1.-beta)/(1.-beta/2.)/(xirad*tau+1.)*8.*pi*r*sth*afac*taufac  # diffusion approximations; energy lost from 4 sides
+    urad = u * (1.-beta)/(1.-beta/2.)
+    qloss = urad/(xirad*tau+1.)*8.*pi*r*sth*afac*taufac  # diffusion approximations; energy lost from 4 sides
     irradheating = heatingeff * gamedd * (sina*cth+cosa*sth)/r**2*8.*pi*r*sth*afac*taufac # photons absorbed by the matter also heat it
-    #    qloss[wtrans] = (u * (1.-beta)/(1.-beta/2.) * taufac *4.*pi*r*sth*afac)[wtrans]
-    #    qloss*=0.       
-    #    work=v*force
-    return rho*0., force, v*force-qloss+irradheating, qloss
+    dudt = v*force-qloss+irradheating
+    if(dt>0.):
+        trat = qloss * dt / u
+
+    return rho*0., force, dudt, qloss, trat
 
 def toprim(m, s, e, across, r, sth):
     '''
     convert conserved quantities to primitives
     '''
     rho=m/across
-    v=s*0.
-    v[rho>rhofloor]=(s/m)[rho>rhofloor]
+    v=s/m
+    if(m.min()<mfloor):
+        print("toprim: m.min = "+str(m.min()))
+        print("... at "+str(r[m.argmin()]))
+        exit(1)
+    #    v=s*0.
+    #    v[rho>rhofloor]=(s/m)[rho>rhofloor]
     #    v=v/sqrt(1.+v**2)
     u=(e-m*(v**2/2.-1./r-0.5*(r*sth*omega)**2))/across
     umin = u.min()
-    #    if(umin < ufloor):
-    #        print("rhomin = "+str(rho.min()))
-    #        print("umin = "+str(umin))
-    #        print("umax = "+str(u.max()))
-    #        input("U")
+    if(rho.min() < rhofloor):
+        print("rhomin = "+str(rho.min()))
+        print("mmin = "+str(m.min()))
+        exit(1)
     u[u<=ufloor]=0.
     beta = betafun(Fbeta(rho, u))
     press = 3.*(1.-beta/2.) * u
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
-def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, across, dlleft, dlright, g1):
+def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, across, dlleft, dlright, g1, trat = None):
     '''
     main advance in a dt step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
     output: three new densities
     includes boundary conditions!
     '''
-    #    dlleft = l_half[1]-l_half[0]
-    #    dlright = l_half[-1]-l_half[-2]
+    #    print("main_step: mmin = "+str(m.min()))
+    if(trat is None):
+        ttrat = taufun(trat) # rapid thermal evolution
+    else:
+        ttrat = m*0. +1.
     nl=size(m)
     m1=zeros(nl) ; s1=zeros(nl); e1=zeros(nl)
     m1[1:-1] = m[1:-1]+ (-(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm[1:-1]) * dt
-    s1[1:-1] = s[1:-1]+ (-(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds[1:-1]) * dt 
-    e1[1:-1] = e[1:-1]+ (-(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]) * dt
+    s1[1:-1] = s[1:-1]+ (-(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds[1:-1]) * dt
+    e1[1:-1] = e[1:-1]+ (-(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]) * ttrat[1:-1] * dt 
+
     # enforcing boundary conditions:
     if(m[0]>mfloor):
         mdot0 = mdotsink # sink present when mass density is positive at the inner boundary
@@ -241,6 +280,8 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         edot0 = 0.
     m1[0] = m[0] + (-(s_half[0]-(-mdot0))/dlleft+dm[0]) * dt # mass flux is zero through the inner boundary
     m1[-1] = m[-1] + (-(-mdot-s_half[-1])/dlright+dm[-1]) * dt  # inflow set to mdot (global)
+    #    print("main_step: mmin1 = "+str(m1.min()))
+    #    print("... at  = "+str(r[m1.argmin()]))
     # this effectively limits the outer velocity from above
     #    if(m1[-1]< (mdot / abs(vout))):
     #        m1[-1] = mdot / abs(vout)
@@ -253,20 +294,19 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
         if coolNS:
             e1[0] = - (m1/r)[0]
         else:
-            e1[0] = e[0] + (-(fe_half[0]-edot0)/dlleft+de[0]) * dt #  energy flux is zero
+            e1[0] = e[0] + (-(fe_half[0]-edot0)/dlleft+de[0]) * ttrat[0] *dt #  energy flux is zero
     if ufixed:
-        e1[-1] = (m1*(vout_current**2-1./r-0.5*(r*sth*omega)**2)+across*umagout/(g1-1.)+de)[-1] # fixing internal energy at the outer rim 
+        e1[-1] = ((m1*(vout_current**2-1./r-0.5*(r*sth*omega)**2)+across*umagout/(g1-1.)+de)*ttrat)[-1] # fixing internal energy at the outer rim 
     else:
         edot = -mdot*(vout_current**2/2.-1./r-0.5*(r*sth*omega)**2)[-1]+across[-1]*vout_current*umagout * (g1/(g1-1.))[-1] # energy flux from the right boundary 
-        e1[-1] = e[-1] + (-(edot-fe_half[-1])/dlright + de[-1]) * dt  # energy inlow
+        e1[-1] = e[-1] + (-(edot-fe_half[-1])/dlright + de[-1]) * ttrat[-1] * dt  # energy inlow
         #    s1[0] = s[0] + (-(p_half[0]-pdot)/(l_half[1]-l_half[0])+ds[0]) * dt # zero velocity, finite density (damped)
     # what if we get negative mass?
     wneg=where(m1<mfloor)
     m1 = maximum(m1, mfloor)
     if(size(wneg)>0):
         s1[wneg] = (m1 * s/m)[wneg]
-        e1[wneg] = (e1 * e/m)[wneg]
-    
+        e1[wneg] = (e1 * e/m)[wneg]    
     return m1, s1, e1
 
 ################################################################################
@@ -328,16 +368,17 @@ def alltire():
     #    s+=vinit*m
     #    e+=(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m+3.*umagout*across * (1.+0.01*rand(size(r)))+vout**2*m
     rho = abs(mdot) / abs(vout) / across
-    u = 3.*umagout + rho * vinit**2
+    u = 3.*umagout + rho * (vinit-vout)**2
     print("U = "+str(u.min())+" to "+str(u.max()))
     m, s, e = cons(rho, vinit, u, across, r, sth)
 
-#    rho1, v1, u1, urad, beta, press = toprim(m, s, e, across, r, sth) # primitive from conserved
-#    print(str((rho-rho1).std())) 
-#    print(str((vinit-v1).std()))
-#    print(str((u-u1).std())) # accuracy 1e-14
-#    print("primitive-conserved")
-#    input("P")
+    rho1, v1, u1, urad, beta, press = toprim(m, s, e, across, r, sth) # primitive from conserved
+    print(str((rho-rho1).std())) 
+    print(str((vinit-v1).std()))
+    print(str((u-u1).std())) # accuracy 1e-14
+    print("primitive-conserved")
+    print("rhomin = "+str(rho.min())+" = "+str(rho1.min()))
+    #    input("P")
     m0=m
     
     t=0.;  tstore=0.  ; nout=0
@@ -383,7 +424,10 @@ def alltire():
         # first make a preliminary half-step
         timer.start_comp("toprim")
         mprev=m ; sprev=s ; eprev=e
+        #        print("mmin = "+str(m.min()))
         rho, v, u, urad, beta, press = toprim(m, s, e, across, r, sth) # primitive from conserved
+        #        print("rhomin = "+str(rho.min()))
+        #        input("M")
         #        wneg = (rho<rhofloor) | (u<ufloor)
         #        rho[wneg] = rhofloor ; u[wneg] = ufloor
         timer.stop_comp("toprim")
@@ -394,22 +438,27 @@ def alltire():
         timer.stop_comp("flux")
         timer.start_comp("velocity")
         g1 = Gamma1(5./3., beta)
-        cs=sqrt(g1*press/(rho)) # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
-        vl, vm, vr = sigvel_isentropic(v, cs, g1)
+        cs=sqrt(g1*press/(rho+u)) # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
+        #        vl, vm, vr = sigvel_isentropic(v, cs, g1)
         # sigvel_linearized(v, cs, g1, rho, press)
         # sigvel_isentropic(v, cs, g1)
+
+        #        print("pressure = "+str(press.min()))
+        #        print("cs = "+str(cs.min()))
+        vl, vm, vr = sigvel_toro(m, s, e, p, fe, (v-cs)[:-1], (v+cs)[1:], across_half, r_half, sth_half)
+        
         timer.stop_comp("velocity")
         timer.start_comp("solver")
         s_half, p_half, fe_half =  solv.HLLE([s, p, fe], [m, s, e], vl, vr, vm)
         # solv.HLLC([s, p, fe], [m, s, e], vl, vr, vstar)
         timer.stop_comp("solver")
         timer.start_comp("sources")
-        dm, ds, de, flux = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
+        dm, ds, de, flux, trat = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot, dt=dt)
         ltot=simps(flux, x=l) # no difference
         heat=simps(de+flux, x=l)
         timer.stop_comp("sources")
         timer.start_comp("main")
-        m1,s1,e1=main_step(m,s,e,l_half, s_half, p_half,fe_half, dm, ds, de, dt/2., r, sth, across, dlleft, dlright, g1)
+        m1, s1, e1 = main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt/2., r, sth, across, dlleft, dlright, g1, trat=trat)
         timer.stop_comp("main")
         timer.lap("step")
         # second take, real step
@@ -425,8 +474,11 @@ def alltire():
         timer.stop_comp("flux")
         timer.start_comp("velocity")
         g1 = Gamma1(5./3., beta1)
-        cs=sqrt(g1 * press1/(rho1)) # slightly under-estimating the SOS to get stable signal velocities; exact for u << rho
-        vl, vm, vr = sigvel_isentropic(v, cs, g1)
+        cs1=sqrt(g1 * press1/(rho1+u1)) # slightly under-estimating the SOS to get stable signal velocities; exact for u << rho
+        #        print("pressure1 = "+str(press1.min()))
+        #        print("cs1 = "+str(cs1.min()))
+        vl, vm, vr = sigvel_toro(m1, s1, e1, p1, fe1, (v1-cs1)[:-1], (v1+cs1)[1:], across_half, r_half, sth_half)
+        #vl, vm, vr = sigvel_isentropic(v, cs, g1)
         # sigvel_linearized(v1, cs, g1, rho1, press1)
         timer.stop_comp("velocity")
         timer.start_comp("solver")
@@ -434,12 +486,12 @@ def alltire():
         # solv.HLLC([s1, p1, fe1], [m1, s1, e1], vl, vr, vm)
         timer.stop_comp("solver")
         timer.start_comp("sources")
-        dm1, ds1, de1, flux1 = sources(rho1, v1, u1, across, r, sth, cth, sina, cosa,ltot=ltot)
+        dm1, ds1, de1, flux1, trat1 = sources(rho1, v1, u1, across, r, sth, cth, sina, cosa,ltot=ltot, dt=dt)
         ltot=simps(flux1, x=l) # no difference
         heat=simps(de1+flux1, x=l)
         timer.stop_comp("sources")
         timer.start_comp("main")
-        m, s, e = main_step(m, s, e, l_half, s_half1, p_half1, fe_half1, dm1, ds1, de1, dt, r, sth, across, dlleft, dlright, g1)
+        m, s, e = main_step(m, s, e, l_half, s_half1, p_half1, fe_half1, dm1, ds1, de1, dt, r, sth, across, dlleft, dlright, g1, trat=trat1)
         timer.stop_comp("main")
         timer.lap("step")
         t+=dt
