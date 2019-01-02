@@ -238,7 +238,7 @@ def toprim(m, s, e, across, r, sth):
     if(m.min()<mfloor):
         print("toprim: m.min = "+str(m.min()))
         print("... at "+str(r[m.argmin()]))
-        exit(1)
+        #   exit(1)
     #    v=s*0.
     #    v[rho>rhofloor]=(s/m)[rho>rhofloor]
     #    v=v/sqrt(1.+v**2)
@@ -247,7 +247,7 @@ def toprim(m, s, e, across, r, sth):
     if(rho.min() < rhofloor):
         print("rhomin = "+str(rho.min()))
         print("mmin = "+str(m.min()))
-        exit(1)
+        # exit(1)
     u[u<=ufloor]=0.
     beta = betafun(Fbeta(rho, u))
     press = 3.*(1.-beta/2.) * u
@@ -449,7 +449,7 @@ def alltire():
         
         timer.stop_comp("velocity")
         timer.start_comp("solver")
-        s_half, p_half, fe_half =  solv.HLLE([s, p, fe], [m, s, e], vl, vr, vm)
+        s_half, p_half, fe_half =  solv.HLLC([s, p, fe], [m, s, e], vl, vr, vm)
         # solv.HLLC([s, p, fe], [m, s, e], vl, vr, vstar)
         timer.stop_comp("solver")
         timer.start_comp("sources")
@@ -482,7 +482,7 @@ def alltire():
         # sigvel_linearized(v1, cs, g1, rho1, press1)
         timer.stop_comp("velocity")
         timer.start_comp("solver")
-        s_half1, p_half1, fe_half1 = solv.HLLE([s1, p1, fe1], [m1, s1, e1], vl, vr, vm)
+        s_half1, p_half1, fe_half1 = solv.HLLC([s1, p1, fe1], [m1, s1, e1], vl, vr, vm)
         # solv.HLLC([s1, p1, fe1], [m1, s1, e1], vl, vr, vm)
         timer.stop_comp("solver")
         timer.start_comp("sources")
