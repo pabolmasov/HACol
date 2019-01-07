@@ -1,9 +1,12 @@
 from numpy import *
 
+debug = False
+
 def HLLE(fs, qs, sl, sr, sm):
     '''
     makes a proxy for a half-step flux, HLLE-like
     flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
+    Sod's test passed!
     '''
     #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
     f1,f2,f3 = fs  ;  q1,q2,q3 = qs
@@ -29,11 +32,9 @@ def HLLC(fs, qs, sl, sr, sm):
     '''
     f1, f2, f3 = fs  ;  q1, q2, q3 = qs
     ds = sr - sl
-    #    for k in arange(size(sl)):
-    #        print(str(sl[k])+" "+str(sm[k])+" "+str(sr[k])+"\n")
-    #    i=input('r')
-    
-    fhalf1=(f1[1:]+f1[:-1])/2.  ;  fhalf2=(f2[1:]+f2[:-1])/2.  ;  fhalf3=(f3[1:]+f3[:-1])/2.
+
+    nx=size(q1)
+    fhalf1=zeros(nx-1, dtype=double)  ;  fhalf2=zeros(nx-1, dtype=double)  ;  fhalf3=zeros(nx-1, dtype=double)
 
     qstar1_left = (q1[:-1] * sl - f1[:-1]) / (sl - sm) ;   qstar1_right = (q1[1:] * sr - f1[1:]) / (sr - sm)
     qstar2_left = qstar1_left * sm ; qstar2_right = qstar1_right * sm
@@ -49,35 +50,49 @@ def HLLC(fs, qs, sl, sr, sm):
     fluxright2 = f2[1:] + sr * (qstar2_right-q2[1:])
     fluxright3 = f3[1:] + sr * (qstar3_right-q3[1:])
     
-    wsuperleft = where((sr<0.) & (ds >0.))
-    wsubleft = where((sr>=0.) & (sm<=0.) & (ds >0.))
-    wsubright = where((sl<=0.) & (sm>=0.) & (ds >0.))
-    wsuperright = where((sl>0.) & (ds >0.))
-        
+    wsuperleft = where((sr<=0.))
+    wsubleft = where((sl<0.) & (sr>0.) & (sm<0.))
+    wsubright = where((sl<0.) & (sr>0.) & (sm>=0.))
+    wsuperright = where((sl>=0.))
+
+    if(debug):
+        print("sr = "+str(sr.min())+" to "+str(sr.max()))
+        print("sl = "+str(sl.min())+" to "+str(sl.max()))
+        print("sm = "+str(sm.min())+" to "+str(sm.max()))
+        print(str(size( wsuperleft))+" + "+str(size( wsubleft))+" + "+str(size( wsubright))+
+              " + "+str(size( wsuperright))+" + "+str(size( where(sl>= sr)))+ " =  "+str(nx-1))
+        j = input('j')
     if(size(wsubleft)>0):
-        fhalf1[wsubleft] = fluxleft1[wsubleft]
-        fhalf2[wsubleft] = fluxleft2[wsubleft]
-        fhalf3[wsubleft] = fluxleft3[wsubleft]
+        fhalf1[wsubleft] = fluxright1[wsubleft]
+        fhalf2[wsubleft] = fluxright2[wsubleft]
+        fhalf3[wsubleft] = fluxright3[wsubleft]
     if(size(wsubright)>0):
-        fhalf1[wsubright] = fluxright1[wsubright]
-        fhalf2[wsubright] = fluxright2[wsubright]
-        fhalf3[wsubright] = fluxright3[wsubright]
+        fhalf1[wsubright] = fluxleft1[wsubright]
+        fhalf2[wsubright] = fluxleft2[wsubright]
+        fhalf3[wsubright] = fluxleft3[wsubright]
     if(size(wsuperleft)>0): # Toro eq 29
-        fhalf1[wsuperleft] = ((sm * ( sr * (q1[1:]-q1[:-1]) + (sr/sl) * f1[:-1] - f1[1:]) +
-                              sr * (1. - sm/sl) * fluxleft1)/(sr - sm))[wsuperleft]
-        fhalf2[wsuperleft] = ((sm * ( sr * (q2[1:]-q2[:-1]) + (sr/sl) * f2[:-1] - f2[1:]) +
-                              sr * (1. - sm/sl) * fluxleft2)/(sr - sm))[wsuperleft]
-        fhalf3[wsuperleft] = ((sm * ( sr * (q3[1:]-q3[:-1]) + (sr/sl) * f3[:-1] - f3[1:]) +
-                              sr * (1. - sm/sl) * fluxleft3)/(sr - sm))[wsuperleft]
+        fhalf1[wsuperleft] = (f1[1:])[wsuperleft]
+        fhalf2[wsuperleft] = (f2[1:])[wsuperleft]
+        fhalf3[wsuperleft] = (f3[1:])[wsuperleft]
+        #        fhalf1[wsuperleft] = ((sm * ( sr * (q1[1:]-q1[:-1]) + (sr/sl) * f1[:-1] - f1[1:]) +
+        #                              sr * (1. - sm/sl) * fluxleft1)/(sr - sm))[wsuperleft]
+        #        fhalf2[wsuperleft] = ((sm * ( sr * (q2[1:]-q2[:-1]) + (sr/sl) * f2[:-1] - f2[1:]) +
+        #                              sr * (1. - sm/sl) * fluxleft2)/(sr - sm))[wsuperleft]
+        #        fhalf3[wsuperleft] = ((sm * ( sr * (q3[1:]-q3[:-1]) + (sr/sl) * f3[:-1] - f3[1:]) +
+        #                              sr * (1. - sm/sl) * fluxleft3)/(sr - sm))[wsuperleft]
     if(size(wsuperright)>0): # Toro eq 30
-        fhalf1[wsuperright] = ((sm * ( sl * (q1[1:]-q1[:-1]) - (sl/sr) * f1[1:] + f1[:-1]) -
-                              sl * (1. - sm/sr) * fluxright1)/(sm - sl))[wsuperright]
-        fhalf2[wsuperright] = ((sm * ( sl * (q2[1:]-q2[:-1]) - (sl/sr) * f2[1:] + f2[:-1]) -
-                              sl * (1. - sm/sr) * fluxright2)/(sm - sl))[wsuperright]
-        fhalf3[wsuperright] = ((sm * ( sl * (q3[1:]-q3[:-1]) - (sl/sr) * f3[1:] + f3[:-1]) -
-                              sl * (1. - sm/sr) * fluxright3)/(sm - sl))[wsuperright]
+        fhalf1[wsuperright] = (f1[:-1])[wsuperright]
+        fhalf2[wsuperright] = (f2[:-1])[wsuperright]
+        fhalf3[wsuperright] = (f3[:-1])[wsuperright]        
+        #        fhalf1[wsuperright] = ((sm * ( sl * (q1[1:]-q1[:-1]) - (sl/sr) * f1[1:] + f1[:-1]) -
+        #                              sl * (1. - sm/sr) * fluxright1)/(sm - sl))[wsuperright]
+        #        fhalf2[wsuperright] = ((sm * ( sl * (q2[1:]-q2[:-1]) - (sl/sr) * f2[1:] + f2[:-1]) -
+        #                              sl * (1. - sm/sr) * fluxright2)/(sm - sl))[wsuperright]
+        #        fhalf3[wsuperright] = ((sm * ( sl * (q3[1:]-q3[:-1]) - (sl/sr) * f3[1:] + f3[:-1]) -
+        #                              sl * (1. - sm/sr) * fluxright3)/(sm - sl))[wsuperright]
     wcool = where(ds<=0.)
     if(size(wcool)>0):
+        #        print(str(size(wcool))+" cool points")
         wcoolright = where((sl>0.) & (ds<=0.))
         wcoolleft = where((sr<0.) & (ds<=0.))
         if(size(wcoolright)>0):
