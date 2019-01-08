@@ -7,7 +7,7 @@ nx0=nx*20 # first we make a finer mesh for interpolation
 logmesh=False
 
 # physical parameters:
-mu30 = 0.01 # magnetic moment, 1e30 units
+mu30 = 1. # magnetic moment, 1e30 units
 m1=1.4
 mdot = 10. * 4. * pi
 # 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 

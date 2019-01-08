@@ -42,7 +42,6 @@ def Gamma1(gamma, beta):
     g1 = gamma - 1.
     return beta + 9. * g1 * (beta-4./3.)**2/(beta+12.*g1 * (1.-beta))
 
-
 # smooth factor for optical depth
 def taufun(tau):
     wtrans = where(tau<taumin)
@@ -389,7 +388,8 @@ def alltire():
 
         #        print("pressure = "+str(press.min()))
         #        print("cs = "+str(cs.min()))
-        vl, vm, vr = sigvel_toro(m, s, e, p, fe, (v-cs)[:-1], (v+cs)[1:], across_half, r_half, sth_half)
+        #  vl, vm, vr = sigvel_toro(m, s, e, p, fe, (v-cs)[:-1], (v+cs)[1:], across_half, r_half, sth_half)
+        vl, vm, vr = sigvel_isentropic(v, cs, g1)
         
         timer.stop_comp("velocity")
         timer.start_comp("solver")
@@ -421,8 +421,8 @@ def alltire():
         cs1=sqrt(g1 * press1/(rho1+u1)) # slightly under-estimating the SOS to get stable signal velocities; exact for u << rho
         #        print("pressure1 = "+str(press1.min()))
         #        print("cs1 = "+str(cs1.min()))
-        vl, vm, vr = sigvel_toro(m1, s1, e1, p1, fe1, (v1-cs1)[:-1], (v1+cs1)[1:], across_half, r_half, sth_half)
-        #vl, vm, vr = sigvel_isentropic(v, cs, g1)
+        # vl, vm, vr = sigvel_toro(m1, s1, e1, p1, fe1, (v1-cs1)[:-1], (v1+cs1)[1:], across_half, r_half, sth_half)
+        vl, vm, vr = sigvel_isentropic(v, cs, g1)
         # sigvel_linearized(v1, cs, g1, rho1, press1)
         timer.stop_comp("velocity")
         timer.start_comp("solver")
