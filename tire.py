@@ -44,6 +44,9 @@ def Gamma1(gamma, beta):
 
 # smooth factor for optical depth
 def taufun(tau):
+    '''
+    calculates 1-exp(-x) in a reasonably smooth way trying to avoid round-off errors for small and large x
+    '''
     wtrans = where(tau<taumin)
     wopaq = where(tau>taumax)
     wmed = where((tau>=taumin) & (tau<=taumax))
@@ -59,7 +62,8 @@ def taufun(tau):
 # pressure ratios:
 def Fbeta(rho, u):
     '''
-    calculated F(beta) = pg/p as a function of rho and u (dimensionless units)
+    calculates a function of 
+    beta = pg/p from rho and u (dimensionless units)
     F(beta) itself is F = beta / (1-beta)**0.25 / (1-beta/2)**0.75
     '''
     beta = rho*0.+1.
@@ -82,7 +86,7 @@ def betafun_define():
 # define once and globally
 betafun = betafun_define() # defines the interpolated function for beta
 
-###########################################################################################
+##############################################################################
 def geometry(r, writeout=None):
     '''
     computes all the geometrical quantities. Sufficient to run once before the start of the simulation.
@@ -122,16 +126,17 @@ def cons(rho, v, u, across, r, sth):
 
 def diffuse(rho, urad, dl, across_half):
     '''
-    radial energy diffusion
+    radial energy diffusion;
+    calculates energy flux contribution already at the cell boundary
     '''
     rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
     rtau_left = rho[1:] * dl # optical depths along the field line, to the left of the cell boundaries
     rtau_right = rho[:-1] * dl # -- " -- to the right -- " --
     dul_half = across_half*((urad/(rho+1.))[1:]*(1.-exp(-rtau_left/2.))-(urad/(rho+1.))[:-1]*(1.-exp(-rtau_right/2.)))/dl/3. # radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
-    dul = rho*0. # just setting the size of the array
-    dul[1:-1]=(dul_half[1:]+dul_half[:-1])/2. # we need to smooth it for stability
-    return dul
+    #    dul = rho*0. # just setting the size of the array
+    #    dul[1:-1]=(dul_half[1:]+dul_half[:-1])/2. # we need to smooth it for stability
+    return dul_half
 
 def fluxes(rho, v, u, across, r, sth):
     '''
@@ -375,25 +380,20 @@ def alltire():
         #        rho[wneg] = rhofloor ; u[wneg] = ufloor
         timer.stop_comp("toprim")
         timer.start_comp("flux")
-        dul = diffuse(rho, urad, dl, across_half)
+        #        dul = diffuse(rho, urad, dl, across_half)
         s, p, fe = fluxes(rho, v, u, across, r, sth)
         #    fe += -dul # adding diffusive flux 
         timer.stop_comp("flux")
         timer.start_comp("velocity")
         g1 = Gamma1(5./3., beta)
         cs=sqrt(g1*press/(rho+u)) # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
-        #        vl, vm, vr = sigvel_isentropic(v, cs, g1)
-        # sigvel_linearized(v, cs, g1, rho, press)
-        # sigvel_isentropic(v, cs, g1)
-
-        #        print("pressure = "+str(press.min()))
-        #        print("cs = "+str(cs.min()))
-        #  vl, vm, vr = sigvel_toro(m, s, e, p, fe, (v-cs)[:-1], (v+cs)[1:], across_half, r_half, sth_half)
         vl, vm, vr = sigvel_isentropic(v, cs, g1)
         
         timer.stop_comp("velocity")
         timer.start_comp("solver")
         s_half, p_half, fe_half =  solv.HLLC([s, p, fe], [m, s, e], vl, vr, vm)
+        dul_half = diffuse(rho, urad, dl, across_half)
+        fe_half += dul_half
         # solv.HLLC([s, p, fe], [m, s, e], vl, vr, vstar)
         timer.stop_comp("solver")
         timer.start_comp("sources")
@@ -412,7 +412,7 @@ def alltire():
         #        rho1[wneg] = rhofloor ; u1[wneg] = ufloor
         timer.stop_comp("toprim")
         timer.start_comp("flux")
-        dul1 = diffuse(rho1, urad1, dl, across_half)
+        #        dul1 = diffuse(rho1, urad1, dl, across_half)
         s1, p1, fe1 = fluxes(rho1, v1, u1, across, r, sth)
         #        fe1 += -dul # adding diffusive flux 
         timer.stop_comp("flux")
@@ -428,6 +428,8 @@ def alltire():
         timer.start_comp("solver")
         s_half1, p_half1, fe_half1 = solv.HLLC([s1, p1, fe1], [m1, s1, e1], vl, vr, vm)
         # solv.HLLC([s1, p1, fe1], [m1, s1, e1], vl, vr, vm)
+        dul_half1 = diffuse(rho1, urad1, dl, across_half)
+        fe_half1 += dul_half1
         timer.stop_comp("solver")
         timer.start_comp("sources")
         dm1, ds1, de1, flux1, trat1 = sources(rho1, v1, u1, across, r, sth, cth, sina, cosa,ltot=ltot, dt=dt)
