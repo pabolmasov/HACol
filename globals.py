@@ -9,7 +9,7 @@ logmesh=False
 # physical parameters:
 mu30 = 1. # magnetic moment, 1e30 units
 m1=1.4
-mdot = 10. * 4. * pi
+mdot = 100. * 4. * pi
 # 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
 mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 6291.12*4.*pi/m1
@@ -58,7 +58,7 @@ omega = sqrt(0.9)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
-vout = -1./sqrt(r_e) / 15.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+vout = -1./sqrt(r_e) / 7.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 # plotting options:
 ifplot = True
@@ -74,3 +74,8 @@ ifrestart = False
 restartfile = outdir + 'tireout1.hdf5'
 restartn = 4756
 restartprefix = outdir+'tireout' # used if we restart from ascii output
+
+# estimating optimal N for a linear grid
+print("nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
+print("nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
+
