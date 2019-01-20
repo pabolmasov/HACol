@@ -11,3 +11,7 @@
 forpaper
 out*/
 globals_*.py
+shocktestv.*
+shocktestm.*
+*.err
+*.out
