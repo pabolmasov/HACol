@@ -45,6 +45,15 @@ def regularize(u, rho):
     u1=u-ufloor ; rho1=rho-rhofloor
     return (u1+fabs(u1))/2.+ufloor, (rho1+fabs(rho1))/2.+rhofloor
 
+#
+def quasirelfunction(v, v0):
+    '''
+    this function matches f(v)=v below v0 and approaches 1 at v \to 0 
+    '''
+    sv0 = sqrt(1.+v0**2) ; sv = sqrt(1.+v**2)
+    a = (1.+2.*v0**2)/sv0 ; b= -v0**3/sv0
+    return (a*abs(v)+b)/sv*sign(v)
+
 # speed of sound multiplier (see Chandrasekhar 1967 or Johnson 2008):
 def Gamma1(gamma, beta):
     g1 = gamma - 1.
@@ -175,7 +184,7 @@ def fluxes(rho, v, u, across, r, sth):
     fe=across*v*(u+press+(v**2/2.-1./r-0.5*(omega*r*sth)**2)*rho) # energy flux without diffusion
     return s, p, fe
 
-def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0., dt=0.):
+def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0., dt=None):
     '''
     computes the RHSs of conservation equations
     no changes in mass
@@ -194,9 +203,11 @@ def sources(rho, v, u, across, r, sth, cth, sina, cosa, ltot=0., dt=0.):
     urad = u * (1.-beta)/(1.-beta/2.)
     qloss = urad/(xirad*tau+1.)*8.*pi*r*sth*afac*taufac  # diffusion approximations; energy lost from 4 sides
     irradheating = heatingeff * gamedd * (sina*cth+cosa*sth)/r**2*8.*pi*r*sth*afac*taufac # photons absorbed by the matter also heat it
-    if(dt>0.):            
+    if(dt is not None):            
         trat = qloss * dt / u
         qloss *= tratfac(trat)
+    else:
+        trat = u*0. +1.
     dudt = v*force-qloss+irradheating
     return rho*0., force, dudt, qloss, trat
 
@@ -206,6 +217,10 @@ def toprim(m, s, e, across, r, sth):
     '''
     rho=m/across
     v=s/m
+    wrel = where(fabs(v)>vmax)
+    if(size(wrel)>0):
+        v[wrel] =  quasirelfunction(v[wrel], vmax) # equal to vmax when v[wrel]=vmax, approaching 1 at large values 
+    # v[wrel]*sqrt((1.+vmax**2)/(1.+v[wrel]**2))
     if(m.min()<mfloor):
         print("toprim: m.min = "+str(m.min()))
         print("... at "+str(r[m.argmin()]))
@@ -215,9 +230,9 @@ def toprim(m, s, e, across, r, sth):
     #    v=v/sqrt(1.+v**2)
     u=(e-m*(v**2/2.-1./r-0.5*(r*sth*omega)**2))/across
     umin = u.min()
-    if(rho.min() < rhofloor):
-        print("rhomin = "+str(rho.min()))
-        print("mmin = "+str(m.min()))
+    #    if(rho.min() < rhofloor):
+    #        print("rhomin = "+str(rho.min()))
+    #        print("mmin = "+str(m.min()))
         # exit(1)
         #    u[u<=ufloor]=0.
     beta = betafun(Fbeta(rho, u))
@@ -272,6 +287,7 @@ def main_step(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, dt, r, sth, 
     wneg=where(m1<mfloor)
     m1 = maximum(m1, mfloor)
     if(size(wneg)>0):
+        # exit()
         s1[wneg] = (m1 * s/m)[wneg]
         e1[wneg] = (e1 * e/m)[wneg]    
     return m1, s1, e1
@@ -329,13 +345,13 @@ def alltire():
     umagtar = umag * (1.+3.*cth**2)/4. * (rstar/r)**6
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-    vinit=vout*((r-rstar)/(r+rstar))*sqrt(r_e/r) # initial velocity
+    vinit=vout*(r-rstar)/(r+rstar) *sqrt(r_e/r) # initial velocity
     #    m=mdot/fabs(vout*sqrt(r_e/r)) # mass distribution
     #    m0=m 
     #    s+=vinit*m
     #    e+=(vinit**2/2.-1./r-0.5*(r*sth*omega)**2)*m+3.*umagout*across * (1.+0.01*rand(size(r)))+vout**2*m
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / across
-    u = 3.*umagout + rho * (vinit+vout)**2
+    u = 3.*umagout+(rho/rho[-1])*0.01/r
     print("U = "+str(u.min())+" to "+str(u.max()))
     m, s, e = cons(rho, vinit, u, across, r, sth)
 
@@ -396,6 +412,8 @@ def alltire():
         #        print("rhomin = "+str(rho.min()))
         #        input("M")
         u,rho = regularize(u,rho) 
+        dt = dlmin*0.25/(1.+(u/rho)+fabs(v)).max()
+        #        print("dt = "+str(dt))
         #        wneg = (u<ufloor)
         # rho[wneg] = rhofloor ; u[wneg] = ufloor
         timer.stop_comp("toprim")
@@ -406,17 +424,17 @@ def alltire():
         timer.stop_comp("flux")
         timer.start_comp("velocity")
         g1 = Gamma1(5./3., beta)
-        cs=sqrt(g1*press/(rho+u)) # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
+        cs=sqrt(g1*press/(rho+0.*(u+press))) # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
         vl, vm, vr = sigvel_isentropic(v, cs, g1)        
         timer.stop_comp("velocity")
         timer.start_comp("solver")
         s_half, p_half, fe_half =  solv.HLLC([s, p, fe], [m, s, e], vl, vr, vm)
         dul_half = diffuse(rho, urad, dl, across_half)
-        #        fe_half += dul_half
+        fe_half += dul_half
         # solv.HLLC([s, p, fe], [m, s, e], vl, vr, vstar)
         timer.stop_comp("solver")
         timer.start_comp("sources")
-        dm, ds, de, flux, trat = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot, dt=dt)
+        dm, ds, de, flux, trat = sources(rho, v, u, across, r, sth, cth, sina, cosa,ltot=ltot)
         ltot=simps(flux, x=l) # no difference
         heat=simps(de+flux, x=l)
         timer.stop_comp("sources")
@@ -438,7 +456,7 @@ def alltire():
         timer.stop_comp("flux")
         timer.start_comp("velocity")
         g1 = Gamma1(5./3., beta1)
-        cs1=sqrt(g1 * press1/(rho1+u1)) # slightly under-estimating the SOS to get stable signal velocities; exact for u << rho
+        cs1=sqrt(g1 * press1/(rho1+0.*(u1+press1))) # slightly under-estimating the SOS to get stable signal velocities; exact for u << rho
         #        print("pressure1 = "+str(press1.min()))
         #        print("cs1 = "+str(cs1.min()))
         # vl, vm, vr = sigvel_toro(m1, s1, e1, p1, fe1, (v1-cs1)[:-1], (v1+cs1)[1:], across_half, r_half, sth_half)
@@ -449,10 +467,10 @@ def alltire():
         s_half1, p_half1, fe_half1 = solv.HLLC([s1, p1, fe1], [m1, s1, e1], vl, vr, vm)
         # solv.HLLC([s1, p1, fe1], [m1, s1, e1], vl, vr, vm)
         dul_half1 = diffuse(rho1, urad1, dl, across_half)
-        #        fe_half1 += dul_half1
+        fe_half1 += dul_half1
         timer.stop_comp("solver")
         timer.start_comp("sources")
-        dm1, ds1, de1, flux1, trat1 = sources(rho1, v1, u1, across, r, sth, cth, sina, cosa,ltot=ltot, dt=dt)
+        dm1, ds1, de1, flux1, trat1 = sources(rho1, v1, u1, across, r, sth, cth, sina, cosa,ltot=ltot)
         ltot=simps(flux1, x=l) # no difference
         heat=simps(de1+flux1, x=l)
         timer.stop_comp("sources")
@@ -486,6 +504,7 @@ def alltire():
             timer.start("io")
             tstore+=dtout
             print("t = "+str(t*tscale)+"s")
+            print("dt = "+str(dt))
             fflux.write(str(t*tscale)+' '+str(ltot)+' '+str(heat)+'\n')
             fflux.flush()
             #            oneplot(r, rho, name=outdir+'/rhotie{:05d}'.format(nout))
