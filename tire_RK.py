@@ -123,7 +123,6 @@ def betafun_define():
 # define once and globally
 betafun = betafun_define() # defines the interpolated function for beta
 
-
 def cons(rho, v, u, g):
     '''
     computes conserved quantities from primitives
@@ -227,7 +226,7 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de):
     det[1:-1] = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]
     return dmt, dst, det
 
-def RKstep(m, s, e, g, ghalf, dl):
+def RKstep(m, s, e, g, ghalf, dl, dt=None):
     '''
     calculating elementary increments of conserved quantities
     '''
@@ -240,10 +239,10 @@ def RKstep(m, s, e, g, ghalf, dl):
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     dul_half = diffuse(rho, urad, dl, ghalf.across)
     fe_half += dul_half
-    dm, ds, de, flux, trat = sources(rho, v, u, g,ltot=0.)
+    dm, ds, de, flux, trat = sources(rho, v, u, g,ltot=0., dt=dt)
     ltot=simps(flux, x=g.l) # no difference
     dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half, dm, ds, de)
-    return dmt, dst, det, ltot
+    return dmt, dst, det, ltot, trat.max()
 
 # boundary conditions:
 def leftBC(m, s, e, dlleft, mdotleft = 0.):
@@ -371,28 +370,31 @@ def alltire():
     while(t<tmax):
         timer.start_comp("advance")
         # Runge-Kutta, fourth order, one step:
-        k1m, k1s, k1e, ltot1 = RKstep(m, s, e, g, ghalf, dl)
+        k1m, k1s, k1e, ltot1, tratmax1 = RKstep(m, s, e, g, ghalf, dl, dt=dt)
                                       #r, sth, across, l_half, across_half, dl)
-        k2m, k2s, k2e, ltot2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl)
-        k3m, k3s, k3e, ltot3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl)
-        k4m, k4s, k4e, ltot4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl)
+        k2m, k2s, k2e, ltot2, tratmax2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dt=dt)
+        k3m, k3s, k3e, ltot3, tratmax3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dt=dt)
+        k4m, k4s, k4e, ltot4, tratmax4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dt=dt)
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
         ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6.
+        tratmax = (tratmax1 + 2.*tratmax2 + 2.*tratmax3 + tratmax4) / 6.
         m[0], s[0], e[0] = leftBC(m, s, e, dlleft)
         m[-1], s[-1], e[-1] = rightBC(m, s, e, dlright)
         t += dt
         csqest = 4./3.*u/rho
-        dt = 0.5 * dlmin / sqrt(1.+csqest.max())
+        rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
+        dt = 0.5 * dlmin / sqrt(1.+csqest.max()+(v**2).max()+tratmax**2)
         timer.stop_comp("advance")
         timer.lap("step")
         if(t>=tstore):
             tstore += dtout
             timer.start("io")
-            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
+            #            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
             print("t = "+str(t*tscale)+"s")
             print("dt = "+str(dt*tscale)+"s")
+            print("tratmax = "+str(tratmax))
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
             fflux.flush()
             if ifplot & (nout%plotalias == 0):
