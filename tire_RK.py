@@ -383,9 +383,12 @@ def alltire():
         m[0], s[0], e[0] = leftBC(m, s, e, dlleft)
         m[-1], s[-1], e[-1] = rightBC(m, s, e, dlright)
         t += dt
+        csqest = 4./3.*u/rho
+        dt = dlmin / sqrt(1.+csqest)
         timer.stop_comp("advance")
         timer.lap("step")
         if(t>=tstore):
+            tstore += dtout
             timer.start("io")
             rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
             print("t = "+str(t*tscale)+"s")
