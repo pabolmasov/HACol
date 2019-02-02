@@ -88,4 +88,3 @@ def shocktester():
             #            print("vL(C) = "+str(sl_C))
             #            print("vR(C) = "+str(sr_C))
             nout += 1 ; tstore += dtout
-            
