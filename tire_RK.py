@@ -197,7 +197,7 @@ def toprim(m, s, e, g):
     if(m.min()<mfloor):
         print("toprim: m.min = "+str(m.min()))
         print("... at "+str(g.r[m.argmin()]))
-        #   exit(1)
+        exit(1)
     #    v=s*0.
     #    v[rho>rhofloor]=(s/m)[rho>rhofloor]
     #    v=v/sqrt(1.+v**2)
@@ -353,7 +353,7 @@ def alltire():
     dlmin=dl.min()
     dt = dlmin*0.25
     print("dt = "+str(dt))
-    ti=input("dt")
+    #    ti=input("dt")
     
     ltot=0. # estimated total luminosity
     if(ifrestart):
@@ -384,7 +384,7 @@ def alltire():
         m[-1], s[-1], e[-1] = rightBC(m, s, e, dlright)
         t += dt
         csqest = 4./3.*u/rho
-        dt = dlmin / sqrt(1.+csqest)
+        dt = 0.5 * dlmin / sqrt(1.+csqest.max())
         timer.stop_comp("advance")
         timer.lap("step")
         if(t>=tstore):
@@ -392,6 +392,7 @@ def alltire():
             timer.start("io")
             rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
             print("t = "+str(t*tscale)+"s")
+            print("dt = "+str(dt*tscale)+"s")
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
             fflux.flush()
             if ifplot & (nout%plotalias == 0):
