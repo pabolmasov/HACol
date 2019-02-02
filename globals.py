@@ -2,9 +2,9 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=10000 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
-logmesh=False
+logmesh=True
 
 # physical parameters:
 mu30 = 1. # magnetic moment, 1e30 units
@@ -23,18 +23,21 @@ betacoeff = 1.788e-5 * (m1)**(-0.25)/mow # coefficient used to calculate gas-to-
 # BC modes:
 galyamode = False # if on, sets the internal energy density to MF energy density at the inner boundary
 coolNS = False # if on (and galyamode is off), internal energy is kept zero at the surface of the NS
-ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
+# a test with coolNS converges well, but it is completely unphysical
+ufixed = False # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
 
 # radiation transfer treatment:
 xirad = 0.2 # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 taumax = 1e2 # maximal optical depth
 
-eta = 0.0 # self-illumination efficiency 
-heatingeff = 0.5 # part of illuminating flux contributing to heating
 mfloor = 1e-15  # crash floor for mass per unit length
 rhofloor = 1e-15 # crash floor for density
 ufloor = 1e-15 # crash floor for energy density
+vmax = 0.6 # when should we worry about relativistic velosities?
+
+eta = 0.0 # self-illumination efficiency 
+heatingeff = 0.5 # part of illuminating flux contributing to heating
 afac = 0.5 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
@@ -54,11 +57,11 @@ massscale = 6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 #
 tmax = 1000./tscale # maximal time in tscales
 dtout = 0.001/tscale # output time step in tscales
-omega = sqrt(0.9)*r_e**(-1.5) # in Keplerian units on the outer rim
+omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
-vout = -1./sqrt(r_e) * 1./15. # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+vout = -1./sqrt(r_e) / 5.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 # plotting options:
 ifplot = True
@@ -74,3 +77,8 @@ ifrestart = False
 restartfile = outdir + 'tireout1.hdf5'
 restartn = 4756
 restartprefix = outdir+'tireout' # used if we restart from ascii output
+
+# estimating optimal N for a linear grid
+print("nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
+print("nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
+

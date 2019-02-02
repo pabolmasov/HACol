@@ -7,7 +7,7 @@ def entryname(n, ndig = 6):
     entry = str(n).rjust(ndig, '0') # allows for 6 positions (hundreds of thousand of entries)
     return entry
 
-def init(hname, l, r, sth, cth): # , m1, mdot, eta, afac, re, dre, omega):
+def init(hname, g): # , m1, mdot, eta, afac, re, dre, omega):
     '''
     writing globals and geometry to the output HDF5 file
     '''
@@ -23,10 +23,10 @@ def init(hname, l, r, sth, cth): # , m1, mdot, eta, afac, re, dre, omega):
     glo.attrs['rstar']      = rstar
 
     geom = hfile.create_group("geometry")
-    geom.create_dataset("l", data=l)
-    geom.create_dataset("r", data=r)
-    geom.create_dataset("sth", data=sth)
-    geom.create_dataset("cth", data=cth)
+    geom.create_dataset("l", data=g.l)
+    geom.create_dataset("r", data=g.r)
+    geom.create_dataset("sth", data=g.sth)
+    geom.create_dataset("cth", data=g.cth)
     
     hfile.flush()
     return hfile # returns file stream reference
