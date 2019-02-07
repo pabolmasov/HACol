@@ -37,7 +37,7 @@ ufloor = 1e-15 # crash floor for energy density
 vmax = 0.6 # when should we worry about relativistic velosities?
 
 eta = 0.0 # self-illumination efficiency 
-heatingeff = 0.5 # part of illuminating flux contributing to heating
+heatingeff = 0.01 # additional heating scaling with mdot
 afac = 0.5 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
@@ -56,7 +56,7 @@ lscale = 1.13685e37*m1 # G Msun c / kappa luminosity scale
 massscale = 6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 #
 tmax = 1000./tscale # maximal time in tscales
-dtout = 0.001/tscale # output time step in tscales
+dtout = 0.0001/tscale # output time step in tscales
 omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png

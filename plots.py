@@ -25,31 +25,36 @@ ioff()
 
 #############################################################
 # Plotting block 
-def uplot(r, u, rho, sth, v, name='outplot'):
+def uplot(r, u, rho, sth, v, name='outplot', umagtar = umagtar, ueq = None):
     '''
     energy u supplemented by rest-mass energy rho c^2
     '''
+    if(umag is None):
+        umagtar = umag*(rstar/r)**6
     ioff()
     clf()
     fig=figure()
     plot(r, u, 'k', label='$u$',linewidth=2)
-    plot(r, rho, 'r', label=r'$\rho c^2$')
-    plot(r, rho*v**2/2., 'm', label=r'$\frac{1}{2}\rho v^2$')
-    plot(r, rho/r, 'r', label=r'$\rho/r$', linestyle='dotted')
-    plot(r, rho*0.5*(r*omega*sth)**2, 'r', label=r'$\frac{1}{2}\rho (\Omega R \sin\theta)^2$', linestyle='dashed')
-    plot(r, umag*(rstar/r)**6, 'b', label=r'$u_{\rm mag}$')
+    if(ueq is not None):
+        plot(r, ueq/umagtar, 'k', label='$u$',linewidth=2, linestyle = 'dotted')
+    plot(r, rho/umagtar, 'r', label=r'$\rho c^2$')
+    plot(r, rho*v**2/2./umagtar, 'm', label=r'$\frac{1}{2}\rho v^2$')
+    plot(r, rho/r /umagtar, 'r', label=r'$\rho/r$', linestyle='dotted')
+    plot(r, rho*0.5*(r*omega*sth)**2/umagtar, 'r', label=r'$\frac{1}{2}\rho (\Omega R \sin\theta)^2$', linestyle='dashed')
+    plot(r, umagtar/umagtar, 'b', label=r'$u_{\rm mag}$')
     B=u*4./3.+rho*(-1./r-0.5*(r*omega*sth)**2+v**2/2.)
-    plot(r, B, 'g', label='$B$', linestyle='dotted')
-    plot(r, -B, 'g', label='$-B$')
+    plot(r, B/umagtar, 'g', label='$B$', linestyle='dotted')
+    plot(r, -B/umagtar, 'g', label='$-B$')
     #    plot(x, y0, 'b')
     #    xscale('log')
     #    ylim(umag*((rstar/r)**6).min(), umag)
     ylim(u[u>0.].min(), u.max())
     xlabel('$r$, $GM/c^2$ units')
+    ylabel(r'$U/U_{\rm mag}$')
     yscale('log')
     xscale('log')    
     legend()
-    fig.set_size_inches(4, 8)
+    fig.set_size_inches(4, 5)
     savefig(name+'.png')
     close()
 
