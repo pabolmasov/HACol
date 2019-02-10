@@ -139,9 +139,10 @@ def diffuse(rho, urad, dl, across_half):
     calculates energy flux contribution already at the cell boundary
     '''
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
-    rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
-    rtau_left = rho[:-1] * dl / 2.# -- " -- to the left -- " --
-    dul_half = across_half*((urad/(rho+1.))[1:]*(1.-exp(-rtau_right))-(urad/(rho+1.))[:-1]*(1.-exp(-rtau_left)))/dl/3. # radial diffusion
+    rtau_right = rho[1:] * dl[1:] / 2.# optical depths along the field line, to the right of the cell boundaries
+    rtau_left = rho[:-1] * dl[:-1] / 2.# -- " -- to the left -- " --
+    dul_half = across_half*((urad * tratfac(rtau_right))[1:] - (urad * tratfac(rtau_right))[:-1])/6. 
+    #    ((urad/(rho+1.)/dl)[1:]*(1.-exp(-rtau_right))-(urad/(rho+1.)/dl)[:-1]*(1.-exp(-rtau_left)))/3. # radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -dul_half 
 
@@ -200,14 +201,14 @@ def toprim(m, s, e, g):
     '''
     rho=m/g.across
     v=s/m
-    wrel = where(fabs(v)>vmax)
-    if(size(wrel)>0):
-        v[wrel] =  quasirelfunction(v[wrel], vmax) # equal to vmax when v[wrel]=vmax, approaching 1 at large values 
+#    wrel = where(fabs(v)>vmax)
+#    if(size(wrel)>0):
+#        v[wrel] =  quasirelfunction(v[wrel], vmax) # equal to vmax when v[wrel]=vmax, approaching 1 at large values 
     # v[wrel]*sqrt((1.+vmax**2)/(1.+v[wrel]**2))
-    if(m.min()<mfloor):
-        print("toprim: m.min = "+str(m.min()))
-        print("... at "+str(g.r[m.argmin()]))
-        exit(1)
+    # if(m.min()<mfloor):
+      #  print("toprim: m.min = "+str(m.min()))
+      #  print("... at "+str(g.r[m.argmin()]))
+        #        exit(1)
     #    v=s*0.
     #    v[rho>rhofloor]=(s/m)[rho>rhofloor]
     #    v=v/sqrt(1.+v**2)
@@ -238,11 +239,13 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
 
     #left boundary conditions:
     dmt[0] = -(s_half[0]-(-mdotsink))/dlleft
-    dst[0] = (-mdotsink-s[0])/dt
-    det[0] = -(s_half[0]-(-mdotsink))/dlleft # no energy sink anyway
+    #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
+    dst[0] = 0.
+    det[0] = -(fe_half[0]-(0.))/dlleft+de[0] # no energy sink anyway
     # right boundary conditions:
     dmt[-1] = -((-mdot)-s_half[-1])/dlright
-    dst[-1] = (-mdot-s[-1])/dt
+    #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
+    dst[-1] = 0.
     #    edot =  abs(mdot) * 0.5/g.r[-1] + s[-1]/m[-1] * u[-1] # virial equilibrium
     if(edot is None):
         edot = 0.
@@ -302,9 +305,10 @@ def alltire():
     r_half=rfun(luni_half) # half-step radial coordinates
     ghalf = geometry_initialize(r_half, r_e, dr_e, afac=afac) # mid-step geometry in r
     ghalf.l += g.l[1]/2. # mid-step mesh starts halfstep later
-    dlleft = 2.*(ghalf.l[1]-ghalf.l[0])-(ghalf.l[2]-ghalf.l[1])
-    dlright = 2.*(ghalf.l[-1]-ghalf.l[-2])-(ghalf.l[-2]-ghalf.l[3])
-    dl=g.l[1:]-g.l[:-1] # cell sizes 
+    #    dlleft = ghalf.l[1]-ghalf.l[0] # 2.*(ghalf.l[1]-ghalf.l[0])-(ghalf.l[2]-ghalf.l[1])
+    #    dlright = ghalf.l[-1]-ghalf.l[-2] # 2.*(ghalf.l[-1]-ghalf.l[-2])-(ghalf.l[-2]-ghalf.l[3])
+    dl=g.l[1:]-g.l[:-1] # cell sizes
+    dlleft = dl[0] ; dlright = dl[-1]
     #
     
     # testing bassun.py
@@ -327,21 +331,25 @@ def alltire():
     umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-    vinit=vout*sqrt((g.r-rstar)/(g.r+rstar)) *sqrt(r_e/g.r) # initial velocity
+    vinit=vout *sqrt(r_e/g.r) # initial velocity
 
     # setting the initial distributions of the primitive variables:
-    rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across 
-    u = 3.*umagout * (rho*vinit**2)/(rho*vinit**2)[-1]
+    rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
+    vinit *= ((g.r-rstar)/(g.r+rstar))
+    u =  3.*umagtar[-1] * (r_e/g.r) * (rho/rho[-1])
     # 3.*umagout+(rho/rho[-1])*0.01/g.r
     print("U = "+str(u.min())+" to "+str(u.max()))
     m, s, e = cons(rho, vinit, u, g)
-
+    print(u/rho)
+    ii=input('m')
+    
     rho1, v1, u1, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
     print(str((rho-rho1).std())) 
     print(str((vinit-v1).std()))
     print(str((u-u1).std())) # accuracy 1e-14
     print("primitive-conserved")
     print("rhomin = "+str(rho.min())+" = "+str(rho1.min()))
+    print("umin = "+str(u.min())+" = "+str(u1.min()))
     #    input("P")
     m0=m
     
@@ -394,12 +402,13 @@ def alltire():
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
+        s[0] = 0. ; s[-1] = -mdot
         ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6.
         ueq = (ueq1 + 2.*ueq2 + 2.*ueq3 + ueq4) / 6.
         t += dt
         csqest = 4./3.*u/rho
         rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
-        dt = 0.5 * dlmin / sqrt(1.+csqest.max()+(v**2).max())
+        dt = 0.5 * dlmin / sqrt(1.+2.*csqest.max()++2.*(v**2).max())
         timer.stop_comp("advance")
         timer.lap("step")
         if(t>=tstore):

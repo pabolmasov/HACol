@@ -25,7 +25,7 @@ ioff()
 
 #############################################################
 # Plotting block 
-def uplot(r, u, rho, sth, v, name='outplot', umagtar = umagtar, ueq = None):
+def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None):
     '''
     energy u supplemented by rest-mass energy rho c^2
     '''
@@ -34,7 +34,7 @@ def uplot(r, u, rho, sth, v, name='outplot', umagtar = umagtar, ueq = None):
     ioff()
     clf()
     fig=figure()
-    plot(r, u, 'k', label='$u$',linewidth=2)
+    plot(r, u/umagtar, 'k', label='$u$',linewidth=2)
     if(ueq is not None):
         plot(r, ueq/umagtar, 'k', label='$u$',linewidth=2, linestyle = 'dotted')
     plot(r, rho/umagtar, 'r', label=r'$\rho c^2$')
@@ -48,13 +48,14 @@ def uplot(r, u, rho, sth, v, name='outplot', umagtar = umagtar, ueq = None):
     #    plot(x, y0, 'b')
     #    xscale('log')
     #    ylim(umag*((rstar/r)**6).min(), umag)
-    ylim(u[u>0.].min(), u.max())
+    ylim(((u/umagtar)[u>0.]).min(), (u/umagtar).max())
     xlabel('$r$, $GM/c^2$ units')
     ylabel(r'$U/U_{\rm mag}$')
     yscale('log')
     xscale('log')    
     legend()
-    fig.set_size_inches(4, 5)
+    fig.tight_layout()
+    fig.set_size_inches(6, 5)
     savefig(name+'.png')
     close()
 

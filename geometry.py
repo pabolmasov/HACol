@@ -40,6 +40,6 @@ def geometry_initialize(r, r_e, dr_e, writeout=None, afac = 1.):
 
     g = geometry()
     g.r = r ; g.l = l ; g.sth = sth ; g.cth = cth
-    g.sina = sina ; g.cosa = cosa ; g. across = across; g.delta = delta
+    g.sina = sina ; g.cosa = cosa ; g.across = across; g.delta = delta
     
     return g

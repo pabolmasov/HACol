@@ -11,7 +11,7 @@ def stepfun(x):
 
 ##########################################################################
 def shocktester():
-
+    # Sod's shock test (Sod 1978)
     x1 = 0.; x2 = 1. ; nx = 1000
     x=arange(nx)/double(nx-1)*(x2-x1)+x1
 
@@ -27,12 +27,12 @@ def shocktester():
     press = (dp-1.)*stepfun((x0-x)/sx)+1.
     e = press / (gamma-1.) + m*v**2/2.
     p = m * v**2 + press
-    fe = (e+p + m*v**2/2.) * v 
+    fe = (e+press + m*v**2/2.) * v 
 
     m_C = copy(m) ; s_C = copy(s) ; e_C = copy(e)
     m_E = m ; s_E = s ; e_E = e
     
-    tmax = 1000. ; t=0.
+    tmax = 100. ; t=0.
     dtout = 0.1 ; tstore =0. ;  nout = 0
     
     dx = 1./double(nx)
