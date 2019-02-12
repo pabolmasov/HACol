@@ -139,8 +139,8 @@ def diffuse(rho, urad, dl, across_half):
     calculates energy flux contribution already at the cell boundary
     '''
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
-    rtau_right = rho[1:] * dl[1:] / 2.# optical depths along the field line, to the right of the cell boundaries
-    rtau_left = rho[:-1] * dl[:-1] / 2.# -- " -- to the left -- " --
+    rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
+    rtau_left = rho[:-1] * dl / 2.# -- " -- to the left -- " --
     dul_half = across_half*((urad * tratfac(rtau_right))[1:] - (urad * tratfac(rtau_right))[:-1])/6. 
     #    ((urad/(rho+1.)/dl)[1:]*(1.-exp(-rtau_right))-(urad/(rho+1.)/dl)[:-1]*(1.-exp(-rtau_left)))/3. # radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
@@ -150,6 +150,9 @@ def fluxes(rho, v, u, g):
     '''
     computes the fluxes of conserved quantities, given primitives; 
     radiation diffusion flux is not included, as it is calculated at halfpoints
+    inputs:
+    rho -- density, v -- velocity, u -- thermal energy density
+    g is geometry (structure)
     '''
     s = rho*v*g.across # mass flux (identical to momentum per unit length -- can we use it?)
     beta = betafun(Fbeta(rho, u))
@@ -227,8 +230,8 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     '''
     main advance in a dt step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
-    output: three new densities
-    includes boundary conditions!
+    output: three temporal derivatives later used for the time step
+    includes boundary conditions for mass and energy!
     '''
     #    print("main_step: mmin = "+str(m.min()))
     nl=size(m)
@@ -240,7 +243,7 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     #left boundary conditions:
     dmt[0] = -(s_half[0]-(-mdotsink))/dlleft
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
-    dst[0] = 0.
+    dst[0] = 0. # 
     det[0] = -(fe_half[0]-(0.))/dlleft+de[0] # no energy sink anyway
     # right boundary conditions:
     dmt[-1] = -((-mdot)-s_half[-1])/dlright
@@ -249,8 +252,7 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     #    edot =  abs(mdot) * 0.5/g.r[-1] + s[-1]/m[-1] * u[-1] # virial equilibrium
     if(edot is None):
         edot = 0.
-    det[-1] = -((edot)-s_half[-1])/dlright +de[-1]
-    
+    det[-1] = -((edot)-s_half[-1])/dlright + de[-1]
     return dmt, dst, det
 
 def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
@@ -265,7 +267,7 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
     # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
     vl, vm, vr = sigvel_isentropic(v, cs, g1)        
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
-    dul_half = diffuse(rho, urad, dl, ghalf.across)
+    #    dul_half = diffuse(rho, urad, dl, ghalf.across)
     # diffusion term introduces instabilities -- what shall we do?
     #    fe_half += dul_half
     dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt)
@@ -340,8 +342,9 @@ def alltire():
     # 3.*umagout+(rho/rho[-1])*0.01/g.r
     print("U = "+str(u.min())+" to "+str(u.max()))
     m, s, e = cons(rho, vinit, u, g)
-    print(u/rho)
-    ii=input('m')
+    ulast = u[-1] # 
+    #    print(u/rho)
+    #    ii=input('m')
     
     rho1, v1, u1, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
     print(str((rho-rho1).std())) 
@@ -402,13 +405,19 @@ def alltire():
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
-        s[0] = 0. ; s[-1] = -mdot
+        s[0] = -mdotsink ; s[-1] = -mdot
+        if(ufixed):
+            # imposes a constant-thermal-energy outer BC
+            # sort of redundant because it converts the whole variable set instead of the single last point; need to optimize it!
+            rhotmp, vtmp, utmp, uradtmp, betatmp, presstmp = toprim(m, s, e, g) 
+            mtmp, stmp, etmp = cons(rhotmp, vtmp, ulast, g)
+            e[-1] = etmp[-1]
         ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6.
         ueq = (ueq1 + 2.*ueq2 + 2.*ueq3 + ueq4) / 6.
         t += dt
         csqest = 4./3.*u/rho
-        rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
-        dt = 0.5 * dlmin / sqrt(1.+2.*csqest.max()++2.*(v**2).max())
+        rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved         
+        dt = 0.5 * dlmin / sqrt(1.+2.*csqest.max()+2.*(v**2).max())
         timer.stop_comp("advance")
         timer.lap("step")
         if(t>=tstore):
