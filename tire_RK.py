@@ -141,7 +141,7 @@ def diffuse(rho, urad, dl, across_half):
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
     rtau_left = rho[:-1] * dl / 2.# -- " -- to the left -- " --
-    dul_half = across_half*((urad * tratfac(rtau_right))[1:] - (urad * tratfac(rtau_right))[:-1])/6. 
+    dul_half = across_half*((urad[1:] * tratfac(rtau_right)) - (urad[:-1] * tratfac(rtau_right)))/6. 
     #    ((urad/(rho+1.)/dl)[1:]*(1.-exp(-rtau_right))-(urad/(rho+1.)/dl)[:-1]*(1.-exp(-rtau_left)))/3. # radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -dul_half 
@@ -189,10 +189,10 @@ def sources(rho, v, u, g, ltot=0., dt=None):
         trat = u*0. +1.
     ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dudt = v*force-qloss+irradheating
-    if(trat.max()>0.1):
+    #    if(trat.max()>1e10):
         # if the thermal time scales are very small, we just set the local thermal energy density to equilibrium (irradiation heating = diffusive cooling)
         #    print("dudt = "+str(dudt))
-        dudt = v*force +(irradheating - qloss) * exp(-trat) + (ueq-u) / (ueq+u) * irradheating * (1.-exp(-trat)) 
+        #        dudt = v*force +(irradheating - qloss) * exp(-trat) + (ueq-u) / (ueq+u) * irradheating * (1.-exp(-trat)) 
         #   print("dudt = "+str(dudt))
         #   ii=input("dudt")
         
@@ -267,9 +267,9 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
     # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
     vl, vm, vr = sigvel_isentropic(v, cs, g1)        
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
-    #    dul_half = diffuse(rho, urad, dl, ghalf.across)
+    dul_half = diffuse(rho, urad, dl, ghalf.across)
     # diffusion term introduces instabilities -- what shall we do?
-    #    fe_half += dul_half
+    fe_half += dul_half
     dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt)
     
     ltot=simps(flux, x=g.l) # no difference
@@ -406,12 +406,21 @@ def alltire():
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
         s[0] = -mdotsink ; s[-1] = -mdot
-        if(ufixed):
+        if(ufixed or galyamode or coolNS):
             # imposes a constant-thermal-energy outer BC
             # sort of redundant because it converts the whole variable set instead of the single last point; need to optimize it!
-            rhotmp, vtmp, utmp, uradtmp, betatmp, presstmp = toprim(m, s, e, g) 
-            mtmp, stmp, etmp = cons(rhotmp, vtmp, ulast, g)
-            e[-1] = etmp[-1]
+            rhotmp, vtmp, utmp, uradtmp, betatmp, presstmp = toprim(m, s, e, g)
+            if(galyamode):
+                utmp[0] = 3.*umagtar[0]
+            if(coolNS):
+                utmp[0] = utmp[1]
+            if(ufixed):
+                utmp[-1] = ulast
+            mtmp, stmp, etmp = cons(rhotmp, vtmp, utmp, g)
+            if(ufixed):
+                e[-1] = etmp[-1]
+            if(galyamode or coolNS):
+                e[0] = etmp[0]
         ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6.
         ueq = (ueq1 + 2.*ueq2 + 2.*ueq3 + ueq4) / 6.
         t += dt
