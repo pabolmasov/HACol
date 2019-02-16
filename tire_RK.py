@@ -133,7 +133,7 @@ def cons(rho, v, u, g):
     e=(u+rho*(v**2/2.- 1./g.r - 0.5*(omega*g.r*g.sth)**2))*g.across  # total energy (thermal + mechanic) per unit length
     return m, s, e
 
-def diffuse(rho, urad, dl, across_half):
+def diffuse(rho, urad, v, dl, across_half):
     '''
     radial energy diffusion;
     calculates energy flux contribution already at the cell boundary
@@ -141,10 +141,13 @@ def diffuse(rho, urad, dl, across_half):
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
     rtau_left = rho[:-1] * dl / 2.# -- " -- to the left -- " --
-    dul_half = across_half*((urad[1:] * tratfac(rtau_right)) - (urad[:-1] * tratfac(rtau_right)))/6. 
+    duls_half =  nubulk * across_half*((urad[1:] * v[1:] * tratfac(rtau_right)) -
+                              (urad[:-1] * v[:-1] * tratfac(rtau_left)))/3.
+    # -- photon bulk viscosity
+    dule_half = across_half*((urad[1:] * tratfac(rtau_right)) - (urad[:-1] * tratfac(rtau_left)))/3. 
     #    ((urad/(rho+1.)/dl)[1:]*(1.-exp(-rtau_right))-(urad/(rho+1.)/dl)[:-1]*(1.-exp(-rtau_left)))/3. # radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
-    return -dul_half 
+    return -duls_half, -dule_half 
 
 def fluxes(rho, v, u, g):
     '''
@@ -180,13 +183,13 @@ def sources(rho, v, u, g, ltot=0., dt=None):
     beta = betafun(Fbeta(rho, u))
     urad = u * (1.-beta)/(1.-beta/2.)
     qloss = urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac  # diffusion approximations; energy lost from 4 sides
-    irradheating = heatingeff * mdot / g.r * g.sth * sinsum
+    irradheating = heatingeff * mdot / g.r * g.sth * sinsum * taufac
     # heatingeff * gamedd * (g.sina*g.cth+g.cosa*g.sth)/g.r**2*8.*pi*g.r*g.sth*afac*taufac # photons absorbed by the matter also heat it
-    if(dt is not None):            
-        trat = qloss * dt / u
+#    if(dt is not None):            
+#        trat = qloss * dt / u
         #        qloss *= tratfac(trat)
-    else:
-        trat = u*0. +1.
+#    else:
+#        trat = u*0. +1.
     ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dudt = v*force-qloss+irradheating
     #    if(trat.max()>1e10):
@@ -267,9 +270,9 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
     # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
     vl, vm, vr = sigvel_isentropic(v, cs, g1)        
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
-    dul_half = diffuse(rho, urad, dl, ghalf.across)
+    duls_half, dule_half = diffuse(rho, urad, v, dl, ghalf.across)
     # diffusion term introduces instabilities -- what shall we do?
-    fe_half += dul_half
+    fs_half += duls_half ;   fe_half += dule_half
     dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt)
     
     ltot=simps(flux, x=g.l) # no difference
@@ -337,7 +340,7 @@ def alltire():
 
     # setting the initial distributions of the primitive variables:
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
-    vinit *= ((g.r-rstar)/(g.r+rstar))
+    vinit *= ((g.r-rstar)/(g.r+rstar))**0.5
     u =  3.*umagtar[-1] * (r_e/g.r) * (rho/rho[-1])
     # 3.*umagout+(rho/rho[-1])*0.01/g.r
     print("U = "+str(u.min())+" to "+str(u.max()))
@@ -413,7 +416,7 @@ def alltire():
             if(galyamode):
                 utmp[0] = 3.*umagtar[0]
             if(coolNS):
-                utmp[0] = utmp[1]
+                utmp[0] = utmp[1] # + 3. * (rhotmp[0]+rhotmp[1])/2. / rstar**2 * dlleft #  hydrostatics
             if(ufixed):
                 utmp[-1] = ulast
             mtmp, stmp, etmp = cons(rhotmp, vtmp, utmp, g)
@@ -445,13 +448,13 @@ def alltire():
                 plots.someplots(g.r, [u/rho**(4./3.)], name=outdir+'/entropy{:05d}'.format(nout), ytitle=r'$S$', ylog=True)
                 plots.someplots(g.r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
                                 name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
-            mtot=simps(m[1:-1], x=g.l[1:-1])
-            etot=simps(e[1:-1], x=g.l[1:-1])
+            mtot=trapz(m, x=g.l)
+            etot=trapz(e, x=g.l)
             print("mass = "+str(mtot))
             print("ltot = "+str(ltot))
             #            print("heat = "+str(heat))
             print("energy = "+str(etot))
-            print("momentum = "+str(trapz(s[1:-1], x=g.l[1:-1])))
+            print("momentum = "+str(trapz(s, x=g.l)))
             
             ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
             ftot.flush()

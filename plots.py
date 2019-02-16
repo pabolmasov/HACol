@@ -36,7 +36,7 @@ def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None):
     fig=figure()
     plot(r, u/umagtar, 'k', label='$u$',linewidth=2)
     if(ueq is not None):
-        plot(r, ueq/umagtar, 'k', label='$u$',linewidth=2, linestyle = 'dotted')
+        plot(r, ueq/umagtar, 'k', label=r'$u_{\rm eq}$',linewidth=2, linestyle = 'dotted')
     plot(r, rho/umagtar, 'r', label=r'$\rho c^2$')
     plot(r, rho*v**2/2./umagtar, 'm', label=r'$\frac{1}{2}\rho v^2$')
     plot(r, rho/r /umagtar, 'r', label=r'$\rho/r$', linestyle='dotted')
@@ -74,7 +74,7 @@ def vplot(x, v, cs, name='outplot'):
     xlabel('$r$, $GM/c^2$ units')
     #    yscale('log')
     xscale('log')
-    ylim(-0.2,0.2)
+    ylim(-0.5,0.5)
     legend()
     savefig(name+'.png')
     close()
