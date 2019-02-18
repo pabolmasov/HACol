@@ -133,7 +133,7 @@ def cons(rho, v, u, g):
     e=(u+rho*(v**2/2.- 1./g.r - 0.5*(omega*g.r*g.sth)**2))*g.across  # total energy (thermal + mechanic) per unit length
     return m, s, e
 
-def diffuse(rho, urad, v, dl, across_half):
+def diffuse(rho, urad, v, dl, across):
     '''
     radial energy diffusion;
     calculates energy flux contribution already at the cell boundary
@@ -141,10 +141,11 @@ def diffuse(rho, urad, v, dl, across_half):
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
     rtau_left = rho[:-1] * dl / 2.# -- " -- to the left -- " --
-    duls_half =  nubulk * across_half*((urad[1:] * v[1:] * tratfac(rtau_right)) -
-                              (urad[:-1] * v[:-1] * tratfac(rtau_left)))/3.
+    duls_half =  nubulk * ((across * urad * v)[1:] * tratfac(rtau_right) -
+                              ( across * urad * v)[:-1] * tratfac(rtau_left))/3.
     # -- photon bulk viscosity
-    dule_half = across_half*((urad[1:] * tratfac(rtau_right)) - (urad[:-1] * tratfac(rtau_left)))/3. 
+    dule_half = ((urad * across)[1:] * tratfac(rtau_right)) \
+                - (urad * across)[:-1] * tratfac(rtau_left))/3. 
     #    ((urad/(rho+1.)/dl)[1:]*(1.-exp(-rtau_right))-(urad/(rho+1.)/dl)[:-1]*(1.-exp(-rtau_left)))/3. # radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -duls_half, -dule_half 
@@ -270,7 +271,7 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
     # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
     vl, vm, vr = sigvel_isentropic(v, cs, g1)        
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
-    duls_half, dule_half = diffuse(rho, urad, v, dl, ghalf.across)
+    duls_half, dule_half = diffuse(rho, urad, v, dl, g.across)
     # diffusion term introduces instabilities -- what shall we do?
     fs_half += duls_half ;   fe_half += dule_half
     dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt)
