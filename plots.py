@@ -299,8 +299,8 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
             ff=open(fname)
             stime = ff.readline()
             ff.close()
-            tar[kctr] = double(''.join(re.findall("\d+[.]\d+", stime)))
-            #            print(stime+": "+str(tar[kctr]))
+            tar[kctr] = double(''.join(re.findall("\d+[.]\d+e-\d+|\d+[.]\d+", stime)))
+            print(stime+": "+str(tar[kctr]))
             v2[kctr,:] = v[:]
             kctr += 1
     plot(r, -1./sqrt(r*rstar), '--k', label='virial')
@@ -320,6 +320,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         xlabel(r'$R/R_*$') ; ylabel(r'$t$, s')
         ylim(tar.min(), tar.max())
         fig.set_size_inches(4, 6)
+        fig.tight_layout()
         savefig("Vcurvestack_2d.png")
     close('all')
         

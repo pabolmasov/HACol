@@ -39,12 +39,12 @@ timer = Timer(["total", "step", "io"],
               ["advance"])
 
 #
-def regularize(u, rho):
+def regularize(u, rho, press):
     '''
     if internal energy goes below ufloor, we heat the matter up artificially
     '''
-    u1=u-ufloor ; rho1=rho-rhofloor
-    return (u1+fabs(u1))/2.+ufloor, (rho1+fabs(rho1))/2.+rhofloor
+    u1=u-ufloor ; rho1=rho-rhofloor ; press1 = press-ufloor
+    return (u1+fabs(u1))/2.+ufloor, (rho1+fabs(rho1))/2.+rhofloor, (press1 +fabs(press1))/2.+ufloor
 
 #
 def quasirelfunction(v, v0):
@@ -144,7 +144,7 @@ def diffuse(rho, urad, v, dl, across):
     duls_half =  nubulk * ((across * urad * v)[1:] * tratfac(rtau_right) -
                               ( across * urad * v)[:-1] * tratfac(rtau_left))/3.
     # -- photon bulk viscosity
-    dule_half = ((urad * across)[1:] * tratfac(rtau_right)) \
+    dule_half = ((urad * across)[1:] * tratfac(rtau_right) \
                 - (urad * across)[:-1] * tratfac(rtau_left))/3. 
     #    ((urad/(rho+1.)/dl)[1:]*(1.-exp(-rtau_right))-(urad/(rho+1.)/dl)[:-1]*(1.-exp(-rtau_left)))/3. # radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
@@ -264,12 +264,26 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
     calculating elementary increments of conserved quantities
     '''
     rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
-    u, rho = regularize(u, rho)
+    #    u, rho, press = regularize(u, rho, press)
     fm, fs, fe = fluxes(rho, v, u, g)
     g1 = Gamma1(5./3., beta)
-    cs=sqrt(g1*press/rho)
-    # slightly under-estimating the SOS to get stable signal velocities; exact for u<< rho
-    vl, vm, vr = sigvel_isentropic(v, cs, g1)        
+    csq=g1*press/rho
+    if(csq.min()<csqmin):
+        wneg = (csq<=csqmin)
+        csq[wneg] = csqmin
+    cs = sqrt(csq)
+    vl, vm, vr =sigvel_mean(v, cs)
+    # sigvel_linearized(v, cs, g1, rho, press)
+    # sigvel_isentropic(v, cs, g1, csqmin=csqmin)
+    if any(vl>=vm) or any(vm>=vr):
+        print(v)
+        print(cs)
+        print(vl[vl>=vm])
+        print(vm[vl>=vm])
+        print(vr[vr<=vm])
+        print(vm[vr<=vm])
+        ii=input("cs")
+        
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     duls_half, dule_half = diffuse(rho, urad, v, dl, g.across)
     # diffusion term introduces instabilities -- what shall we do?
@@ -337,14 +351,14 @@ def alltire():
     umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-    vinit=vout *sqrt(r_e/g.r) # initial velocity
+    vinit=vout *sqrt(rmax/g.r) # initial velocity
 
     # setting the initial distributions of the primitive variables:
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
     vinit *= ((g.r-rstar)/(g.r+rstar))**0.5
-    u =  3.*umagtar[-1] * (r_e/g.r) * (rho/rho[-1])
+    u =  3.*umagtar[-1] * (g.r/rmax) * (rho/rho[-1])
     # 3.*umagout+(rho/rho[-1])*0.01/g.r
-    print("U = "+str(u.min())+" to "+str(u.max()))
+    print("U = "+str((u/umagtar).min())+" to "+str((u/umagtar).max()))
     m, s, e = cons(rho, vinit, u, g)
     ulast = u[-1] # 
     #    print(u/rho)

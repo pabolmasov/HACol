@@ -2,9 +2,9 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=10000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
-logmesh=True
+logmesh=False
 
 # physical parameters:
 mu30 = 1. # magnetic moment, 1e30 units
@@ -34,6 +34,7 @@ taumax = 1e2 # maximal optical depth
 mfloor = 1e-15  # crash floor for mass per unit length
 rhofloor = 1e-15 # crash floor for density
 ufloor = 1e-15 # crash floor for energy density
+csqmin = 1e-8
 vmax = 0.6 # when should we worry about relativistic velosities?
 nubulk = 0.0 # bulk viscosity coeff.
 
@@ -62,7 +63,7 @@ omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
-vout = -1./sqrt(r_e) / 50.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+vout = -1./sqrt(r_e) / 5.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 # plotting options:
 ifplot = True
