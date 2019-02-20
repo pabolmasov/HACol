@@ -433,7 +433,7 @@ def alltire():
             if(coolNS):
                 utmp[0] = utmp[1] # + 3. * (rhotmp[0]+rhotmp[1])/2. / rstar**2 * dlleft #  hydrostatics
             if(ufixed):
-                utmp[-1] = ulast
+                utmp[-1] = minimum(ulast, 0.5*rhotmp[-1]/rmax)
             mtmp, stmp, etmp = cons(rhotmp, vtmp, utmp, g)
             if(ufixed):
                 e[-1] = etmp[-1]

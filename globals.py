@@ -2,9 +2,9 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=10000 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
-logmesh=False
+logmesh=True
 
 # physical parameters:
 mu30 = 1. # magnetic moment, 1e30 units
@@ -40,7 +40,7 @@ nubulk = 0.0 # bulk viscosity coeff.
 
 eta = 0.0 # self-illumination efficiency 
 heatingeff = 0.0 # additional heating scaling with mdot
-afac = 0.5 # part of the longitudes subtended by the flow
+afac = 1. # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
 dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
