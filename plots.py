@@ -25,31 +25,37 @@ ioff()
 
 #############################################################
 # Plotting block 
-def uplot(r, u, rho, sth, v, name='outplot'):
+def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None):
     '''
     energy u supplemented by rest-mass energy rho c^2
     '''
+    if(umag is None):
+        umagtar = umag*(rstar/r)**6
     ioff()
     clf()
     fig=figure()
-    plot(r, u, 'k', label='$u$',linewidth=2)
-    plot(r, rho, 'r', label=r'$\rho c^2$')
-    plot(r, rho*v**2/2., 'm', label=r'$\frac{1}{2}\rho v^2$')
-    plot(r, rho/r, 'r', label=r'$\rho/r$', linestyle='dotted')
-    plot(r, rho*0.5*(r*omega*sth)**2, 'r', label=r'$\frac{1}{2}\rho (\Omega R \sin\theta)^2$', linestyle='dashed')
-    plot(r, umag*(rstar/r)**6, 'b', label=r'$u_{\rm mag}$')
+    plot(r, u/umagtar, 'k', label='$u$',linewidth=2)
+    if(ueq is not None):
+        plot(r, ueq/umagtar, 'k', label=r'$u_{\rm eq}$',linewidth=2, linestyle = 'dotted')
+    plot(r, rho/umagtar, 'r', label=r'$\rho c^2$')
+    plot(r, rho*v**2/2./umagtar, 'm', label=r'$\frac{1}{2}\rho v^2$')
+    plot(r, rho/r /umagtar, 'r', label=r'$\rho/r$', linestyle='dotted')
+    plot(r, rho*0.5*(r*omega*sth)**2/umagtar, 'r', label=r'$\frac{1}{2}\rho (\Omega R \sin\theta)^2$', linestyle='dashed')
+    plot(r, umagtar/umagtar, 'b', label=r'$u_{\rm mag}$')
     B=u*4./3.+rho*(-1./r-0.5*(r*omega*sth)**2+v**2/2.)
-    plot(r, B, 'g', label='$B$', linestyle='dotted')
-    plot(r, -B, 'g', label='$-B$')
+    plot(r, B/umagtar, 'g', label='$B$', linestyle='dotted')
+    plot(r, -B/umagtar, 'g', label='$-B$')
     #    plot(x, y0, 'b')
     #    xscale('log')
     #    ylim(umag*((rstar/r)**6).min(), umag)
-    ylim(u[u>0.].min(), u.max())
+    ylim(((u/umagtar)[u>0.]).min(), (u/umagtar).max())
     xlabel('$r$, $GM/c^2$ units')
+    ylabel(r'$U/U_{\rm mag}$')
     yscale('log')
     xscale('log')    
     legend()
-    fig.set_size_inches(4, 8)
+    fig.tight_layout()
+    fig.set_size_inches(6, 5)
     savefig(name+'.png')
     close()
 
@@ -68,7 +74,7 @@ def vplot(x, v, cs, name='outplot'):
     xlabel('$r$, $GM/c^2$ units')
     #    yscale('log')
     xscale('log')
-    ylim(-0.2,0.2)
+    ylim(-0.5,0.5)
     legend()
     savefig(name+'.png')
     close()
@@ -293,8 +299,8 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
             ff=open(fname)
             stime = ff.readline()
             ff.close()
-            tar[kctr] = double(''.join(re.findall("\d+[.]\d+", stime)))
-            #            print(stime+": "+str(tar[kctr]))
+            tar[kctr] = double(''.join(re.findall("\d+[.]\d+e-\d+|\d+[.]\d+", stime)))
+            print(stime+": "+str(tar[kctr]))
             v2[kctr,:] = v[:]
             kctr += 1
     plot(r, -1./sqrt(r*rstar), '--k', label='virial')
@@ -314,6 +320,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         xlabel(r'$R/R_*$') ; ylabel(r'$t$, s')
         ylim(tar.min(), tar.max())
         fig.set_size_inches(4, 6)
+        fig.tight_layout()
         savefig("Vcurvestack_2d.png")
     close('all')
         

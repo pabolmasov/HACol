@@ -157,11 +157,22 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     geometry = loadtxt(outdir+"/geo.dat", comments="#", delimiter=" ", unpack=False)
     t=fluxlines[:,0] ; f=fluxlines[:,1]
     across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
-    rstar = 6.8/1.4 ; mdot = 4.*pi * 10. ; umag=2.29e6*1.4  # temporary!!! need to save this info somehow
+    rstar = 6.8/1.4 ; mdot = 4.*pi * 10. ; umag=2.29e6*1.4 ; afac=1. # temporary!!! need to save this info somehow
     BSgamma = (across0/delta0**2)/mdot*rstar
     BSeta = (8./21./sqrt(2.)*umag)**0.25*sqrt(delta0)/(rstar)**0.125
     xs = bs.xis(BSgamma, BSeta, x0=20.)
 
+    # spherization radius
+    rsph =1.5*mdot/4./pi
+    # iterating to find the cooling radius
+    niter = 10 ;    rcool=rsph
+    deltafun=interp1d(geometry[:,0], geometry[:,5], bounds_error = False, fill_value=delta0)
+    for k in arange(niter):
+        print(rcool)
+        deltacool = deltafun(rcool)
+        rcool = sqrt(2./3. * deltacool * rsph/ afac)
+    print("rcool converged?")
+        
     for k in arange(size(n)):
         if(dat):
             stmp, dstmp = shock_dat(n[k], prefix=prefix)

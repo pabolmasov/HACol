@@ -1,15 +1,13 @@
-from numpy import *
-from scipy.integrate import cumtrapz
 
 class geometry:
-    r = None # radial (spherical) coordinate
-    l = None # coordinate along the line
-    sth = None # sin(theta), where theta is polar angle
-    cth = None # cos(theta)
-    across = None # cross-section
-    sina = None # sin(alpha), where alpha sets the orientation of the tangent to the field line
-    cosa = None # cos(alpha)
-    delta = None # tangent (polar-angle) thickness of the tube
+    r # radial (spherical) coordinate
+    l # coordinate along the line
+    sth # sin(theta), where theta is polar angle
+    cth # cos(theta)
+    across # cross-section
+    sina # sin(alpha), where alpha sets the orientation of the tangent to the field line
+    cosa # cos(alpha)
+    delta # tangent (polar-angle) thickness of the tube
 
 ##############################################################################
 def geometry_initialize(r, r_e, dr_e, writeout=None, afac = 1.):
@@ -40,6 +38,6 @@ def geometry_initialize(r, r_e, dr_e, writeout=None, afac = 1.):
 
     g = geometry()
     g.r = r ; g.l = l ; g.sth = sth ; g.cth = cth
-    g.sina = sina ; g.cosa = cosa ; g.across = across; g.delta = delta
+    g.sina = sina ; g.cosa = cosa ; g. across = across; g.delta = delta
     
     return g

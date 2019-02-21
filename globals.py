@@ -22,9 +22,9 @@ betacoeff = 1.788e-5 * (m1)**(-0.25)/mow # coefficient used to calculate gas-to-
 
 # BC modes:
 galyamode = False # if on, sets the internal energy density to MF energy density at the inner boundary
-coolNS = False # if on (and galyamode is off), internal energy is kept zero at the surface of the NS
+coolNS = False # if on (and galyamode is off), internal energy is constant at the inner boundary
 # a test with coolNS converges well, but it is completely unphysical
-ufixed = False # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
+ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
 
 # radiation transfer treatment:
 xirad = 0.2 # radiation diffusion scaling
@@ -34,11 +34,13 @@ taumax = 1e2 # maximal optical depth
 mfloor = 1e-15  # crash floor for mass per unit length
 rhofloor = 1e-15 # crash floor for density
 ufloor = 1e-15 # crash floor for energy density
+csqmin = 1e-8
 vmax = 0.6 # when should we worry about relativistic velosities?
+nubulk = 0.0 # bulk viscosity coeff.
 
 eta = 0.0 # self-illumination efficiency 
-heatingeff = 0.5 # part of illuminating flux contributing to heating
-afac = 0.5 # part of the longitudes subtended by the flow
+heatingeff = 0.0 # additional heating scaling with mdot
+afac = 1. # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
 dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
@@ -56,7 +58,7 @@ lscale = 1.13685e37*m1 # G Msun c / kappa luminosity scale
 massscale = 6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 #
 tmax = 1000./tscale # maximal time in tscales
-dtout = 0.001/tscale # output time step in tscales
+dtout = 0.0001/tscale # output time step in tscales
 omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
