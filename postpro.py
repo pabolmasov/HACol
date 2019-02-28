@@ -1,15 +1,27 @@
 from numpy import *
 from scipy.integrate import *
 from scipy.interpolate import *
+from scipy.optimize import curve_fit
 import os
 
-from globals import ifplot
+from globals import *
 
 import hdfoutput as hdf
 import bassun as bs
 if ifplot:
     import plots
 
+def rcoolfun(geometry, mdot):
+    '''
+    calculates the cooling radius from the known geometry
+    '''
+    r = geometry[:,0] ; across = geometry[:,3] ; delta = geometry[:,5]
+
+    f = delta**2/across * mdot- r
+
+    ffun = interp1d(f, r, bounds_error = False)
+    return ffun(0.)
+    
 def pds(infile='out/flux', binning=None, binlogscale=False):
     '''
     makes a power spectrum plot;
@@ -157,7 +169,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     geometry = loadtxt(outdir+"/geo.dat", comments="#", delimiter=" ", unpack=False)
     t=fluxlines[:,0] ; f=fluxlines[:,1]
     across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
-    rstar = 6.8/1.4 ; mdot = 4.*pi * 10. ; umag=2.29e6*1.4 ; afac=1. # temporary!!! need to save this info somehow
+    #    rstar = 6.8/m1 ; mdot = 4.*pi * 10. ; umag=b12**2*2.29e6*m1 ; afac=1. # temporary!!! need to save this info somehow
     BSgamma = (across0/delta0**2)/mdot*rstar
     BSeta = (8./21./sqrt(2.)*umag)**0.25*sqrt(delta0)/(rstar)**0.125
     xs = bs.xis(BSgamma, BSeta, x0=20.)
@@ -165,14 +177,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     # spherization radius
     rsph =1.5*mdot/4./pi
     # iterating to find the cooling radius
-    niter = 10 ;    rcool=rsph
-    deltafun=interp1d(geometry[:,0], geometry[:,5], bounds_error = False, fill_value=delta0)
-    for k in arange(niter):
-        print(rcool)
-        deltacool = deltafun(rcool)
-        rcool = sqrt(2./3. * deltacool * rsph/ afac)
-    print("rcool converged?")
-        
+    rcool = rcoolfun(geometry, mdot)
     for k in arange(size(n)):
         if(dat):
             stmp, dstmp = shock_dat(n[k], prefix=prefix)
@@ -181,11 +186,28 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
         s[k] = stmp ; ds[k] = dstmp
 
     if(ifplot):
-        plots.someplots(t[n], [s, s*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False)
-        plots.someplots(f[n], [s, s*0.+xs], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False)
+        plots.someplots(t[n], [s, s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k,', 'r-', 'b-'])
+        plots.someplots(f[n], [s, s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k,', 'r-', 'b-'])
     # ascii output
     fout = open(outdir+'/sfront.dat', 'w')
     for k in arange(size(n)):
         fout.write(str(t[n[k]])+" "+str(s[k])+" "+str(ds[k])+"\n")
     fout.close()
-        
+
+###############################
+def tailfitfun(x, p, n, x0, y0):
+    return ((x-x0)**2)**(p/2.)*n+y0
+
+def tailfit(prefix = 'out/flux', trange = None):
+    fluxlines = loadtxt(prefix+".dat", comments="#", delimiter=" ", unpack=False)
+    
+    t=fluxlines[:,0] ; f=fluxlines[:,1]
+    if(trange is None):
+        t1 = t; f1 = f
+    else:
+        t1=t[(t>trange[0])&(t<trange[1])]
+        f1=f[(t>trange[0])&(t<trange[1])]
+    par, pcov = curve_fit(tailfitfun, t1, f1, p0=[-2.,5., 0., f1.min()])
+    plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3])], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=True, ylog=True)
+    print("slope ="+str(par[0]))
+    print("y0 ="+str(par[3]))

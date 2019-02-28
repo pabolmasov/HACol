@@ -90,17 +90,18 @@ def splot(x, y, name='outplot', fmt='-k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     savefig(name+'.png')
     close('all')
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle=''):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None):
     '''
     plots a series of curves  
     '''
     ny=shape(ys)[0]
-    colorsequence = ['k', 'r', 'b']
-    sc=size(colorsequence)
+
+    if formatsequence is None:
+        formatsequence = ["." for x in range(ny)]
 
     clf()
     for k in arange(ny):
-        plot(x, ys[k], 'k', color=colorsequence[k % sc])
+        plot(x, ys[k], formatsequence[k])
     if(xlog):
         xscale('log')
     if(ylog):
@@ -144,7 +145,7 @@ def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     fmin=binfreqc[nbin>nbin0].min()
     fmax=binfreqc[nbin>nbin0].max()
     clf()
-    pcolormesh(t2, binfreq2, pds2, cmap='hot_r') #, vmin=10.**lmin, vmax=10.**lmax)
+    pcolormesh(t2, binfreq2, pds2, cmap='hot') #, vmin=10.**lmin, vmax=10.**lmax)
     colorbar()
     if omega != None:
         plot([t2.min(), t2.max()], [omega/2./pi, omega/2./pi], color='k')
@@ -242,8 +243,9 @@ def postplot(hname, nentry):
     taken from the HDF output "hname"
     '''
     entryname, t, l, r, sth, rho, u, v = hdf.read(hname, nentry)
-    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
-    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
+    #    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
+    #    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
+    someplots(r, [-u*v*(r/r.min())**4], name=hname+"_"+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm NS}\right)^4$", ylog=True)
     
 def multiplots(hname, n1, n2):
     '''
@@ -363,3 +365,5 @@ def binplot(xe, f, df, fname = "binplot", fit = 0):
     savefig(fname+".png")
     savefig(fname+".eps")
     close("all")
+
+
