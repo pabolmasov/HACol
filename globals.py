@@ -7,7 +7,7 @@ nx0=nx*20 # first we make a finer mesh for interpolation
 logmesh=True
 
 # physical parameters:
-mu30 = 1. # magnetic moment, 1e30 units
+mu30 = 0.1 # magnetic moment, 1e30 units
 m1=1.4
 mdot = 10. * 4. * pi
 # 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
@@ -38,9 +38,9 @@ csqmin = 1e-8
 vmax = 0.6 # when should we worry about relativistic velosities?
 nubulk = 0.0 # bulk viscosity coeff.
 
-eta = 0.0 # self-illumination efficiency 
-heatingeff = 0.0 # additional heating scaling with mdot
-afac = 1. # part of the longitudes subtended by the flow
+eta = 0.1 # self-illumination efficiency 
+heatingeff = 0.01 # additional heating scaling with mdot
+afac = 1.0 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
 dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e

@@ -429,9 +429,10 @@ def alltire():
             # sort of redundant because it converts the whole variable set instead of the single last point; need to optimize it!
             rhotmp, vtmp, utmp, uradtmp, betatmp, presstmp = toprim(m, s, e, g)
             if(galyamode):
-                utmp[0] = 3.*umagtar[0]
-            if(coolNS):
-                utmp[0] = utmp[1] # + 3. * (rhotmp[0]+rhotmp[1])/2. / rstar**2 * dlleft #  hydrostatics
+                utmp[0] = minimum(utmp[0], 3.*umagtar[0]) # limits the thermal energy by 3*Umag at the inner boundary
+            else:
+                if(coolNS):
+                    utmp[0] = utmp[1] # + 3. * (rhotmp[0]+rhotmp[1])/2. / rstar**2 * dlleft #  hydrostatics
             if(ufixed):
                 utmp[-1] = minimum(ulast, 0.5*rhotmp[-1]/rmax)
             mtmp, stmp, etmp = cons(rhotmp, vtmp, utmp, g)
