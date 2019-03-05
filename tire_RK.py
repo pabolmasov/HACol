@@ -230,7 +230,7 @@ def toprim(m, s, e, g):
     press = 3.*(1.-beta/2.) * u
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
-def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = None):
+def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = None, mdotsink_eff = mdotsink):
     '''
     main advance in a dt step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
@@ -245,7 +245,7 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     det[1:-1] = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]
 
     #left boundary conditions:
-    dmt[0] = -(s_half[0]-(-mdotsink))/dlleft
+    dmt[0] = -(s_half[0]-(-mdotsink_eff))/dlleft
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
     dst[0] = 0. # 
     det[0] = -(fe_half[0]-(0.))/dlleft+de[0] # no energy sink anyway
@@ -291,7 +291,11 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
     dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt)
     
     ltot=simps(flux, x=g.l) # no difference
-    dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = fe[-1])
+    if(squeezemode):
+        mdotsink_eff = sqrt(maximum(press[0]-umag, 0.)/rho[0]) * m[0]
+    else:
+        mdotsink_eff = mdotsink
+    dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = fe[-1], mdotsink_eff = mdotsink_eff)
                            #fe_half[-1])
     return dmt, dst, det, ltot, ueq
     

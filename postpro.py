@@ -170,12 +170,16 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     t=fluxlines[:,0] ; f=fluxlines[:,1]
     across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
     #    rstar = 6.8/m1 ; mdot = 4.*pi * 10. ; umag=b12**2*2.29e6*m1 ; afac=1. # temporary!!! need to save this info somehow
-    BSgamma = (across0/delta0**2)/mdot*rstar
-    BSeta = (8./21./sqrt(2.)*umag)**0.25*sqrt(delta0)/(rstar)**0.125
+    BSgamma = (2.*across0/delta0**2)/mdot*rstar
+    # umag is magnetic pressure
+    BSeta = (8./21./sqrt(2.)*30.*umag*m1)**0.25*sqrt(delta0)/(rstar)**0.125
     xs = bs.xis(BSgamma, BSeta, x0=20.)
 
     # spherization radius
     rsph =1.5*mdot/4./pi
+    eqlum = mdot/rstar
+    print("mdot = "+str(mdot))
+    print("rstar = "+str(rstar))
     # iterating to find the cooling radius
     rcool = rcoolfun(geometry, mdot)
     for k in arange(size(n)):
@@ -186,8 +190,8 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
         s[k] = stmp ; ds[k] = dstmp
 
     if(ifplot):
-        plots.someplots(t[n], [s, s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k,', 'r-', 'b-'])
-        plots.someplots(f[n], [s, s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k,', 'r-', 'b-'])
+        plots.someplots(t[n], [s, s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k.', 'r-', 'b-'])
+        plots.someplots(f[n], [s, s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k.', 'r-', 'b-'], vertical = eqlum)
     # ascii output
     fout = open(outdir+'/sfront.dat', 'w')
     for k in arange(size(n)):

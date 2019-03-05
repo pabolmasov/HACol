@@ -90,7 +90,7 @@ def splot(x, y, name='outplot', fmt='-k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     savefig(name+'.png')
     close('all')
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None):
     '''
     plots a series of curves  
     '''
@@ -101,6 +101,8 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
 
     clf()
     for k in arange(ny):
+        if vertical is not None:
+            plot([vertical, vertical], [ys[k].min(), ys[k].max()], 'r-')
         plot(x, ys[k], formatsequence[k])
     if(xlog):
         xscale('log')
