@@ -367,5 +367,15 @@ def binplot(xe, f, df, fname = "binplot", fit = 0):
     savefig(fname+".png")
     savefig(fname+".eps")
     close("all")
+######################################################
+def multishock_plot(fluxfile, frontfile, geometry = None):
+    fluxlines = loadtxt(fluxfile+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
+    tf=fluxlines[:,0] ; f=fluxlines[:,1]
+    ts=frontlines[:,0] ; s=frontlines[:,1] ; ds=frontlines[:,2]
 
-
+    # interpolate!
+    fint = interp1d(tf, f)
+    
+    someplots(ts, [s], name = frontfile + "_frontcurve", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k.'])
+    someplots(fint(ts), [s], name = frontfile + "_fluxfront", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k.'])

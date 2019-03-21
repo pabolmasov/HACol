@@ -2,7 +2,7 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=3000 # the actual number of points in use
 nx0=nx*20 # first we make a finer mesh for interpolation
 logmesh=True
 
@@ -13,7 +13,6 @@ mdot = 10. * 4. * pi
 # 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
 mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 6291.12*4.*pi/m1
-# acc=True # true if we are going to zero the mass and energy fluxes through the outer boundary in actual equations
 rstar = 6.8/m1 # GM/c**2 units
 # 10km --> 6.77159 for 1Msun
 b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
@@ -21,13 +20,14 @@ mow = 0.6 # molecular weight
 betacoeff = 1.788e-5 * (m1)**(-0.25)/mow # coefficient used to calculate gas-to-total pressure ratio
 
 # BC modes:
-galyamode = True # if on, sets the internal energy density to MF energy density at the inner boundary
+galyamode = False # if on, limits the internal energy density by MF energy density at the inner boundary
 coolNS = False # if on (and galyamode is off), internal energy is constant at the inner boundary
 # a test with coolNS converges well, but it is completely unphysical
 ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
 squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
 # radiation transfer treatment:
+raddiff = True # if we include radiation diffusion along the field line
 xirad = 1. # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 taumax = 1e2 # maximal optical depth
@@ -36,8 +36,7 @@ mfloor = 1e-15  # crash floor for mass per unit length
 rhofloor = 1e-15 # crash floor for density
 ufloor = 1e-15 # crash floor for energy density
 csqmin = 1e-8
-vmax = 0.6 # when should we worry about relativistic velosities?
-nubulk = 0.0 # bulk viscosity coeff.
+nubulk = 0.8 # bulk viscosity coeff.
 
 eta = 0.1 # self-illumination efficiency 
 heatingeff = 0.01 # additional heating scaling with mdot
@@ -73,7 +72,7 @@ ascalias = 10 # make an ascii file every Nth output step
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
-outdir = "out/"
+outdir = "out_nu/"
 
 # restart options
 ifrestart = False

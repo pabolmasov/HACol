@@ -169,7 +169,6 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     geometry = loadtxt(outdir+"/geo.dat", comments="#", delimiter=" ", unpack=False)
     t=fluxlines[:,0] ; f=fluxlines[:,1]
     across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
-    #    rstar = 6.8/m1 ; mdot = 4.*pi * 10. ; umag=b12**2*2.29e6*m1 ; afac=1. # temporary!!! need to save this info somehow
     BSgamma = (2.*across0/delta0**2)/mdot*rstar
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*30.*umag*m1)**0.25*sqrt(delta0)/(rstar)**0.125
@@ -189,6 +188,9 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
             stmp, dstmp = shock_hdf(n[k], infile = prefix+".hdf5")
         s[k] = stmp ; ds[k] = dstmp
 
+    print("predicted shock position: xs = "+str(xs)+" (rstar)")
+    print("cooling limit: rcool/rstar = "+str(rcool/rstar))
+        
     if(ifplot):
         plots.someplots(t[n], [s, s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k.', 'r-', 'b-'])
         plots.someplots(f[n], [s, s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k.', 'r-', 'b-'], vertical = eqlum)
@@ -197,7 +199,11 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     for k in arange(size(n)):
         fout.write(str(t[n[k]])+" "+str(s[k])+" "+str(ds[k])+"\n")
     fout.close()
-
+    fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
+    fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')
+    fglo.write(str(eqlum)+' '+str(xs)+' '+str(rcool/rstar)+'\n')
+    fglo.close()
+    
 ###############################
 def tailfitfun(x, p, n, x0, y0):
     return ((x-x0)**2)**(p/2.)*n+y0

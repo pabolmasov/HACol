@@ -142,7 +142,7 @@ def diffuse(rho, urad, v, dl, across):
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
     rtau_left = rho[:-1] * dl / 2.# -- " -- to the left -- " --
     duls_half =  nubulk * ((across * urad * v)[1:] * tratfac(rtau_right) -
-                              ( across * urad * v)[:-1] * tratfac(rtau_left))/3.
+                           ( across * urad * v)[:-1] * tratfac(rtau_left))/3.
     # -- photon bulk viscosity
     dule_half = ((urad * across)[1:] * tratfac(rtau_right) \
                 - (urad * across)[:-1] * tratfac(rtau_left))/3. 
@@ -208,17 +208,6 @@ def toprim(m, s, e, g):
     '''
     rho=m/g.across
     v=s/m
-#    wrel = where(fabs(v)>vmax)
-#    if(size(wrel)>0):
-#        v[wrel] =  quasirelfunction(v[wrel], vmax) # equal to vmax when v[wrel]=vmax, approaching 1 at large values 
-    # v[wrel]*sqrt((1.+vmax**2)/(1.+v[wrel]**2))
-    # if(m.min()<mfloor):
-      #  print("toprim: m.min = "+str(m.min()))
-      #  print("... at "+str(g.r[m.argmin()]))
-        #        exit(1)
-    #    v=s*0.
-    #    v[rho>rhofloor]=(s/m)[rho>rhofloor]
-    #    v=v/sqrt(1.+v**2)
     u=(e-m*(v**2/2.-1./g.r-0.5*(g.r*g.sth*omega)**2))/g.across
     umin = u.min()
     #    if(rho.min() < rhofloor):
@@ -247,7 +236,7 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     #left boundary conditions:
     dmt[0] = -(s_half[0]-(-mdotsink_eff))/dlleft
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
-    dst[0] = 0. # 
+    dst[0] = 0. # mdotsink_eff does not enter here, as matter should escape sideways, but near the bottom
     det[0] = -(fe_half[0]-(0.))/dlleft+de[0] # no energy sink anyway
     # right boundary conditions:
     dmt[-1] = -((-mdot)-s_half[-1])/dlright
@@ -285,9 +274,10 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
         ii=input("cs")
         
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
-    duls_half, dule_half = diffuse(rho, urad, v, dl, g.across)
-    # diffusion term introduces instabilities -- what shall we do?
-    fs_half += duls_half ;   fe_half += dule_half
+    if(raddiff):
+        duls_half, dule_half = diffuse(rho, urad, v, dl, g.across)
+        # diffusion term introduces instabilities -- what shall we do?
+        fs_half += duls_half ;   fe_half += dule_half
     dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt)
     
     ltot=simps(flux, x=g.l) # no difference
@@ -295,7 +285,9 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
         mdotsink_eff = sqrt(maximum(press[0]-umag, 0.)/rho[0]) * m[0]
     else:
         mdotsink_eff = mdotsink
-    dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = fe[-1], mdotsink_eff = mdotsink_eff)
+    dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half,
+                           dm, ds, de, g, dlleft, dlright, dt,
+                           edot = fe[-1], mdotsink_eff = mdotsink_eff)
                            #fe_half[-1])
     return dmt, dst, det, ltot, ueq
     
@@ -385,20 +377,44 @@ def alltire():
     if(ifrestart):
         if(ifhdf):
             # restarting from a HDF5 file
-            entryname, t, l, r, sth, rho, u, v = hdf.read(restartfile, restartn)
+            entryname, t, l1, r1, sth1, rho1, u1, v1 = hdf.read(restartfile, restartn)
             tstore = t
             print("restarted from file "+restartfile+", entry "+entryname)
         else:
             # restarting from an ascii output
             ascrestartname = restartprefix + hdf.entryname(restartn, ndig=5) + ".dat"
             lines = loadtxt(ascrestartname, comments="#")
-            rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3] * umagtar
+            r1 = lines[:,0]
+            umagtar1 = umag * (1.+3.*(1.-sth1**2))/4. * (1./r1)**6
+            rho1 = lines[:,1] ; v1 = lines[:,2] ; u1 = lines[:,3] * umagtar1
             # what about t??
             print("restarted from ascii output "+ascrestartname)
-        r *= rstar
+        if (size(r1) != nx):
+            print("interpolating from "+str(size(r1))+" to "+str(nx))
+            print("r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
+            print("r1 from "+str(r1.min())+" to "+str(r1.max()))
+            rhofun = interp1d(r1, rho1,bounds_error=False, fill_value = (rho1[0], rho1[-1]))
+            vfun = interp1d(r1, v1,bounds_error=False, fill_value = (v1[0], v1[-1]))
+            ufun = interp1d(r1, u1,bounds_error=False, fill_value = (u1[0], u1[-1]))
+            rho = rhofun(r/rstar) ; v = vfun(r/rstar) ; u = ufun(r/rstar)
+        else:
+            print("restarting with the same resolution")
+            rho = rho1 ; v = v1 ; u = u1
+            # r *= rstar
+            #        print(r)
+            #        print(r1)
+            #        ii = input('r')
+        if ifplot :
+            print("plotting")
+            plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie_restart', umagtar = umagtar)
+            plots.vplot(g.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie_restart')
+            plots.someplots(g.r, [u/rho**(4./3.)], name=outdir+'/entropy_restart', ytitle=r'$S$', ylog=True)
+            plots.someplots(g.r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
+                            name=outdir+'/beta_restart', ytitle=r'$\beta$, $1-\beta$', ylog=True)
+
         m, s, e = cons(rho, v, u, g)
         nout = restartn
-            
+        
     dlmin=dl.min()
     dt = dlmin*0.25
     print("dt = "+str(dt))
