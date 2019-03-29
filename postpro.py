@@ -192,8 +192,8 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     print("cooling limit: rcool/rstar = "+str(rcool/rstar))
         
     if(ifplot):
-        plots.someplots(t[n], [s, s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k.', 'r-', 'b-'])
-        plots.someplots(f[n], [s, s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k.', 'r-', 'b-'], vertical = eqlum)
+        plots.someplots(t[n], [s, s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
+        plots.someplots(f[n], [s, s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     # ascii output
     fout = open(outdir+'/sfront.dat', 'w')
     for k in arange(size(n)):
@@ -201,7 +201,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     fout.close()
     fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
     fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')
-    fglo.write(str(eqlum)+' '+str(xs)+' '+str(rcool/rstar)+'\n')
+    fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
     fglo.close()
     
 ###############################

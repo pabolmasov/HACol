@@ -165,7 +165,7 @@ def fluxes(rho, v, u, g):
     fe = g.across*v*(u+press+(v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion
     return s, p, fe
 
-def sources(rho, v, u, g, ltot=0., dt=None):
+def sources(rho, v, u, g, ltot=0., dt=None, dmsqueeze = 0.):
     '''
     computes the RHSs of conservation equations
     no changes in mass
@@ -186,11 +186,11 @@ def sources(rho, v, u, g, ltot=0., dt=None):
     qloss = urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac  # diffusion approximations; energy lost from 4 sides
     irradheating = heatingeff * mdot / g.r * g.sth * sinsum * taufac
     # heatingeff * gamedd * (g.sina*g.cth+g.cosa*g.sth)/g.r**2*8.*pi*g.r*g.sth*afac*taufac # photons absorbed by the matter also heat it
-#    if(dt is not None):            
-#        trat = qloss * dt / u
-        #        qloss *= tratfac(trat)
-#    else:
-#        trat = u*0. +1.
+    #    if(dt is not None):            
+    #        trat = qloss * dt / u
+    #        qloss *= tratfac(trat)
+    #    else:
+    #        trat = u*0. +1.
     ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dudt = v*force-qloss+irradheating
     #    if(trat.max()>1e10):
@@ -199,8 +199,10 @@ def sources(rho, v, u, g, ltot=0., dt=None):
         #        dudt = v*force +(irradheating - qloss) * exp(-trat) + (ueq-u) / (ueq+u) * irradheating * (1.-exp(-trat)) 
         #   print("dudt = "+str(dudt))
         #   ii=input("dudt")
-        
-    return rho*0., force, dudt, qloss, ueq
+    dm = rho*0.
+    dm[0] = dmsqueeze 
+    
+    return dm, force, dudt, qloss, ueq
 
 def toprim(m, s, e, g):
     '''
@@ -219,7 +221,7 @@ def toprim(m, s, e, g):
     press = 3.*(1.-beta/2.) * u
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
-def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = None, mdotsink_eff = mdotsink):
+def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = None):
     '''
     main advance in a dt step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
@@ -234,12 +236,13 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     det[1:-1] = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]
 
     #left boundary conditions:
-    dmt[0] = -(s_half[0]-(-mdotsink_eff))/dlleft
+    dmt[0] = -(s_half[0]-(-mdotsink))/dlleft+dm[0]
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
     dst[0] = 0. # mdotsink_eff does not enter here, as matter should escape sideways, but near the bottom
-    det[0] = -(fe_half[0]-(0.))/dlleft+de[0] # no energy sink anyway
+    edotsink_eff = mdotsink * (e[0]/m[0])
+    det[0] = -(fe_half[0]-(-edotsink_eff))/dlleft + dm[0] * (e[0]/m[0]) # no energy sink anyway
     # right boundary conditions:
-    dmt[-1] = -((-mdot)-s_half[-1])/dlright
+    dmt[-1] = -((-mdot)-s_half[-1])/dlright+dm[-1]
     #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
     dst[-1] = 0.
     #    edot =  abs(mdot) * 0.5/g.r[-1] + s[-1]/m[-1] * u[-1] # virial equilibrium
@@ -278,16 +281,17 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
         duls_half, dule_half = diffuse(rho, urad, v, dl, g.across)
         # diffusion term introduces instabilities -- what shall we do?
         fs_half += duls_half ;   fe_half += dule_half
-    dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt)
+    if(squeezemode):
+        dmsqueeze = sqrt(maximum(press[0]-umag, 0.))/g.delta[0]
+    else:
+        mdotsink_eff = 0.
+        
+    dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt, dmsqueeze = dmsqueeze)
     
     ltot=simps(flux, x=g.l) # no difference
-    if(squeezemode):
-        mdotsink_eff = sqrt(maximum(press[0]-umag, 0.)/rho[0]) * m[0]
-    else:
-        mdotsink_eff = mdotsink
     dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half,
                            dm, ds, de, g, dlleft, dlright, dt,
-                           edot = fe[-1], mdotsink_eff = mdotsink_eff)
+                           edot = fe[-1])
                            #fe_half[-1])
     return dmt, dst, det, ltot, ueq
     

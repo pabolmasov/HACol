@@ -36,7 +36,7 @@ mfloor = 1e-15  # crash floor for mass per unit length
 rhofloor = 1e-15 # crash floor for density
 ufloor = 1e-15 # crash floor for energy density
 csqmin = 1e-8
-nubulk = 0.8 # bulk viscosity coeff.
+nubulk = 0.0 # bulk viscosity coeff.
 
 eta = 0.1 # self-illumination efficiency 
 heatingeff = 0.01 # additional heating scaling with mdot
@@ -72,7 +72,7 @@ ascalias = 10 # make an ascii file every Nth output step
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
-outdir = "out_nu/"
+outdir = "out/"
 
 # restart options
 ifrestart = False
