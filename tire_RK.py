@@ -200,7 +200,7 @@ def sources(rho, v, u, g, ltot=0., dt=None, dmsqueeze = 0.):
         #   print("dudt = "+str(dudt))
         #   ii=input("dudt")
     dm = rho*0.
-    dm[0] = dmsqueeze 
+    dm[0] = -dmsqueeze 
     
     return dm, force, dudt, qloss, ueq
 
@@ -215,8 +215,8 @@ def toprim(m, s, e, g):
     #    if(rho.min() < rhofloor):
     #        print("rhomin = "+str(rho.min()))
     #        print("mmin = "+str(m.min()))
-        # exit(1)
-        #    u[u<=ufloor]=0.
+    # exit(1)
+    #    u[u<=ufloor]=0.
     beta = betafun(Fbeta(rho, u))
     press = 3.*(1.-beta/2.) * u
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
