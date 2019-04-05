@@ -165,7 +165,7 @@ def fluxes(rho, v, u, g):
     fe = g.across*v*(u+press+(v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion
     return s, p, fe
 
-def sources(rho, v, u, g, ltot=0., dt=None, dmsqueeze = 0.):
+def sources(rho, v, u, g, ltot=0., dt=None, dmsqueeze = 0., desqueeze = 0.):
     '''
     computes the RHSs of conservation equations
     no changes in mass
@@ -185,22 +185,9 @@ def sources(rho, v, u, g, ltot=0., dt=None, dmsqueeze = 0.):
     urad = u * (1.-beta)/(1.-beta/2.)
     qloss = urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac  # diffusion approximations; energy lost from 4 sides
     irradheating = heatingeff * mdot / g.r * g.sth * sinsum * taufac
-    # heatingeff * gamedd * (g.sina*g.cth+g.cosa*g.sth)/g.r**2*8.*pi*g.r*g.sth*afac*taufac # photons absorbed by the matter also heat it
-    #    if(dt is not None):            
-    #        trat = qloss * dt / u
-    #        qloss *= tratfac(trat)
-    #    else:
-    #        trat = u*0. +1.
     ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
-    dudt = v*force-qloss+irradheating
-    #    if(trat.max()>1e10):
-        # if the thermal time scales are very small, we just set the local thermal energy density to equilibrium (irradiation heating = diffusive cooling)
-        #    print("dudt = "+str(dudt))
-        #        dudt = v*force +(irradheating - qloss) * exp(-trat) + (ueq-u) / (ueq+u) * irradheating * (1.-exp(-trat)) 
-        #   print("dudt = "+str(dudt))
-        #   ii=input("dudt")
-    dm = rho*0.
-    dm[0] = -dmsqueeze 
+    dm = rho*0.-dmsqueeze 
+    dudt = v*force-qloss+irradheating - desqueeze
     
     return dm, force, dudt, qloss, ueq
 
@@ -212,13 +199,8 @@ def toprim(m, s, e, g):
     v=s/m
     u=(e-m*(v**2/2.-1./g.r-0.5*(g.r*g.sth*omega)**2))/g.across
     umin = u.min()
-    #    if(rho.min() < rhofloor):
-    #        print("rhomin = "+str(rho.min()))
-    #        print("mmin = "+str(m.min()))
-    # exit(1)
-    #    u[u<=ufloor]=0.
     beta = betafun(Fbeta(rho, u))
-    press = 3.*(1.-beta/2.) * u
+    press = u/3./(1.-beta/2.)
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
 def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = None):
@@ -240,7 +222,7 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
     dst[0] = 0. # mdotsink_eff does not enter here, as matter should escape sideways, but near the bottom
     edotsink_eff = mdotsink * (e[0]/m[0])
-    det[0] = -(fe_half[0]-(-edotsink_eff))/dlleft + dm[0] * (e[0]/m[0]) # no energy sink anyway
+    det[0] = -(fe_half[0]-(-edotsink_eff))/dlleft + de[0] # no energy sink anyway
     # right boundary conditions:
     dmt[-1] = -((-mdot)-s_half[-1])/dlright+dm[-1]
     #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
@@ -282,11 +264,14 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
         # diffusion term introduces instabilities -- what shall we do?
         fs_half += duls_half ;   fe_half += dule_half
     if(squeezemode):
-        dmsqueeze = sqrt(maximum(press[0]-umag, 0.))/g.delta[0]
+        umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
+        dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/g.delta
+        desqueeze = dmsqueeze * e/m
     else:
-        mdotsink_eff = 0.
+        dmsqueeze = None
+        desqueeze = None
         
-    dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt, dmsqueeze = dmsqueeze)
+    dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt, dmsqueeze = dmsqueeze, desqueeze = desqueeze)
     
     ltot=simps(flux, x=g.l) # no difference
     dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half,

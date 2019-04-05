@@ -77,7 +77,7 @@ outdir = "out/"
 # restart options
 ifrestart = False
 restartfile = outdir + 'tireout1.hdf5'
-restartn = 4756
+restartn = 400
 restartprefix = outdir+'tireout' # used if we restart from ascii output
 
 # estimating optimal N for a linear grid
