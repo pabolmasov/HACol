@@ -2,9 +2,10 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=3000 # the actual number of points in use
-nx0=nx*20 # first we make a finer mesh for interpolation
+nx=300 # the actual number of points in use
+nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
+rbasefactor = 0.1 #  
 
 # physical parameters:
 mu30 = 0.1 # magnetic moment, 1e30 units
@@ -38,7 +39,7 @@ ufloor = 1e-15 # crash floor for energy density
 csqmin = 1e-8
 nubulk = 0.0 # bulk viscosity coeff.
 
-eta = 0.1 # self-illumination efficiency 
+eta = 0.0 # self-illumination efficiency 
 heatingeff = 0.01 # additional heating scaling with mdot
 afac = 0.1 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
@@ -59,7 +60,7 @@ massscale = 6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 #
 tmax = 1000./tscale # maximal time in tscales
 dtout = 0.0001/tscale # output time step in tscales
-omega = sqrt(0.9)*r_e**(-1.5) # in Keplerian units on the outer rim
+omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
@@ -76,8 +77,8 @@ outdir = "out/"
 
 # restart options
 ifrestart = False
-restartfile = outdir + 'tireout1.hdf5'
-restartn = 400
+restartfile = outdir + 'tireout2.hdf5'
+restartn = 270
 restartprefix = outdir+'tireout' # used if we restart from ascii output
 
 # estimating optimal N for a linear grid

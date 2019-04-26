@@ -235,6 +235,7 @@ def quasi2d(hname, n1, n2):
     contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
+    fig.tight_layout()
     savefig(outdir+'/q2d_u.png')
     savefig(outdir+'/q2d_u.eps')
     close('all')

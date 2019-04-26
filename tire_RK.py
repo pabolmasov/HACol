@@ -266,7 +266,7 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
     if(squeezemode):
         umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
         dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/g.delta
-        desqueeze = dmsqueeze * e/m
+        desqueeze = dmsqueeze * (e-u*g.across)/m
     else:
         dmsqueeze = None
         desqueeze = None
@@ -296,12 +296,16 @@ def alltire():
     rmax=r_e*sthd # slightly less then r_e 
     r=((2.*(rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
     g = geometry_initialize(r, r_e, dr_e, afac=afac) # radial-equidistant mesh
-    g.l += r.min() # we are starting from a finite radius
+    if (rbasefactor is None):
+        rbase = r.min()
+    else:
+        rbase = r.min()*rbasefactor
+    g.l += rbase # we are starting from a finite radius
     if(logmesh):
         luni=exp(linspace(log((g.l).min()), log((g.l).max()), nx, endpoint=False)) # log(l)-equidistant mesh
     else:
         luni=linspace((g.l).min(), (g.l).max(), nx, endpoint=False)
-    g.l -= r.min() ; luni -= r.min()
+    g.l -= rbase ; luni -= rbase
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(g.l,g.r, kind='linear') # interpolation function mapping l to r
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
@@ -472,7 +476,8 @@ def alltire():
                 plots.vplot(g.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
                 plots.someplots(g.r, [u/rho**(4./3.)], name=outdir+'/entropy{:05d}'.format(nout), ytitle=r'$S$', ylog=True)
                 plots.someplots(g.r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
-                                name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
+                                name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$',
+                                ylog=True, formatsequence=['r-', 'b-'])
             mtot=trapz(m, x=g.l)
             etot=trapz(e, x=g.l)
             print("mass = "+str(mtot))
