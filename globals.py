@@ -2,7 +2,7 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=300 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
 rbasefactor = 0.1 #  

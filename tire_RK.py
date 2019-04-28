@@ -261,12 +261,11 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
         duls_half, dule_half = diffuse(rho, urad, v, dl, g.across)
-        # diffusion term introduces instabilities -- what shall we do?
         fs_half += duls_half ;   fe_half += dule_half
     if(squeezemode):
         umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
         dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/g.delta
-        desqueeze = dmsqueeze * (e-u*g.across)/m
+        desqueeze = dmsqueeze * e / m # (e-u*g.across)/m
     else:
         dmsqueeze = None
         desqueeze = None
