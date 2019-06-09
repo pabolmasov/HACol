@@ -218,6 +218,6 @@ def tailfit(prefix = 'out/flux', trange = None):
         t1=t[(t>trange[0])&(t<trange[1])]
         f1=f[(t>trange[0])&(t<trange[1])]
     par, pcov = curve_fit(tailfitfun, t1, f1, p0=[-2.,5., 0., f1.min()])
-    plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3])], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=True, ylog=True)
-    print("slope ="+str(par[0]))
-    print("y0 ="+str(par[3]))
+    plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3])], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=True, ylog=True, formatsequence=['k.', 'r-'])
+    print("slope ="+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
+    print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))

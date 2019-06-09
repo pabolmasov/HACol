@@ -230,7 +230,7 @@ def quasi2d(hname, n1, n2):
     print(lulev)
     clf()
     fig=figure()
-    contourf(rnew, tar*tscale, lurel, cmap='hot_r', levels=lulev)
+    contourf(rnew, tar*tscale, lurel, cmap='hot', levels=lulev)
     colorbar()
     contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)

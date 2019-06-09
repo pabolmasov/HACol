@@ -165,7 +165,7 @@ def fluxes(rho, v, u, g):
     fe = g.across*v*(u+press+(v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion
     return s, p, fe
 
-def sources(rho, v, u, g, ltot=0., dt=None, dmsqueeze = 0., desqueeze = 0.):
+def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0.):
     '''
     computes the RHSs of conservation equations
     no changes in mass
@@ -203,9 +203,9 @@ def toprim(m, s, e, g):
     press = u/3./(1.-beta/2.)
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
-def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = None):
+def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, edot = None):
     '''
-    main advance in a dt step
+    main advance step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
     output: three temporal derivatives later used for the time step
     includes boundary conditions for mass and energy!
@@ -233,7 +233,7 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     det[-1] = -((edot)-s_half[-1])/dlright + de[-1]
     return dmt, dst, det
 
-def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
+def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0.):
     '''
     calculating elementary increments of conserved quantities
     '''
@@ -270,12 +270,11 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
         dmsqueeze = None
         desqueeze = None
         
-    dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt, dmsqueeze = dmsqueeze, desqueeze = desqueeze)
+    dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze)
     
     ltot=simps(flux, x=g.l) # no difference
     dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half,
-                           dm, ds, de, g, dlleft, dlright, dt,
-                           edot = fe[-1])
+                           dm, ds, de, g, dlleft, dlright, edot = fe[-1])
                            #fe_half[-1])
     return dmt, dst, det, ltot, ueq
     
@@ -428,10 +427,10 @@ def alltire():
     while(t<tmax):
         timer.start_comp("advance")
         # Runge-Kutta, fourth order, one step:
-        k1m, k1s, k1e, ltot1, ueq1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt)
-        k2m, k2s, k2e, ltot2, ueq2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, dt)
-        k3m, k3s, k3e, ltot3, ueq3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, dt)
-        k4m, k4s, k4e, ltot4, ueq4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, dt)
+        k1m, k1s, k1e, ltot1, ueq1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot)
+        k2m, k2s, k2e, ltot2, ueq2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot)
+        k3m, k3s, k3e, ltot3, ueq3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot)
+        k4m, k4s, k4e, ltot4, ueq4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot)
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.

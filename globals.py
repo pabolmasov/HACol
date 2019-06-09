@@ -76,12 +76,15 @@ ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always output
 outdir = "out/"
 
 # restart options
-ifrestart = False
+ifrestart = True
 restartfile = outdir + 'tireout2.hdf5'
-restartn = 270
+restartn = 1110
 restartprefix = outdir+'tireout' # used if we restart from ascii output
 
 # estimating optimal N for a linear grid
 print("nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
 print("nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
 
+# estimated heat flux at the outer boundary:
+print("heat coming from the outer BC "+str(-vout * 4.*pi*r_e*dr_e*4.*pi * 3.*umagout))
+print("compare to "+str(mdot/rstar))
