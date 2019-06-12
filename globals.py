@@ -3,8 +3,9 @@ from numpy import *
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
 nx=1000 # the actual number of points in use
-nx0=nx*20 # first we make a finer mesh for interpolation
+nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
+rbasefactor = 0.1 #  
 
 # physical parameters:
 mu30 = 0.1 # magnetic moment, 1e30 units
@@ -13,7 +14,6 @@ mdot = 10. * 4. * pi
 # 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
 mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 6291.12*4.*pi/m1
-# acc=True # true if we are going to zero the mass and energy fluxes through the outer boundary in actual equations
 rstar = 6.8/m1 # GM/c**2 units
 # 10km --> 6.77159 for 1Msun
 b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
@@ -21,13 +21,15 @@ mow = 0.6 # molecular weight
 betacoeff = 1.788e-5 * (m1)**(-0.25)/mow # coefficient used to calculate gas-to-total pressure ratio
 
 # BC modes:
-galyamode = False # if on, sets the internal energy density to MF energy density at the inner boundary
+galyamode = False # if on, limits the internal energy density by MF energy density at the inner boundary
 coolNS = False # if on (and galyamode is off), internal energy is constant at the inner boundary
 # a test with coolNS converges well, but it is completely unphysical
 ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
+squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
 # radiation transfer treatment:
-xirad = 0.2 # radiation diffusion scaling
+raddiff = True # if we include radiation diffusion along the field line
+xirad = 1. # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 taumax = 1e2 # maximal optical depth
 
@@ -35,12 +37,11 @@ mfloor = 1e-15  # crash floor for mass per unit length
 rhofloor = 1e-15 # crash floor for density
 ufloor = 1e-15 # crash floor for energy density
 csqmin = 1e-8
-vmax = 0.6 # when should we worry about relativistic velosities?
 nubulk = 0.0 # bulk viscosity coeff.
 
-eta = 0.1 # self-illumination efficiency 
+eta = 0.0 # self-illumination efficiency 
 heatingeff = 0.01 # additional heating scaling with mdot
-afac = 1.0 # part of the longitudes subtended by the flow
+afac = 0.1 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
 dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
@@ -63,7 +64,7 @@ omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
-vout = -1./sqrt(r_e) / 5.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+vout = -1./sqrt(r_e) / 15.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 # plotting options:
 ifplot = True
@@ -75,12 +76,15 @@ ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always output
 outdir = "out/"
 
 # restart options
-ifrestart = False
-restartfile = outdir + 'tireout1.hdf5'
-restartn = 4756
+ifrestart = True
+restartfile = outdir + 'tireout2.hdf5'
+restartn = 1110
 restartprefix = outdir+'tireout' # used if we restart from ascii output
 
 # estimating optimal N for a linear grid
 print("nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
 print("nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
 
+# estimated heat flux at the outer boundary:
+print("heat coming from the outer BC "+str(-vout * 4.*pi*r_e*dr_e*4.*pi * 3.*umagout))
+print("compare to "+str(mdot/rstar))

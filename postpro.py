@@ -169,13 +169,16 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     geometry = loadtxt(outdir+"/geo.dat", comments="#", delimiter=" ", unpack=False)
     t=fluxlines[:,0] ; f=fluxlines[:,1]
     across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
-    #    rstar = 6.8/m1 ; mdot = 4.*pi * 10. ; umag=b12**2*2.29e6*m1 ; afac=1. # temporary!!! need to save this info somehow
-    BSgamma = (across0/delta0**2)/mdot*rstar
-    BSeta = (8./21./sqrt(2.)*umag)**0.25*sqrt(delta0)/(rstar)**0.125
+    BSgamma = (2.*across0/delta0**2)/mdot*rstar
+    # umag is magnetic pressure
+    BSeta = (8./21./sqrt(2.)*30.*umag*m1)**0.25*sqrt(delta0)/(rstar)**0.125
     xs = bs.xis(BSgamma, BSeta, x0=20.)
 
     # spherization radius
     rsph =1.5*mdot/4./pi
+    eqlum = mdot/rstar
+    print("mdot = "+str(mdot))
+    print("rstar = "+str(rstar))
     # iterating to find the cooling radius
     rcool = rcoolfun(geometry, mdot)
     for k in arange(size(n)):
@@ -185,15 +188,22 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
             stmp, dstmp = shock_hdf(n[k], infile = prefix+".hdf5")
         s[k] = stmp ; ds[k] = dstmp
 
+    print("predicted shock position: xs = "+str(xs)+" (rstar)")
+    print("cooling limit: rcool/rstar = "+str(rcool/rstar))
+        
     if(ifplot):
-        plots.someplots(t[n], [s, s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k,', 'r-', 'b-'])
-        plots.someplots(f[n], [s, s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k,', 'r-', 'b-'])
+        plots.someplots(t[n], [s, s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
+        plots.someplots(f[n], [s, s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     # ascii output
     fout = open(outdir+'/sfront.dat', 'w')
     for k in arange(size(n)):
         fout.write(str(t[n[k]])+" "+str(s[k])+" "+str(ds[k])+"\n")
     fout.close()
-
+    fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
+    fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')
+    fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
+    fglo.close()
+    
 ###############################
 def tailfitfun(x, p, n, x0, y0):
     return ((x-x0)**2)**(p/2.)*n+y0
@@ -208,6 +218,6 @@ def tailfit(prefix = 'out/flux', trange = None):
         t1=t[(t>trange[0])&(t<trange[1])]
         f1=f[(t>trange[0])&(t<trange[1])]
     par, pcov = curve_fit(tailfitfun, t1, f1, p0=[-2.,5., 0., f1.min()])
-    plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3])], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=True, ylog=True)
-    print("slope ="+str(par[0]))
-    print("y0 ="+str(par[3]))
+    plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3])], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=True, ylog=True, formatsequence=['k.', 'r-'])
+    print("slope ="+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
+    print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))

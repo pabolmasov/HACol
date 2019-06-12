@@ -90,7 +90,7 @@ def splot(x, y, name='outplot', fmt='-k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     savefig(name+'.png')
     close('all')
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None):
     '''
     plots a series of curves  
     '''
@@ -101,6 +101,8 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
 
     clf()
     for k in arange(ny):
+        if vertical is not None:
+            plot([vertical, vertical], [ys[k].min(), ys[k].max()], 'r-')
         plot(x, ys[k], formatsequence[k])
     if(xlog):
         xscale('log')
@@ -228,11 +230,12 @@ def quasi2d(hname, n1, n2):
     print(lulev)
     clf()
     fig=figure()
-    contourf(rnew, tar*tscale, lurel, cmap='hot_r', levels=lulev)
+    contourf(rnew, tar*tscale, lurel, cmap='hot', levels=lulev)
     colorbar()
     contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
+    fig.tight_layout()
     savefig(outdir+'/q2d_u.png')
     savefig(outdir+'/q2d_u.eps')
     close('all')
@@ -365,5 +368,17 @@ def binplot(xe, f, df, fname = "binplot", fit = 0):
     savefig(fname+".png")
     savefig(fname+".eps")
     close("all")
-
-
+######################################################
+def multishock_plot(fluxfile, frontfile):
+    fluxlines = loadtxt(fluxfile+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontinfo = loadtxt(frontfile+'glo.dat', comments="#", delimiter=" ", unpack=False)
+    tf=fluxlines[:,0] ; f=fluxlines[:,1]
+    ts=frontlines[:,0] ; s=frontlines[:,1] ; ds=frontlines[:,2]
+    eqlum = frontinfo[0] ; rs = frontinfo[1] ; rcool = frontinfo[2]
+    
+    # interpolate!
+    fint = interp1d(tf, f)
+    
+    someplots(ts, [s, s*0. + rs, s*0. + rcool], name = frontfile + "_frontcurve", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
+    someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)

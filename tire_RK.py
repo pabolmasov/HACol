@@ -142,7 +142,7 @@ def diffuse(rho, urad, v, dl, across):
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
     rtau_left = rho[:-1] * dl / 2.# -- " -- to the left -- " --
     duls_half =  nubulk * ((across * urad * v)[1:] * tratfac(rtau_right) -
-                              ( across * urad * v)[:-1] * tratfac(rtau_left))/3.
+                           ( across * urad * v)[:-1] * tratfac(rtau_left))/3.
     # -- photon bulk viscosity
     dule_half = ((urad * across)[1:] * tratfac(rtau_right) \
                 - (urad * across)[:-1] * tratfac(rtau_left))/3. 
@@ -165,7 +165,7 @@ def fluxes(rho, v, u, g):
     fe = g.across*v*(u+press+(v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion
     return s, p, fe
 
-def sources(rho, v, u, g, ltot=0., dt=None):
+def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0.):
     '''
     computes the RHSs of conservation equations
     no changes in mass
@@ -185,22 +185,11 @@ def sources(rho, v, u, g, ltot=0., dt=None):
     urad = u * (1.-beta)/(1.-beta/2.)
     qloss = urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac  # diffusion approximations; energy lost from 4 sides
     irradheating = heatingeff * mdot / g.r * g.sth * sinsum * taufac
-    # heatingeff * gamedd * (g.sina*g.cth+g.cosa*g.sth)/g.r**2*8.*pi*g.r*g.sth*afac*taufac # photons absorbed by the matter also heat it
-#    if(dt is not None):            
-#        trat = qloss * dt / u
-        #        qloss *= tratfac(trat)
-#    else:
-#        trat = u*0. +1.
     ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
-    dudt = v*force-qloss+irradheating
-    #    if(trat.max()>1e10):
-        # if the thermal time scales are very small, we just set the local thermal energy density to equilibrium (irradiation heating = diffusive cooling)
-        #    print("dudt = "+str(dudt))
-        #        dudt = v*force +(irradheating - qloss) * exp(-trat) + (ueq-u) / (ueq+u) * irradheating * (1.-exp(-trat)) 
-        #   print("dudt = "+str(dudt))
-        #   ii=input("dudt")
-        
-    return rho*0., force, dudt, qloss, ueq
+    dm = rho*0.-dmsqueeze 
+    dudt = v*force-qloss+irradheating - desqueeze
+    
+    return dm, force, dudt, qloss, ueq
 
 def toprim(m, s, e, g):
     '''
@@ -208,31 +197,15 @@ def toprim(m, s, e, g):
     '''
     rho=m/g.across
     v=s/m
-#    wrel = where(fabs(v)>vmax)
-#    if(size(wrel)>0):
-#        v[wrel] =  quasirelfunction(v[wrel], vmax) # equal to vmax when v[wrel]=vmax, approaching 1 at large values 
-    # v[wrel]*sqrt((1.+vmax**2)/(1.+v[wrel]**2))
-    # if(m.min()<mfloor):
-      #  print("toprim: m.min = "+str(m.min()))
-      #  print("... at "+str(g.r[m.argmin()]))
-        #        exit(1)
-    #    v=s*0.
-    #    v[rho>rhofloor]=(s/m)[rho>rhofloor]
-    #    v=v/sqrt(1.+v**2)
     u=(e-m*(v**2/2.-1./g.r-0.5*(g.r*g.sth*omega)**2))/g.across
     umin = u.min()
-    #    if(rho.min() < rhofloor):
-    #        print("rhomin = "+str(rho.min()))
-    #        print("mmin = "+str(m.min()))
-        # exit(1)
-        #    u[u<=ufloor]=0.
     beta = betafun(Fbeta(rho, u))
-    press = 3.*(1.-beta/2.) * u
+    press = u/3./(1.-beta/2.)
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
-def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = None):
+def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, edot = None):
     '''
-    main advance in a dt step
+    main advance step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
     output: three temporal derivatives later used for the time step
     includes boundary conditions for mass and energy!
@@ -245,12 +218,13 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     det[1:-1] = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]
 
     #left boundary conditions:
-    dmt[0] = -(s_half[0]-(-mdotsink))/dlleft
+    dmt[0] = -(s_half[0]-(-mdotsink))/dlleft+dm[0]
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
-    dst[0] = 0. # 
-    det[0] = -(fe_half[0]-(0.))/dlleft+de[0] # no energy sink anyway
+    dst[0] = 0. # mdotsink_eff does not enter here, as matter should escape sideways, but near the bottom
+    edotsink_eff = mdotsink * (e[0]/m[0])
+    det[0] = -(fe_half[0]-(-edotsink_eff))/dlleft + de[0] # no energy sink anyway
     # right boundary conditions:
-    dmt[-1] = -((-mdot)-s_half[-1])/dlright
+    dmt[-1] = -((-mdot)-s_half[-1])/dlright+dm[-1]
     #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
     dst[-1] = 0.
     #    edot =  abs(mdot) * 0.5/g.r[-1] + s[-1]/m[-1] * u[-1] # virial equilibrium
@@ -259,7 +233,7 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     det[-1] = -((edot)-s_half[-1])/dlright + de[-1]
     return dmt, dst, det
 
-def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
+def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0.):
     '''
     calculating elementary increments of conserved quantities
     '''
@@ -285,13 +259,22 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt):
         ii=input("cs")
         
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
-    duls_half, dule_half = diffuse(rho, urad, v, dl, g.across)
-    # diffusion term introduces instabilities -- what shall we do?
-    fs_half += duls_half ;   fe_half += dule_half
-    dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=0., dt=dt)
+    if(raddiff):
+        duls_half, dule_half = diffuse(rho, urad, v, dl, g.across)
+        fs_half += duls_half ;   fe_half += dule_half
+    if(squeezemode):
+        umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
+        dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/g.delta
+        desqueeze = dmsqueeze * e / m # (e-u*g.across)/m
+    else:
+        dmsqueeze = None
+        desqueeze = None
+        
+    dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze)
     
     ltot=simps(flux, x=g.l) # no difference
-    dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half, dm, ds, de, g, dlleft, dlright, dt, edot = fe[-1])
+    dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half,
+                           dm, ds, de, g, dlleft, dlright, edot = fe[-1])
                            #fe_half[-1])
     return dmt, dst, det, ltot, ueq
     
@@ -311,12 +294,16 @@ def alltire():
     rmax=r_e*sthd # slightly less then r_e 
     r=((2.*(rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
     g = geometry_initialize(r, r_e, dr_e, afac=afac) # radial-equidistant mesh
-    g.l += r.min() # we are starting from a finite radius
+    if (rbasefactor is None):
+        rbase = r.min()
+    else:
+        rbase = r.min()*rbasefactor
+    g.l += rbase # we are starting from a finite radius
     if(logmesh):
         luni=exp(linspace(log((g.l).min()), log((g.l).max()), nx, endpoint=False)) # log(l)-equidistant mesh
     else:
         luni=linspace((g.l).min(), (g.l).max(), nx, endpoint=False)
-    g.l -= r.min() ; luni -= r.min()
+    g.l -= rbase ; luni -= rbase
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(g.l,g.r, kind='linear') # interpolation function mapping l to r
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
@@ -381,20 +368,44 @@ def alltire():
     if(ifrestart):
         if(ifhdf):
             # restarting from a HDF5 file
-            entryname, t, l, r, sth, rho, u, v = hdf.read(restartfile, restartn)
+            entryname, t, l1, r1, sth1, rho1, u1, v1 = hdf.read(restartfile, restartn)
             tstore = t
             print("restarted from file "+restartfile+", entry "+entryname)
         else:
             # restarting from an ascii output
             ascrestartname = restartprefix + hdf.entryname(restartn, ndig=5) + ".dat"
             lines = loadtxt(ascrestartname, comments="#")
-            rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3] * umagtar
+            r1 = lines[:,0]
+            umagtar1 = umag * (1.+3.*(1.-sth1**2))/4. * (1./r1)**6
+            rho1 = lines[:,1] ; v1 = lines[:,2] ; u1 = lines[:,3] * umagtar1
             # what about t??
             print("restarted from ascii output "+ascrestartname)
-        r *= rstar
+        if (size(r1) != nx):
+            print("interpolating from "+str(size(r1))+" to "+str(nx))
+            print("r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
+            print("r1 from "+str(r1.min())+" to "+str(r1.max()))
+            rhofun = interp1d(r1, rho1,bounds_error=False, fill_value = (rho1[0], rho1[-1]))
+            vfun = interp1d(r1, v1,bounds_error=False, fill_value = (v1[0], v1[-1]))
+            ufun = interp1d(r1, u1,bounds_error=False, fill_value = (u1[0], u1[-1]))
+            rho = rhofun(r/rstar) ; v = vfun(r/rstar) ; u = ufun(r/rstar)
+        else:
+            print("restarting with the same resolution")
+            rho = rho1 ; v = v1 ; u = u1
+            # r *= rstar
+            #        print(r)
+            #        print(r1)
+            #        ii = input('r')
+        if ifplot :
+            print("plotting")
+            plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie_restart', umagtar = umagtar)
+            plots.vplot(g.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie_restart')
+            plots.someplots(g.r, [u/rho**(4./3.)], name=outdir+'/entropy_restart', ytitle=r'$S$', ylog=True)
+            plots.someplots(g.r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
+                            name=outdir+'/beta_restart', ytitle=r'$\beta$, $1-\beta$', ylog=True)
+
         m, s, e = cons(rho, v, u, g)
         nout = restartn
-            
+        
     dlmin=dl.min()
     dt = dlmin*0.25
     print("dt = "+str(dt))
@@ -416,10 +427,10 @@ def alltire():
     while(t<tmax):
         timer.start_comp("advance")
         # Runge-Kutta, fourth order, one step:
-        k1m, k1s, k1e, ltot1, ueq1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, dt)
-        k2m, k2s, k2e, ltot2, ueq2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, dt)
-        k3m, k3s, k3e, ltot3, ueq3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, dt)
-        k4m, k4s, k4e, ltot4, ueq4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, dt)
+        k1m, k1s, k1e, ltot1, ueq1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot)
+        k2m, k2s, k2e, ltot2, ueq2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot)
+        k3m, k3s, k3e, ltot3, ueq3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot)
+        k4m, k4s, k4e, ltot4, ueq4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot)
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
@@ -463,7 +474,8 @@ def alltire():
                 plots.vplot(g.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
                 plots.someplots(g.r, [u/rho**(4./3.)], name=outdir+'/entropy{:05d}'.format(nout), ytitle=r'$S$', ylog=True)
                 plots.someplots(g.r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
-                                name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
+                                name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$',
+                                ylog=True, formatsequence=['r-', 'b-'])
             mtot=trapz(m, x=g.l)
             etot=trapz(e, x=g.l)
             print("mass = "+str(mtot))
