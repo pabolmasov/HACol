@@ -12,9 +12,9 @@ The core also supports running with an arbitrary configuration file (useful if y
 Make sure that the outputs of different simulations do not interfere. For this, set different outdir names in the configuration files. 
 
 To run the code without ipython, you need to be sure that all the necessary libraries like scipy are linked. Then you can uncomment the "alltire()" line at the end of tire_new and run the code from the command line as
-> python tire_new.py
+> python tire_RK.py
 or
-> python tire_new myglobals
+> python tire_RK myglobals
 
 If you are running the code remotely, make sure that graphic output is off (ifplot=False in globals.py). 
 
