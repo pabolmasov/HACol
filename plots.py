@@ -18,6 +18,7 @@ rc('text', usetex=True)
 matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
 import hdfoutput as hdf
+import geometry as geo
 from globals import *
 
 close('all')
@@ -240,15 +241,26 @@ def quasi2d(hname, n1, n2):
     savefig(outdir+'/q2d_u.eps')
     close('all')
 
-def postplot(hname, nentry):
+def postplot(hname, nentry, ifdat = True):
     '''
     reading and plotting a single snapshot number "nentry" 
     taken from the HDF output "hname"
     '''
-    entryname, t, l, r, sth, rho, u, v = hdf.read(hname, nentry)
+    geofile = os.path.dirname(hname)+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile) 
+    if(ifdat):
+        fname = hname + hdf.entryname(nentry, ndig=5) + ".dat"
+        entryname = hdf.entryname(nentry, ndig=5)
+        print(fname)
+        lines = loadtxt(fname, comments="#")
+        r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3]
+    else:
+        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, nentry)
     #    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
     #    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
-    someplots(r, [-u*v*(r/r.min())**4], name=hname+"_"+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm NS}\right)^4$", ylog=True)
+    someplots(r, [-v*rho*across, v*rho*across], name=hname+entryname+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])
+    someplots(r, [-u*v*(r/r.min())**4], name=hname+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm NS}\right)^4$", ylog=True)
     
 def multiplots(hname, n1, n2):
     '''
@@ -284,6 +296,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
     '''
     kctr = 0
     vmin=0. ; vmax=0.
+    
     clf()
     for k in arange(n1,n2,step):
         fname = prefix + hdf.entryname(k, ndig=5) + postfix

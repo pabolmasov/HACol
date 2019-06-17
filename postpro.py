@@ -177,6 +177,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     # spherization radius
     rsph =1.5*mdot/4./pi
     eqlum = mdot/rstar
+    print("m1 = "+str(m1))
     print("mdot = "+str(mdot))
     print("rstar = "+str(rstar))
     # iterating to find the cooling radius
@@ -221,3 +222,5 @@ def tailfit(prefix = 'out/flux', trange = None):
     plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3])], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=True, ylog=True, formatsequence=['k.', 'r-'])
     print("slope ="+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
     print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))
+
+##################################################################

@@ -305,7 +305,9 @@ def alltire():
         luni=linspace((g.l).min(), (g.l).max(), nx, endpoint=False)
     g.l -= rbase ; luni -= rbase
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
-    rfun=interp1d(g.l,g.r, kind='linear') # interpolation function mapping l to r
+    rfun=interp1d(g.l,g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
+    #    print(g.l)
+    #    print(luni)
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
