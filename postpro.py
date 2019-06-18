@@ -7,6 +7,7 @@ import os
 from globals import *
 
 import hdfoutput as hdf
+import geometry as geo
 import bassun as bs
 if ifplot:
     import plots
@@ -224,3 +225,33 @@ def tailfit(prefix = 'out/flux', trange = None):
     print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))
 
 ##################################################################
+def mdotmap(n1, n2, step,  prefix = "out/tireout"):
+    # reconstructs the mass flow
+    # reding geometry:
+    geofile = os.path.dirname(prefix)+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile) 
+    print(mdot)
+    nr = size(r) ;    n = n2-n1 
+    md2 = zeros([n, nr], dtype=double)
+    t2 = zeros([n, nr], dtype=double)
+    r2 = zeros([n, nr], dtype=double)   
+    
+    for k in arange(n):
+        hname = prefix + ".hdf5"
+        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, k+n1)
+        md2[k, :] = (rho * v * across)[:]
+        t2[k, :] = t  ;     r2[k, :] = r[:]
+
+    # ascii output:
+    fmap = open(prefix+"_mdot.dat", "w")
+    for k in arange(n):
+        for kr in arange(nr):
+            fmap.write(str(t2[k, kr])+" "+str(r2[k, kr])+" "+str(md2[k, kr])+"\n")
+    fmap.close()
+    if(ifplot):
+        # graphic output
+        nlev=30
+        plots.somemap(r2, t2, -md2/mdot, name=prefix+"_mdot", levels = arange(nlev)/double(nlev-2))
+
+        

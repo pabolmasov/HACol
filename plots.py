@@ -90,6 +90,30 @@ def splot(x, y, name='outplot', fmt='-k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     xlabel(xtitle) ; ylabel(ytitle)
     savefig(name+'.png')
     close('all')
+
+def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle='$r$, $GM/c^2$ units', ytitle='$t$, s', levels = None):
+    '''
+    plots a 2dmap
+    '''
+    clf()
+    fig=figure()
+    if(levels is not None):
+        pcolormesh(x, y, q, cmap='hot', vmin = levels.min(), vmax=levels.max())
+    else:
+        pcolormesh(x, y, q, cmap='hot')
+    colorbar()
+    if(xlog):
+        xscale('log')
+    if(ylog):
+        yscale('log')
+    xlabel(xtitle) ; ylabel(ytitle)
+    fig.tight_layout()
+    savefig(name)
+    close()
+    
+def plot_someplot(fname):
+    x, y, q = loadtxt(fname, comments="#", delimiter=" ", unpack=False)
+    somemap(x, y, q, name=fname+".png")
     
 def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None):
     '''
