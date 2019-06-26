@@ -19,7 +19,6 @@ def rcoolfun(geometry, mdot):
     r = geometry[:,0] ; across = geometry[:,3] ; delta = geometry[:,5]
 
     f = delta**2/across * mdot- r
-
     ffun = interp1d(f, r, bounds_error = False)
     return ffun(0.)
     
@@ -156,7 +155,7 @@ def shock_dat(n, prefix = "out/tireout"):
     #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
     return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.
     
-def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
+def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot):
     '''
     draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
     '''
@@ -174,7 +173,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*30.*umag*m1)**0.25*sqrt(delta0)/(rstar)**0.125
     xs = bs.xis(BSgamma, BSeta, x0=20.)
-
+    
     # spherization radius
     rsph =1.5*mdot/4./pi
     eqlum = mdot/rstar
@@ -194,8 +193,10 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     print("cooling limit: rcool/rstar = "+str(rcool/rstar))
         
     if(ifplot):
-        plots.someplots(t[n], [s, s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
-        plots.someplots(f[n], [s, s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+        ws=where(s>1.)
+        n=n[ws]
+        plots.someplots(t[n], [s[ws], s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
+        plots.someplots(f[n], [s[ws], s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     # ascii output
     fout = open(outdir+'/sfront.dat', 'w')
     for k in arange(size(n)):
@@ -203,7 +204,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     fout.close()
     fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
     fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')
-    fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
+    fglo.write(str(eqlum)+' '+str(xs)+' '+str(rcool/rstar)+'\n')
     fglo.close()
     
 ###############################
@@ -253,5 +254,3 @@ def mdotmap(n1, n2, step,  prefix = "out/tireout"):
         # graphic output
         nlev=30
         plots.somemap(r2, t2, -md2/mdot, name=prefix+"_mdot", levels = arange(nlev)/double(nlev-2))
-
-        

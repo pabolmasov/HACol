@@ -344,6 +344,8 @@ def alltire():
 
     # setting the initial distributions of the primitive variables:
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
+    rhonoise = 1.e-3 * random.random_sample(nx)
+    rho *= (rhonoise+1.)
     vinit *= ((g.r-rstar)/(g.r+rstar))**0.5
     u =  3.*umagtar[-1] * (g.r/rmax) * (rho/rho[-1])
     # 3.*umagout+(rho/rho[-1])*0.01/g.r
@@ -409,7 +411,7 @@ def alltire():
         nout = restartn
         
     dlmin=dl.min()
-    dt = dlmin*0.25
+    dt = dlmin*CFL
     print("dt = "+str(dt))
     #    ti=input("dt")
     
@@ -458,7 +460,7 @@ def alltire():
         t += dt
         csqest = 4./3.*u/rho
         rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved         
-        dt = 0.5 * dlmin / sqrt(1.+2.*csqest.max()+2.*(v**2).max())
+        dt = CFL * dlmin / sqrt(1.+2.*csqest.max()+2.*(v**2).max())
         timer.stop_comp("advance")
         timer.lap("step")
         if(t>=tstore):
