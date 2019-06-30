@@ -204,9 +204,19 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot):
     fout.close()
     fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
     fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')
-    fglo.write(str(eqlum)+' '+str(xs)+' '+str(rcool/rstar)+'\n')
+    fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
     fglo.close()
-    
+    # last 0.1s average shock position
+#    tn=copy(s)
+#    tn[:] = t[n[:]]
+#    print(tn)
+#    print("tmax = "+str(t.max()))
+    wlate = (t[n] > (t.max()-0.1))
+    xmean = s[wlate].mean() ; xrms = s[wlate].std()+ds[wlate].mean()
+    print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
+    fmean = f[t>(t.max()-0.1)].mean() ; frms = f[t>(t.max()-0.1)].std()
+    print("flux = "+str(fmean/4./pi)+"+/-"+str(frms/4./pi)+"\n")
+         
 ###############################
 def tailfitfun(x, p, n, x0, y0):
     return ((x-x0)**2)**(p/2.)*n+y0
@@ -254,3 +264,25 @@ def mdotmap(n1, n2, step,  prefix = "out/tireout"):
         # graphic output
         nlev=30
         plots.somemap(r2, t2, -md2/mdot, name=prefix+"_mdot", levels = arange(nlev)/double(nlev-2))
+
+def taus(n, prefix = 'out/tireout', ifhdf = True):
+    '''
+    calculates the optical depths along and across the flow
+    '''
+    geofile = os.path.dirname(prefix)+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile) 
+    if(ifhdf):
+        hname = prefix + ".hdf5"
+        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n)
+    else:
+        entryname = hdf.entryname(n, ndig=5)
+        fname = prefix + entryname + ".dat"
+        lines = loadtxt(fname, comments="#")
+        rho = lines[:,1]
+    taucross = delta * rho  # across the flow
+    dr = (r[1:]-r[:-1])  ;   rc = (r[1:]+r[:-1])/2.
+    taualong = (rho[1:]+rho[:-1])/2. * dr
+    taucrossfun = interp1d(r, taucross, kind = 'linear')
+    if(ifplot):
+        plots.someplots(rc/rstar, [taucrossfun(rc), taualong], name = prefix+"_tau", xtitle=r'$r/R_{\rm NS}$', ytitle=r'$\tau$', xlog=True, ylog=True, formatsequence=['k-', 'r-'])

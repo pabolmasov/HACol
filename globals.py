@@ -6,7 +6,7 @@ nx=3000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
 rbasefactor = 0.5 #  
-CFL = 0.5
+CFL = 0.25 # CFL = 0.5 is still noisy!
 
 # physical parameters:
 mu30 = 0.1 # magnetic moment, 1e30 units
