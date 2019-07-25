@@ -79,7 +79,7 @@ def taufun(tau):
 
 def tratfac(x):
     '''
-    the correction factor used when local thermal time scales are small
+    an accurate smooth version of (1-e^{-x})/x
     '''
     xmin = taumin ; xmax = taumax # limits the same as for optical depth
     tt=x*0.
@@ -140,13 +140,13 @@ def diffuse(rho, urad, v, dl, across):
     '''
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
-    rtau_left = rho[:-1] * dl / 2.# -- " -- to the left -- " --
+    rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
     duls_half =  nubulk * ((across * urad * v)[1:] * tratfac(rtau_right) -
                            ( across * urad * v)[:-1] * tratfac(rtau_left))/3.
     # -- photon bulk viscosity
     dule_half = ((urad * across)[1:] * tratfac(rtau_right) \
                 - (urad * across)[:-1] * tratfac(rtau_left))/3. 
-    #    ((urad/(rho+1.)/dl)[1:]*(1.-exp(-rtau_right))-(urad/(rho+1.)/dl)[:-1]*(1.-exp(-rtau_left)))/3. # radial diffusion
+    # -- radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -duls_half, -dule_half 
 
@@ -175,11 +175,12 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0.):
     additional output:  equilibrium energy density
     '''
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
-    tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
+    #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
+    tau = rho * g.delta
     taufac = taufun(tau)    # 1.-exp(-tau)
-    gamefac = taufac/tau
+    gamefac = tratfac(tau)
     gamedd = eta * ltot * gamefac
-    sinsum = (g.sina*g.cth+g.cosa*g.sth)# sin(theta+alpha)
+    sinsum = (g.sina*g.cth+g.cosa*g.sth) # sin(theta+alpha)
     force = (-sinsum/g.r**2*(1.-gamedd)+omega**2*g.r*g.sth*g.cosa)*rho*g.across #*taufac
     beta = betafun(Fbeta(rho, u))
     urad = u * (1.-beta)/(1.-beta/2.)
@@ -187,10 +188,13 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0.):
     irradheating = heatingeff * mdot / g.r * g.sth * sinsum * taufac
     ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = rho*0.-dmsqueeze 
-    dudt = v*force-qloss+irradheating - desqueeze
+    dudt = v*force-qloss+irradheating
+    ds = force - dmsqueeze * v # lost mass carries away momentum
+    de = dudt - desqueeze
     
-    return dm, force, dudt, qloss, ueq
-
+    #    return dm, force, dudt, qloss, ueq
+    return dm, ds, de, qloss, ueq
+    
 def toprim(m, s, e, g):
     '''
     convert conserved quantities to primitives
