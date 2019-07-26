@@ -2,10 +2,11 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=3000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
-rbasefactor = 0.1 #  
+rbasefactor = 0.5 #  
+CFL = 0.25 # CFL = 0.5 is still noisy!
 
 # physical parameters:
 mu30 = 0.1 # magnetic moment, 1e30 units
@@ -25,6 +26,7 @@ galyamode = False # if on, limits the internal energy density by MF energy densi
 coolNS = False # if on (and galyamode is off), internal energy is constant at the inner boundary
 # a test with coolNS converges well, but it is completely unphysical
 ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
+# (setting ufixed = False leads to unpredictable results if v changes at the outer boundary, as the heat flux is (u+p)v)
 squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
 # radiation transfer treatment:
@@ -40,7 +42,7 @@ csqmin = 1e-8
 nubulk = 0.0 # bulk viscosity coeff.
 
 eta = 0.0 # self-illumination efficiency 
-heatingeff = 0.01 # additional heating scaling with mdot
+heatingeff = 0.0 # additional heating scaling with mdot
 afac = 0.1 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
@@ -76,7 +78,7 @@ ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always output
 outdir = "out/"
 
 # restart options
-ifrestart = True
+ifrestart = False
 restartfile = outdir + 'tireout2.hdf5'
 restartn = 1110
 restartprefix = outdir+'tireout' # used if we restart from ascii output

@@ -79,7 +79,7 @@ def taufun(tau):
 
 def tratfac(x):
     '''
-    the correction factor used when local thermal time scales are small
+    an accurate smooth version of (1-e^{-x})/x
     '''
     xmin = taumin ; xmax = taumax # limits the same as for optical depth
     tt=x*0.
@@ -140,13 +140,13 @@ def diffuse(rho, urad, v, dl, across):
     '''
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
-    rtau_left = rho[:-1] * dl / 2.# -- " -- to the left -- " --
+    rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
     duls_half =  nubulk * ((across * urad * v)[1:] * tratfac(rtau_right) -
                            ( across * urad * v)[:-1] * tratfac(rtau_left))/3.
     # -- photon bulk viscosity
     dule_half = ((urad * across)[1:] * tratfac(rtau_right) \
                 - (urad * across)[:-1] * tratfac(rtau_left))/3. 
-    #    ((urad/(rho+1.)/dl)[1:]*(1.-exp(-rtau_right))-(urad/(rho+1.)/dl)[:-1]*(1.-exp(-rtau_left)))/3. # radial diffusion
+    # -- radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -duls_half, -dule_half 
 
@@ -175,11 +175,12 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0.):
     additional output:  equilibrium energy density
     '''
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
-    tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
+    #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
+    tau = rho * g.delta
     taufac = taufun(tau)    # 1.-exp(-tau)
-    gamefac = taufac/tau
+    gamefac = tratfac(tau)
     gamedd = eta * ltot * gamefac
-    sinsum = (g.sina*g.cth+g.cosa*g.sth)# sin(theta+alpha)
+    sinsum = (g.sina*g.cth+g.cosa*g.sth) # sin(theta+alpha)
     force = (-sinsum/g.r**2*(1.-gamedd)+omega**2*g.r*g.sth*g.cosa)*rho*g.across #*taufac
     beta = betafun(Fbeta(rho, u))
     urad = u * (1.-beta)/(1.-beta/2.)
@@ -187,10 +188,13 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0.):
     irradheating = heatingeff * mdot / g.r * g.sth * sinsum * taufac
     ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = rho*0.-dmsqueeze 
-    dudt = v*force-qloss+irradheating - desqueeze
+    dudt = v*force-qloss+irradheating
+    ds = force - dmsqueeze * v # lost mass carries away momentum
+    de = dudt - desqueeze
     
-    return dm, force, dudt, qloss, ueq
-
+    #    return dm, force, dudt, qloss, ueq
+    return dm, ds, de, qloss, ueq
+    
 def toprim(m, s, e, g):
     '''
     convert conserved quantities to primitives
@@ -305,7 +309,9 @@ def alltire():
         luni=linspace((g.l).min(), (g.l).max(), nx, endpoint=False)
     g.l -= rbase ; luni -= rbase
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
-    rfun=interp1d(g.l,g.r, kind='linear') # interpolation function mapping l to r
+    rfun=interp1d(g.l,g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
+    #    print(g.l)
+    #    print(luni)
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
     r=rnew # set a grid uniform in l=luni
@@ -342,6 +348,8 @@ def alltire():
 
     # setting the initial distributions of the primitive variables:
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
+    rhonoise = 1.e-3 * random.random_sample(nx)
+    rho *= (rhonoise+1.)
     vinit *= ((g.r-rstar)/(g.r+rstar))**0.5
     u =  3.*umagtar[-1] * (g.r/rmax) * (rho/rho[-1])
     # 3.*umagout+(rho/rho[-1])*0.01/g.r
@@ -407,7 +415,7 @@ def alltire():
         nout = restartn
         
     dlmin=dl.min()
-    dt = dlmin*0.25
+    dt = dlmin*CFL
     print("dt = "+str(dt))
     #    ti=input("dt")
     
@@ -456,7 +464,7 @@ def alltire():
         t += dt
         csqest = 4./3.*u/rho
         rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved         
-        dt = 0.5 * dlmin / sqrt(1.+2.*csqest.max()+2.*(v**2).max())
+        dt = CFL * dlmin / sqrt(1.+2.*csqest.max()+2.*(v**2).max())
         timer.stop_comp("advance")
         timer.lap("step")
         if(t>=tstore):

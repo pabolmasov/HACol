@@ -43,3 +43,10 @@ def geometry_initialize(r, r_e, dr_e, writeout=None, afac = 1.):
     g.sina = sina ; g.cosa = cosa ; g.across = across; g.delta = delta
     
     return g
+
+def gread(geofile):
+    ## reads a geometry file written by geometry-initialize
+    lines = loadtxt(geofile, comments="#")
+    r = lines[:,0] ; theta = lines[:,1] ; alpha = lines[:,2] 
+    across = lines[:,3] ; l = lines[:,4] ; delta = lines[:,5]
+    return r, theta, alpha, across, l, delta

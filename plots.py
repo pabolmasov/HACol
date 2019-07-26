@@ -18,6 +18,7 @@ rc('text', usetex=True)
 matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
 import hdfoutput as hdf
+import geometry as geo
 from globals import *
 
 close('all')
@@ -89,6 +90,37 @@ def splot(x, y, name='outplot', fmt='-k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     xlabel(xtitle) ; ylabel(ytitle)
     savefig(name+'.png')
     close('all')
+
+def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle='$r$, $GM/c^2$ units', ytitle='$t$, s', levels = None):
+    '''
+    plots a 2dmap
+    '''
+    clf()
+    fig=figure()
+    if(levels is not None):
+        pcolormesh(x, y, q, cmap='hot', vmin = levels.min(), vmax=levels.max())
+    else:
+        pcolormesh(x, y, q, cmap='hot')
+    colorbar()
+    contour(x, y, q, levels=[1.], colors='w')
+    if(xlog):
+        xscale('log')
+    if(ylog):
+        yscale('log')
+    xlabel(xtitle) ; ylabel(ytitle)
+    fig.tight_layout()
+    savefig(name)
+    close()
+    
+def plot_somemap(fname):
+    lines = loadtxt(fname, comments="#", delimiter=" ", unpack=False)
+    x=lines[:,1] ; y=lines[:,0] ; q=lines[:,2]
+    xun = unique(x) ; yun = unique(y)
+    nx = size(xun) ; ny = size(yun)
+    x=reshape(x, [ny,nx]) ; y=reshape(y, [ny,nx]) ; q=reshape(q, [ny,nx])
+    #    x = transpose(x) ; y=transpose(y) ; q=transpose(q)
+    somemap(x, y, -q/mdot, name=fname+".png", levels=arange(50)/30.,
+            xlog=False, xtitle='$r/R_*$')
     
 def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None):
     '''
@@ -198,7 +230,7 @@ def quasi2d(hname, n1, n2):
     fig=figure()
     pcolormesh(rnew, tar*tscale, var, vmin=var.min(), vmax=var.max(),cmap='hot')
     colorbar()
-    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
+#    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
@@ -232,7 +264,7 @@ def quasi2d(hname, n1, n2):
     fig=figure()
     contourf(rnew, tar*tscale, lurel, cmap='hot', levels=lulev)
     colorbar()
-    contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
+#    contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
@@ -240,15 +272,26 @@ def quasi2d(hname, n1, n2):
     savefig(outdir+'/q2d_u.eps')
     close('all')
 
-def postplot(hname, nentry):
+def postplot(hname, nentry, ifdat = True):
     '''
     reading and plotting a single snapshot number "nentry" 
     taken from the HDF output "hname"
     '''
-    entryname, t, l, r, sth, rho, u, v = hdf.read(hname, nentry)
+    geofile = os.path.dirname(hname)+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile) 
+    if(ifdat):
+        fname = hname + hdf.entryname(nentry, ndig=5) + ".dat"
+        entryname = hdf.entryname(nentry, ndig=5)
+        print(fname)
+        lines = loadtxt(fname, comments="#")
+        r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3]
+    else:
+        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, nentry)
     #    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
     #    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
-    someplots(r, [-u*v*(r/r.min())**4], name=hname+"_"+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm NS}\right)^4$", ylog=True)
+    someplots(r, [-v*rho*across, v*rho*across], name=hname+entryname+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])
+    someplots(r, [-u*v*(r/r.min())**4], name=hname+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm NS}\right)^4$", ylog=True)
     
 def multiplots(hname, n1, n2):
     '''
@@ -284,6 +327,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
     '''
     kctr = 0
     vmin=0. ; vmax=0.
+    
     clf()
     for k in arange(n1,n2,step):
         fname = prefix + hdf.entryname(k, ndig=5) + postfix
@@ -370,6 +414,9 @@ def binplot(xe, f, df, fname = "binplot", fit = 0):
     close("all")
 ######################################################
 def multishock_plot(fluxfile, frontfile):
+    '''
+    plots the position of the shock as a function of time and total flux
+    '''
     fluxlines = loadtxt(fluxfile+'.dat', comments="#", delimiter=" ", unpack=False)
     frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
     frontinfo = loadtxt(frontfile+'glo.dat', comments="#", delimiter=" ", unpack=False)
@@ -382,3 +429,24 @@ def multishock_plot(fluxfile, frontfile):
     
     someplots(ts, [s, s*0. + rs, s*0. + rcool], name = frontfile + "_frontcurve", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
     someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+
+#############################################################
+def allfluxes():
+    dirs = [ 'titania_fidu', 'titania_rot', 'titaniaW', 'titaniaI']
+    labels = ['F', 'R', 'W', 'I']
+    fmtseq = ['-k', '-r', '-g', '-b']
+
+    eta = 0.21
+    
+    clf()
+    
+    plot([0., 0.4], [10.*eta,10.*eta], 'gray')
+    for k in arange(size(dirs)):
+        fluxlines = loadtxt(dirs[k]+'/flux.dat', comments="#", delimiter=" ", unpack=False)
+        t = fluxlines[:,0] ; f = fluxlines[:,1]
+        plot(t, f/4./pi, fmtseq[k], label=labels[k])
+        
+    legend()
+    yscale('log') ; ylim(0.2,20.); xlim(0.0,0.4)
+    xlabel(r'$t$, s') ; ylabel(r'$L/L_{\rm Edd}$')
+    savefig('allfluxes.png')

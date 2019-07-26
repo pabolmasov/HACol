@@ -7,6 +7,7 @@ import os
 from globals import *
 
 import hdfoutput as hdf
+import geometry as geo
 import bassun as bs
 if ifplot:
     import plots
@@ -18,7 +19,6 @@ def rcoolfun(geometry, mdot):
     r = geometry[:,0] ; across = geometry[:,3] ; delta = geometry[:,5]
 
     f = delta**2/across * mdot- r
-
     ffun = interp1d(f, r, bounds_error = False)
     return ffun(0.)
     
@@ -155,7 +155,7 @@ def shock_dat(n, prefix = "out/tireout"):
     #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
     return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.
     
-def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
+def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot):
     '''
     draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
     '''
@@ -173,10 +173,11 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*30.*umag*m1)**0.25*sqrt(delta0)/(rstar)**0.125
     xs = bs.xis(BSgamma, BSeta, x0=20.)
-
+    
     # spherization radius
     rsph =1.5*mdot/4./pi
     eqlum = mdot/rstar
+    print("m1 = "+str(m1))
     print("mdot = "+str(mdot))
     print("rstar = "+str(rstar))
     # iterating to find the cooling radius
@@ -192,8 +193,10 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     print("cooling limit: rcool/rstar = "+str(rcool/rstar))
         
     if(ifplot):
-        plots.someplots(t[n], [s, s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
-        plots.someplots(f[n], [s, s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+        ws=where(s>1.)
+        n=n[ws]
+        plots.someplots(t[n], [s[ws], s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
+        plots.someplots(f[n], [s[ws], s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     # ascii output
     fout = open(outdir+'/sfront.dat', 'w')
     for k in arange(size(n)):
@@ -203,7 +206,17 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True):
     fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')
     fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
     fglo.close()
-    
+    # last 0.1s average shock position
+#    tn=copy(s)
+#    tn[:] = t[n[:]]
+#    print(tn)
+#    print("tmax = "+str(t.max()))
+    wlate = (t[n] > (t.max()-0.1))
+    xmean = s[wlate].mean() ; xrms = s[wlate].std()+ds[wlate].mean()
+    print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
+    fmean = f[t>(t.max()-0.1)].mean() ; frms = f[t>(t.max()-0.1)].std()
+    print("flux = "+str(fmean/4./pi)+"+/-"+str(frms/4./pi)+"\n")
+         
 ###############################
 def tailfitfun(x, p, n, x0, y0):
     return ((x-x0)**2)**(p/2.)*n+y0
@@ -221,3 +234,55 @@ def tailfit(prefix = 'out/flux', trange = None):
     plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3])], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=True, ylog=True, formatsequence=['k.', 'r-'])
     print("slope ="+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
     print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))
+
+##################################################################
+def mdotmap(n1, n2, step,  prefix = "out/tireout"):
+    # reconstructs the mass flow
+    # reding geometry:
+    geofile = os.path.dirname(prefix)+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile) 
+    print(mdot)
+    nr = size(r) ;    n = n2-n1 
+    md2 = zeros([n, nr], dtype=double)
+    t2 = zeros([n, nr], dtype=double)
+    r2 = zeros([n, nr], dtype=double)   
+    
+    for k in arange(n):
+        hname = prefix + ".hdf5"
+        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, k+n1)
+        md2[k, :] = (rho * v * across)[:]
+        t2[k, :] = t  ;     r2[k, :] = r[:]
+
+    # ascii output:
+    fmap = open(prefix+"_mdot.dat", "w")
+    for k in arange(n):
+        for kr in arange(nr):
+            fmap.write(str(t2[k, kr])+" "+str(r2[k, kr])+" "+str(md2[k, kr])+"\n")
+    fmap.close()
+    if(ifplot):
+        # graphic output
+        nlev=30
+        plots.somemap(r2, t2, -md2/mdot, name=prefix+"_mdot", levels = arange(nlev)/double(nlev-2))
+
+def taus(n, prefix = 'out/tireout', ifhdf = True):
+    '''
+    calculates the optical depths along and across the flow
+    '''
+    geofile = os.path.dirname(prefix)+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile) 
+    if(ifhdf):
+        hname = prefix + ".hdf5"
+        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n)
+    else:
+        entryname = hdf.entryname(n, ndig=5)
+        fname = prefix + entryname + ".dat"
+        lines = loadtxt(fname, comments="#")
+        rho = lines[:,1]
+    taucross = delta * rho  # across the flow
+    dr = (r[1:]-r[:-1])  ;   rc = (r[1:]+r[:-1])/2.
+    taualong = (rho[1:]+rho[:-1])/2. * dr
+    taucrossfun = interp1d(r, taucross, kind = 'linear')
+    if(ifplot):
+        plots.someplots(rc/rstar, [taucrossfun(rc), taualong], name = prefix+"_tau", xtitle=r'$r/R_{\rm NS}$', ytitle=r'$\tau$', xlog=True, ylog=True, formatsequence=['k-', 'r-'])
