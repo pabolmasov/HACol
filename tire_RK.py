@@ -141,11 +141,13 @@ def diffuse(rho, urad, v, dl, across):
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
     rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
-    duls_half =  nubulk * ((across * urad * v)[1:] * tratfac(rtau_right) -
-                           ( across * urad * v)[:-1] * tratfac(rtau_left))/3.
+    duls_half =  nubulk * ((across * urad * v)[1:] * taufun(rtau_right) -
+                           ( across * urad * v)[:-1] * taufun(rtau_left))\
+                           / 3. / (rtau_left + rtau_right)
     # -- photon bulk viscosity
-    dule_half = ((urad * across)[1:] * tratfac(rtau_right) \
-                - (urad * across)[:-1] * tratfac(rtau_left))/3. 
+    dule_half = ((urad * across)[1:] * taufun(rtau_right) \
+                - (urad * across)[:-1] * taufun(rtau_left))\
+                /3.  / (rtau_left + rtau_right)
     # -- radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -duls_half, -dule_half 
