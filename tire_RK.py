@@ -137,17 +137,17 @@ def diffuse(rho, urad, v, dl, across):
     '''
     radial energy diffusion;
     calculates energy flux contribution already at the cell boundary
+    across should be set at half-steps
     '''
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
     rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
-    duls_half =  nubulk * ((across * urad * v)[1:] * taufun(rtau_right) -
-                           ( across * urad * v)[:-1] * taufun(rtau_left))\
-                           / 3. / (rtau_left + rtau_right)
+    
+    duls_half =  nubulk * (( urad * v)[1:] - ( urad * v)[:-1])\
+                 *across / 3. / (rtau_left + rtau_right)
     # -- photon bulk viscosity
-    dule_half = ((urad * across)[1:] * taufun(rtau_right) \
-                - (urad * across)[:-1] * taufun(rtau_left))\
-                /3.  / (rtau_left + rtau_right)
+    dule_half = ((urad)[1:] - (urad )[:-1])\
+                *across / 3.  / (rtau_left + rtau_right)
     # -- radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -duls_half, -dule_half 
@@ -159,6 +159,7 @@ def fluxes(rho, v, u, g):
     inputs:
     rho -- density, v -- velocity, u -- thermal energy density
     g is geometry (structure)
+    Note: fluxes do not include diffusion (added separately)
     '''
     s = rho*v*g.across # mass flux (identical to momentum per unit length -- can we use it?)
     beta = betafun(Fbeta(rho, u))
@@ -167,7 +168,7 @@ def fluxes(rho, v, u, g):
     fe = g.across*v*(u+press+(v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion
     return s, p, fe
 
-def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0.):
+def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
     '''
     computes the RHSs of conservation equations
     no changes in mass
@@ -175,6 +176,7 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0.):
     energy losses through the surface
     outputs: dm, ds, de, and separately the amount of energy radiated per unit length per unit time ("flux")
     additional output:  equilibrium energy density
+    if the "forcecheck" flag is on, outputs the grav.potential difference between the outer and inner boundaries and compares to the work of the force along the field line
     '''
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
@@ -182,20 +184,23 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0.):
     taufac = taufun(tau)    # 1.-exp(-tau)
     gamefac = tratfac(tau)
     gamedd = eta * ltot * gamefac
-    sinsum = (g.sina*g.cth+g.cosa*g.sth) # sin(theta+alpha)
-    force = (-sinsum/g.r**2*(1.-gamedd)+omega**2*g.r*g.sth*g.cosa)*rho*g.across #*taufac
+    sinsum = copy(g.sina*g.cth+g.cosa*g.sth) # sin(theta+alpha)
+    force = copy((-sinsum/g.r**2*(1.-gamedd)+omega**2*g.r*g.sth*g.cosa)*rho*g.across) # *taufac
+    if(forcecheck):
+        work = simps(force/(rho*g.across), x=g.l)
+        return work, (1./g.r[0]-1./g.r[-1])
     beta = betafun(Fbeta(rho, u))
-    urad = u * (1.-beta)/(1.-beta/2.)
-    qloss = urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac  # diffusion approximations; energy lost from 4 sides
+    urad = copy(u * (1.-beta)/(1.-beta/2.))
+    qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
     irradheating = heatingeff * mdot / g.r * g.sth * sinsum * taufac
-    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
-    dm = rho*0.-dmsqueeze 
-    dudt = v*force-qloss+irradheating
-    ds = force - dmsqueeze * v # lost mass carries away momentum
-    de = dudt - desqueeze
+    #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
+    dm = copy(rho*0.-dmsqueeze)
+    dudt = copy(v*force-qloss)   #!!!! +irradheating
+    ds = copy(force - dmsqueeze * v) # lost mass carries away momentum
+    de = copy(dudt - desqueeze) # lost matter carries away energy (or enthalpy??)
     
     #    return dm, force, dudt, qloss, ueq
-    return dm, ds, de, qloss, ueq
+    return dm, ds, de, qloss #, ueq
     
 def toprim(m, s, e, g):
     '''
@@ -266,24 +271,25 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0.):
         
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
-        duls_half, dule_half = diffuse(rho, urad, v, dl, g.across)
+        duls_half, dule_half = diffuse(rho, urad, v, dl, ghalf.across)
         fs_half += duls_half ;   fe_half += dule_half
     if(squeezemode):
         umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
         dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/g.delta
-        desqueeze = dmsqueeze * e / m # (e-u*g.across)/m
+        desqueeze = dmsqueeze * (e+press* g.across) / m # (e-u*g.across)/m
     else:
-        dmsqueeze = None
-        desqueeze = None
+        dmsqueeze = 0.
+        desqueeze = 0.
         
-    dm, ds, de, flux, ueq = sources(rho, v, u, g,ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze)
+    dm, ds, de, flux = sources(rho, v, u, g, ltot=ltot,
+                               dmsqueeze = dmsqueeze, desqueeze = desqueeze)
     
-    ltot=simps(flux, x=g.l) # no difference
+    ltot=trapz(flux, x=g.l) # no difference
     dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half,
                            dm, ds, de, g, dlleft, dlright, edot = fe[-1])
                            #fe_half[-1])
-    return dmt, dst, det, ltot, ueq
-    
+    return dmt, dst, det, ltot
+
 ################################################################################
 def alltire():
     '''
@@ -311,7 +317,7 @@ def alltire():
         luni=linspace((g.l).min(), (g.l).max(), nx, endpoint=False)
     g.l -= rbase ; luni -= rbase
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
-    rfun=interp1d(g.l,g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
+    rfun=interp1d(g.l, g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
     #    print(g.l)
     #    print(luni)
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
@@ -320,10 +326,13 @@ def alltire():
     r_half=rfun(luni_half) # half-step radial coordinates
     ghalf = geometry_initialize(r_half, r_e, dr_e, afac=afac) # mid-step geometry in r
     ghalf.l += g.l[1]/2. # mid-step mesh starts halfstep later
+    print("half-step Delta l = "+str(fabs(luni_half-ghalf.l).max()))
+    print("half-step l step = "+str(fabs(ghalf.l[:-1]-ghalf.l[1:]).min()))
+    #    ii = input("Dl")
     #    dlleft = ghalf.l[1]-ghalf.l[0] # 2.*(ghalf.l[1]-ghalf.l[0])-(ghalf.l[2]-ghalf.l[1])
     #    dlright = ghalf.l[-1]-ghalf.l[-2] # 2.*(ghalf.l[-1]-ghalf.l[-2])-(ghalf.l[-2]-ghalf.l[3])
     dl=g.l[1:]-g.l[:-1] # cell sizes
-    dlleft = dl[0] ; dlright = dl[-1]
+    dlleft = dl[0] ; dlright = dl[-1] # 
     #
     
     # testing bassun.py
@@ -362,6 +371,8 @@ def alltire():
     #    ii=input('m')
     
     rho1, v1, u1, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
+    workout, dphi = sources(rho1, v1, u1, g, forcecheck = True) # checking whether the force corresponds to the potential
+    print("potential at the surface = "+str(-workout)+" = "+str(dphi))
     print(str((rho-rho1).std())) 
     print(str((vinit-v1).std()))
     print(str((u-u1).std())) # accuracy 1e-14
@@ -437,10 +448,10 @@ def alltire():
     while(t<tmax):
         timer.start_comp("advance")
         # Runge-Kutta, fourth order, one step:
-        k1m, k1s, k1e, ltot1, ueq1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot)
-        k2m, k2s, k2e, ltot2, ueq2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot)
-        k3m, k3s, k3e, ltot3, ueq3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot)
-        k4m, k4s, k4e, ltot4, ueq4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot)
+        k1m, k1s, k1e, ltot1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot)
+        k2m, k2s, k2e, ltot2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot)
+        k3m, k3s, k3e, ltot3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot)
+        k4m, k4s, k4e, ltot4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot)
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
@@ -462,7 +473,6 @@ def alltire():
             if(galyamode or coolNS):
                 e[0] = etmp[0]
         ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6.
-        ueq = (ueq1 + 2.*ueq2 + 2.*ueq3 + ueq4) / 6.
         t += dt
         csqest = 4./3.*u/rho
         rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved         
@@ -475,12 +485,13 @@ def alltire():
             #            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
             print("t = "+str(t*tscale)+"s")
             print("dt = "+str(dt*tscale)+"s")
+            print("ltot = "+str(ltot1)+" = "+str(ltot2)+" = "+str(ltot3)+" = "+str(ltot4))
             #            print("tratmax = "+str(tratmax))
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
             fflux.flush()
             if ifplot & (nout%plotalias == 0):
                 print("plotting")
-                plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar, ueq=ueq)
+                plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
                 plots.vplot(g.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
                 plots.someplots(g.r, [u/rho**(4./3.)], name=outdir+'/entropy{:05d}'.format(nout), ytitle=r'$S$', ylog=True)
                 plots.someplots(g.r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
