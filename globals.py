@@ -2,14 +2,15 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=300 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
-logmesh=True
-rbasefactor = 0.5 #  
-CFL = 0.25 # CFL = 0.5 is still noisy!
+logmesh=False
+rbasefactor = 0.1 #  
+CFL = 0.5 # CFL = 0.5 is still noisy!
+Cth = 0.125 # thermal timescale factor
 
 # physical parameters:
-mu30 = 0.1 # magnetic moment, 1e30 units
+mu30 = 1. # magnetic moment, 1e30 units
 m1=1.4
 mdot = 10. * 4. * pi
 # 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
@@ -27,10 +28,10 @@ coolNS = False # if on (and galyamode is off), internal energy is constant at th
 # a test with coolNS converges well, but it is completely unphysical
 ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
 # (setting ufixed = False leads to unpredictable results if v changes at the outer boundary, as the heat flux is (u+p)v)
-squeezemode = False # if on, press>umag at the inner boundary leads to mass loss
+squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
 # radiation transfer treatment:
-raddiff = False # if we include radiation diffusion along the field line
+raddiff = True # if we include radiation diffusion along the field line
 xirad = 1. # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 taumax = 1e2 # maximal optical depth
@@ -42,7 +43,7 @@ csqmin = 1e-16
 nubulk = 0.5 # bulk viscosity coeff. Coughlin & Begelman (2014) give 8/81, Loeb & Laor (1992) 40/81 -- check which one is correct! Maybe the definition of zeta is different
 
 eta = 0.0 # self-illumination efficiency 
-heatingeff = 0.0 # additional heating scaling with mdot
+heatingeff = 0.1 # additional heating scaling with mdot
 afac = 0.2 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
@@ -66,7 +67,7 @@ omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
-vout = -1./sqrt(r_e) / 15.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+vout = -1./sqrt(r_e) / 5.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 # plotting options:
 ifplot = True

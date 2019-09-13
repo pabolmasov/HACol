@@ -102,7 +102,7 @@ def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle='$r$, $GM/c^2$ un
     else:
         pcolormesh(x, y, q, cmap='hot')
     colorbar()
-    contour(x, y, q, levels=[1.], colors='w')
+    #    contour(x, y, q, levels=[1.], colors='k')
     if(xlog):
         xscale('log')
     if(ylog):

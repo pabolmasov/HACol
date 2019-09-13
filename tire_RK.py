@@ -43,17 +43,8 @@ def regularize(u, rho, press):
     '''
     if internal energy goes below ufloor, we heat the matter up artificially
     '''
-    u1=u-ufloor ; rho1=rho-rhofloor ; press1 = press-ufloor
-    return (u1+fabs(u1))/2.+ufloor, (rho1+fabs(rho1))/2.+rhofloor, (press1 +fabs(press1))/2.+ufloor
-
-#
-def quasirelfunction(v, v0):
-    '''
-    this function matches f(v)=v below v0 and approaches 1 at v \to 0 
-    '''
-    sv0 = sqrt(1.+v0**2) ; sv = sqrt(1.+v**2)
-    a = (1.+2.*v0**2)/sv0 ; b= -v0**3/sv0
-    return (a*abs(v)+b)/sv*sign(v)
+    #    u1=u-ufloor ; rho1=rho-rhofloor ; press1 = press-ufloor
+    return (u+ufloor+fabs(u-ufloor))/2., (rho+rhofloor+fabs(rho-rhofloor))/2., (press+ufloor +fabs(press-ufloor))/2.
 
 # speed of sound multiplier (see Chandrasekhar 1967 or Johnson 2008):
 def Gamma1(gamma, beta):
@@ -68,7 +59,7 @@ def taufun(tau):
     wtrans = where(tau<taumin)
     wopaq = where(tau>taumax)
     wmed = where((tau>=taumin) & (tau<=taumax))
-    tt = tau*0.
+    tt = copy(tau)*0.
     if(size(wtrans)>0):
         tt[wtrans] = (tau[wtrans]+abs(tau[wtrans]))/2.
     if(size(wopaq)>0):
@@ -82,7 +73,7 @@ def tratfac(x):
     an accurate smooth version of (1-e^{-x})/x
     '''
     xmin = taumin ; xmax = taumax # limits the same as for optical depth
-    tt=x*0.
+    tt=copy(x)*0.
     w1 = where(x<= xmin) ;  w2 = where(x>= xmax) ; wmed = where((x < xmax) & (x > xmin))
     if(size(w1)>0):
         tt[w1] = 1.
@@ -109,6 +100,17 @@ def Fbeta(rho, u):
     if(size(wpos)>0):
         beta[wpos]=betacoeff * rho[wpos] / u[wpos]**0.75
     return beta 
+def Fbeta_press(rho, press):
+    '''
+    calculates a function of 
+    beta = pg/p from rho and pressure (dimensionless units)
+    F(beta) itself is F = beta / (1-beta)**0.25
+    '''
+    beta = rho*0.+1.
+    wpos=where(press>ufloor)
+    if(size(wpos)>0):
+        beta[wpos]=betacoeff * rho[wpos] / (press[wpos]*3.)**0.75 
+    return beta 
 
 def betafun_define():
     '''
@@ -121,8 +123,20 @@ def betafun_define():
     bfun = interp1d(fb, b, kind='linear', bounds_error=False, fill_value=1.)
     return bfun
 
+def betafun_press_define():
+    '''
+    defines the function to calculate beta as a function of rho/p**0.75
+    '''
+    bepsilon = 1e-8 ; nb = 1e4
+    b1 = 0. ; b2 = 1.-bepsilon
+    b = (b2-b1)*arange(nb+1)/double(nb)+b1
+    fb = b / (1.-b)**0.25
+    bfun = interp1d(fb, b, kind='linear', bounds_error=False, fill_value=1.)
+    return bfun
+
 # define once and globally
 betafun = betafun_define() # defines the interpolated function for beta
+betafun_p = betafun_press_define() # defines the interpolated function for beta
 
 def cons(rho, v, u, g):
     '''
@@ -146,8 +160,9 @@ def diffuse(rho, urad, v, dl, across):
     duls_half =  nubulk * (( urad * v)[1:] - ( urad * v)[:-1])\
                  *across / 3. / (rtau_left + rtau_right)
     # -- photon bulk viscosity
-    dule_half = ((urad)[1:] - (urad )[:-1])\
+    dule_half = ((urad)[1:] - (urad)[:-1])\
                 *across / 3.  / (rtau_left + rtau_right)
+    dule_half *=  (1. + nubulk * (v[1:]+v[:-1])/2.) # adding the viscous energy flux 
     # -- radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -duls_half, -dule_half 
@@ -187,21 +202,33 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = 
     sinsum = copy(g.sina*g.cth+g.cosa*g.sth) # sin(theta+alpha)
     force = copy((-sinsum/g.r**2*(1.-gamedd)+omega**2*g.r*g.sth*g.cosa)*rho*g.across) # *taufac
     if(forcecheck):
-        work = simps(force/(rho*g.across), x=g.l)
-        return work, (1./g.r[0]-1./g.r[-1])
+        network = simps(force/(rho*g.across), x=g.l)
+        return network, (1./g.r[0]-1./g.r[-1])
     beta = betafun(Fbeta(rho, u))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
+    #    urad = (urad+abs(urad))/2.
     qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
-    irradheating = heatingeff * mdot / g.r * g.sth * sinsum * taufac
+    irradheating = heatingeff * eta * mdot *afac / g.r * g.sth * sinsum * taufac
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = copy(rho*0.-dmsqueeze)
-    dudt = copy(v*force-qloss)   #!!!! +irradheating
+    dudt = copy(v*force-qloss+irradheating)
     ds = copy(force - dmsqueeze * v) # lost mass carries away momentum
     de = copy(dudt - desqueeze) # lost matter carries away energy (or enthalpy??)
     
     #    return dm, force, dudt, qloss, ueq
     return dm, ds, de, qloss #, ueq
-    
+
+def qloss_separate(rho, v, u, g):
+    '''
+    standalone estimate for flux distribution
+    '''
+    tau = rho * g.delta
+    taufac = taufun(tau)    # 1.-exp(-tau)
+    beta = betafun(Fbeta(rho, u))
+    urad = copy(u * (1.-beta)/(1.-beta/2.))
+    qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
+    return qloss
+
 def toprim(m, s, e, g):
     '''
     convert conserved quantities to primitives
@@ -209,7 +236,7 @@ def toprim(m, s, e, g):
     rho=m/g.across
     v=s/m
     u=(e-m*(v**2/2.-1./g.r-0.5*(g.r*g.sth*omega)**2))/g.across
-    umin = u.min()
+    #    umin = u.min()
     beta = betafun(Fbeta(rho, u))
     press = u/3./(1.-beta/2.)
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
@@ -249,7 +276,7 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0.):
     calculating elementary increments of conserved quantities
     '''
     rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
-    #    u, rho, press = regularize(u, rho, press)
+    u, rho, press = regularize(u, rho, press)
     fm, fs, fe = fluxes(rho, v, u, g)
     g1 = Gamma1(5./3., beta)
     csq=g1*press/rho
@@ -293,7 +320,7 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0.):
 ################################################################################
 def alltire():
     '''
-    the main routine bringing all together.
+    the main routine bringing all together
     '''
     timer.start("total")
 
@@ -303,9 +330,10 @@ def alltire():
 
     # setting geometry:
     sthd=1./sqrt(1.+(dr_e/r_e)**2) # initial sin(theta)
-    rmax=r_e*sthd # slightly less then r_e 
+    rmax=r_e*sthd # slightly less then r_e
     r=((2.*(rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
     g = geometry_initialize(r, r_e, dr_e, afac=afac) # radial-equidistant mesh
+    #     print(str(r.min()) + " = " + str(rstar)+"?")
     if (rbasefactor is None):
         rbase = r.min()
     else:
@@ -326,6 +354,8 @@ def alltire():
     r_half=rfun(luni_half) # half-step radial coordinates
     ghalf = geometry_initialize(r_half, r_e, dr_e, afac=afac) # mid-step geometry in r
     ghalf.l += g.l[1]/2. # mid-step mesh starts halfstep later
+    #    print(str((g.r).min()) + " = " + str(rstar)+"?")
+    #    ii = input("rbase")
     print("half-step Delta l = "+str(fabs(luni_half-ghalf.l).max()))
     print("half-step l step = "+str(fabs(ghalf.l[:-1]-ghalf.l[1:]).min()))
     #    ii = input("Dl")
@@ -356,18 +386,21 @@ def alltire():
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
     vinit=vout *sqrt(rmax/g.r) # initial velocity
-
+    
     # setting the initial distributions of the primitive variables:
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
-    rhonoise = 1.e-3 * random.random_sample(nx)
+    rhonoise = 1.e-2 * random.random_sample(nx)
     rho *= (rhonoise+1.)
     vinit *= ((g.r-rstar)/(g.r+rstar))**0.5
-    u =  3.*umagtar[-1] * (g.r/rmax) * (rho/rho[-1])
+    press = umagtar[-1] * (g.r/r_e) * (rho/rho[-1]+1.)/2.
+    beta = betafun_p(Fbeta_press(rho, press))
+    u = press * 3. * (1.-beta/2.)
+    u, rho, press = regularize(u, rho, press)
     # 3.*umagout+(rho/rho[-1])*0.01/g.r
     print("U = "+str((u/umagtar).min())+" to "+str((u/umagtar).max()))
     m, s, e = cons(rho, vinit, u, g)
     ulast = u[-1] # 
-    #    print(u/rho)
+    print("U/Umag(Rout) = "+str((u/umagtar)[-1]))
     #    ii=input('m')
     
     rho1, v1, u1, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
@@ -387,7 +420,7 @@ def alltire():
     # if we want to restart from a stored configuration
     # works so far correctly ONLY if the mesh is identical!
     if(ifrestart):
-        if(ifhdf):
+        if(ifhdf_restart):
             # restarting from a HDF5 file
             entryname, t, l1, r1, sth1, rho1, u1, v1 = hdf.read(restartfile, restartn)
             tstore = t
@@ -397,6 +430,8 @@ def alltire():
             ascrestartname = restartprefix + hdf.entryname(restartn, ndig=5) + ".dat"
             lines = loadtxt(ascrestartname, comments="#")
             r1 = lines[:,0]
+            r1, theta1, alpha1, across1, l1, delta1 = gread(os.path.dirname(restartprefix)+"/geo.dat")
+            sth1 = sin(theta1) ; cth1 = cos(theta1)
             umagtar1 = umag * (1.+3.*(1.-sth1**2))/4. * (1./r1)**6
             rho1 = lines[:,1] ; v1 = lines[:,2] ; u1 = lines[:,3] * umagtar1
             # what about t??
@@ -475,8 +510,13 @@ def alltire():
         ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6.
         t += dt
         csqest = 4./3.*u/rho
-        rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved         
-        dt = CFL * dlmin / sqrt(1.+2.*csqest.max()+2.*(v**2).max())
+        rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
+        # time step adjustment:
+        dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
+        qloss = qloss_separate(rho, v, u, g)
+        dt_thermal = Cth * (u/qloss)[where(qloss>0.)].min()
+        dt = 1./(1./dt_CFL + 1./dt_thermal)
+        #        print("time steps: dtCFL = "+str(dt_CFL)+", dt_thermal = "+str(dt_thermal))
         timer.stop_comp("advance")
         timer.lap("step")
         if(t>=tstore):

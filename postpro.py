@@ -231,7 +231,7 @@ def tailfit(prefix = 'out/flux', trange = None):
         t1=t[(t>trange[0])&(t<trange[1])]
         f1=f[(t>trange[0])&(t<trange[1])]
     par, pcov = curve_fit(tailfitfun, t1, f1, p0=[-2.,5., 0., f1.min()])
-    plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3])], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=True, ylog=True, formatsequence=['k.', 'r-'])
+    plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'])
     print("slope ="+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
     print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))
 
@@ -246,35 +246,42 @@ def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False):
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     print(mdot)
-    nr = size(r) ;    n = n2-n1 
-    md2 = zeros([n, nr], dtype=double)
-    t2 = zeros([n, nr], dtype=double)
-    r2 = zeros([n, nr], dtype=double)   
+    nr = size(r) 
+    indices = arange(n1, n2, step)
+    nind = size(indices)
+    md2 = zeros([nind, nr], dtype=double)
+    t2 = zeros([nind, nr], dtype=double)
+    r2 = zeros([nind, nr], dtype=double)   
+
     
-    for k in arange(n1, n2, step):
+    for k in arange(nind): # arange(n1, n2, step):
         hname = prefix + ".hdf5"
         if(ifdat):
-            fname = prefix + hdf.entryname(k, ndig=5) + ".dat"
+            fname = prefix + hdf.entryname(indices[k], ndig=5) + ".dat"
             print(fname)
             lines = loadtxt(fname, comments="#")
-            r = lines[:,0] ; rho = lines[:,2] ; v = lines[:,2]
-            t=tar[k]
+            r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2]
+            t=tar[indices[k]]
         else:
-            entryname, t, l, r, sth, rho, u, v = hdf.read(hname, k)
+            entryname, t, l, r, sth, rho, u, v = hdf.read(hname, indices[k])
         md2[k, :] = (rho * v * across)[:]
         t2[k, :] = t  ;     r2[k, :] = r[:]
 
     # ascii output:
     fmap = open(prefix+"_mdot.dat", "w")
-    for k in arange(n1, n2, step):
+    for k in arange(k):
         for kr in arange(nr):
             fmap.write(str(t2[k, kr])+" "+str(r2[k, kr])+" "+str(md2[k, kr])+"\n")
     fmap.close()
     if(ifplot):
         # graphic output
         nlev=30
-        plots.somemap(r2, t2, -md2/mdot, name=prefix+"_mdot", levels = arange(nlev)/double(nlev-2))
-
+        plots.somemap(r2, t2, -md2/mdot, name=prefix+"_mdot", levels = 2.*arange(nlev)/double(nlev-2))
+        mdmean = -md2.mean(axis=0)
+        plots.someplots(r, [mdmean/(4.*pi), mdmean*0.+mdot/(4.*pi)], name=prefix+"_mdmean",
+                        xtitle='$R/R_*$', ytitle=r"$\dot{M}c^2/L_{\rm Edd}$", formatsequence=['k.', 'r-'])
+        
+        
 def taus(n, prefix = 'out/tireout', ifhdf = True):
     '''
     calculates the optical depths along and across the flow
