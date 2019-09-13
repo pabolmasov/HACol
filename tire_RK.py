@@ -6,6 +6,8 @@ from numpy.random import rand
 from numpy import *
 # import time
 import os
+import re
+import linecache
 import os.path
 import imp
 import sys
@@ -162,7 +164,7 @@ def diffuse(rho, urad, v, dl, across):
     # -- photon bulk viscosity
     dule_half = ((urad)[1:] - (urad)[:-1])\
                 *across / 3.  / (rtau_left + rtau_right)
-    dule_half *=  (1. + nubulk * (v[1:]+v[:-1])/2.) # adding the viscous energy flux 
+    dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux 
     # -- radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -duls_half, -dule_half 
@@ -427,23 +429,31 @@ def alltire():
             print("restarted from file "+restartfile+", entry "+entryname)
         else:
             # restarting from an ascii output
+            restartdir = os.path.dirname(restartprefix)
             ascrestartname = restartprefix + hdf.entryname(restartn, ndig=5) + ".dat"
             lines = loadtxt(ascrestartname, comments="#")
             r1 = lines[:,0]
-            r1, theta1, alpha1, across1, l1, delta1 = gread(os.path.dirname(restartprefix)+"/geo.dat")
+            r1, theta1, alpha1, across1, l1, delta1 = gread(restartdir+"/geo.dat")
+            r1 /= rstar
             sth1 = sin(theta1) ; cth1 = cos(theta1)
             umagtar1 = umag * (1.+3.*(1.-sth1**2))/4. * (1./r1)**6
             rho1 = lines[:,1] ; v1 = lines[:,2] ; u1 = lines[:,3] * umagtar1
             # what about t??
+            tfile = open(ascrestartname, "r") # linecache.getline(restartfile, 1)
+            tline = tfile.readline()
+            tfile.close()
+            t=double(re.search(r'\d+.\d+', tline).group()) / tscale
+            tstore = t
             print("restarted from ascii output "+ascrestartname)
+            print("t = "+str(t))
         if (size(r1) != nx):
             print("interpolating from "+str(size(r1))+" to "+str(nx))
             print("r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
             print("r1 from "+str(r1.min())+" to "+str(r1.max()))
-            rhofun = interp1d(r1, rho1,bounds_error=False, fill_value = (rho1[0], rho1[-1]))
-            vfun = interp1d(r1, v1,bounds_error=False, fill_value = (v1[0], v1[-1]))
-            ufun = interp1d(r1, u1,bounds_error=False, fill_value = (u1[0], u1[-1]))
-            rho = rhofun(r/rstar) ; v = vfun(r/rstar) ; u = ufun(r/rstar)
+            rhofun = interp1d(log(r1), log(rho1), kind='linear', bounds_error=False, fill_value = (rho1[0], rho1[-1]))
+            vfun = interp1d(log(r1), v1, kind='linear', bounds_error=False, fill_value = (v1[0], v1[-1]))
+            ufun = interp1d(log(r1), log(u1), kind='linear', bounds_error=False, fill_value = (u1[0], u1[-1]))
+            rho = exp(rhofun(log(r/rstar))) ; v = vfun(log(r/rstar)) ; u = exp(ufun(log(r/rstar)))
         else:
             print("restarting with the same resolution")
             rho = rho1 ; v = v1 ; u = u1
