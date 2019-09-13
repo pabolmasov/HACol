@@ -2,15 +2,15 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=300 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=False
 rbasefactor = 0.1 #  
 CFL = 0.5 # CFL = 0.5 is still noisy!
-Cth = 0.125 # thermal timescale factor
+Cth = 0.25 # thermal timescale factor
 
 # physical parameters:
-mu30 = 1. # magnetic moment, 1e30 units
+mu30 = 0.01 # magnetic moment, 1e30 units
 m1=1.4
 mdot = 10. * 4. * pi
 # 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
@@ -31,7 +31,7 @@ ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fix
 squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
 # radiation transfer treatment:
-raddiff = True # if we include radiation diffusion along the field line
+raddiff = False # if we include radiation diffusion along the field line
 xirad = 1. # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 taumax = 1e2 # maximal optical depth
@@ -67,7 +67,7 @@ omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
-vout = -1./sqrt(r_e) / 5.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+vout = -1./sqrt(r_e) / 15.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 # plotting options:
 ifplot = True
@@ -90,5 +90,5 @@ print("nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
 print("nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
 
 # estimated heat flux at the outer boundary:
-print("heat coming from the outer BC "+str(-vout * 4.*pi*r_e*dr_e*4.*pi * 3.*umagout))
+print("heat coming from the outer BC "+str(-vout * 4.*pi*r_e*dr_e * 3.*umagout))
 print("compare to "+str(mdot/rstar))
