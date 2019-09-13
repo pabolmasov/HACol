@@ -446,14 +446,15 @@ def alltire():
             tstore = t
             print("restarted from ascii output "+ascrestartname)
             print("t = "+str(t))
-        if (size(r1) != nx):
+        if ((size(r1) != nx) | (r.max() < (0.99 * r1.max()))): 
             print("interpolating from "+str(size(r1))+" to "+str(nx))
             print("r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
             print("r1 from "+str(r1.min())+" to "+str(r1.max()))
-            rhofun = interp1d(log(r1), log(rho1), kind='linear', bounds_error=False, fill_value = (rho1[0], rho1[-1]))
+            rhofun = interp1d(log(r1), log(rho1), kind='linear', bounds_error=False, fill_value = (log(rho1[0]), log(rho1[-1])))
             vfun = interp1d(log(r1), v1, kind='linear', bounds_error=False, fill_value = (v1[0], v1[-1]))
-            ufun = interp1d(log(r1), log(u1), kind='linear', bounds_error=False, fill_value = (u1[0], u1[-1]))
+            ufun = interp1d(log(r1), log(u1), kind='linear', bounds_error=False, fill_value = (log(u1[0]), log(u1[-1])))
             rho = exp(rhofun(log(r/rstar))) ; v = vfun(log(r/rstar)) ; u = exp(ufun(log(r/rstar)))
+            #            ulast = u[-1]
         else:
             print("restarting with the same resolution")
             rho = rho1 ; v = v1 ; u = u1
@@ -511,7 +512,7 @@ def alltire():
                 if(coolNS):
                     utmp[0] = utmp[1] # + 3. * (rhotmp[0]+rhotmp[1])/2. / rstar**2 * dlleft #  hydrostatics
             if(ufixed):
-                utmp[-1] = minimum(ulast, 0.5*rhotmp[-1]/rmax)
+                utmp[-1] = minimum(ulast, 0.5*rhotmp[-1]/rmax) # either initial energy density or virial limit
             mtmp, stmp, etmp = cons(rhotmp, vtmp, utmp, g)
             if(ufixed):
                 e[-1] = etmp[-1]
@@ -547,6 +548,8 @@ def alltire():
                 plots.someplots(g.r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
                                 name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$',
                                 ylog=True, formatsequence=['r-', 'b-'])
+                plots.someplots(g.r, [qloss], name=outdir+'/qloss{:05d}'.format(nout),
+                                ytitle=r'$\frac{d^2 E}{dl dt}$', ylog=True)
             mtot=trapz(m, x=g.l)
             etot=trapz(e, x=g.l)
             print("mass = "+str(mtot))

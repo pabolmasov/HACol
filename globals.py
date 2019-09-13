@@ -80,6 +80,7 @@ outdir = "out/"
 
 # restart options
 ifrestart = False
+ifhdf_restart = True # if we are restarting from a hdf file (or an ascii snapshot)
 restartfile = outdir + 'tireout2.hdf5'
 restartn = 2580
 restartprefix = outdir+'tireout' # used if we restart from ascii output
