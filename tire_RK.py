@@ -276,7 +276,7 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     det[-1] = -((edot)-s_half[-1])/dlright + de[-1]
     return dmt, dst, det
 
-def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., presslast = None):
+def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., presslast = None, energy_inflow =  None):
     '''
     calculating elementary increments of conserved quantities
     '''
@@ -320,7 +320,8 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., presslast = None):
     
     ltot=trapz(flux, x=g.l) # no difference
     dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half,
-                           dm, ds, de, g, dlleft, dlright, edot = fe[-1], presslast = presslast)
+                           dm, ds, de, g, dlleft, dlright,
+                           edot = energy_inflow, presslast = presslast)
                            #fe_half[-1])
     return dmt, dst, det, ltot
 
@@ -369,6 +370,7 @@ def alltire():
     #    dlleft = ghalf.l[1]-ghalf.l[0] # 2.*(ghalf.l[1]-ghalf.l[0])-(ghalf.l[2]-ghalf.l[1])
     #    dlright = ghalf.l[-1]-ghalf.l[-2] # 2.*(ghalf.l[-1]-ghalf.l[-2])-(ghalf.l[-2]-ghalf.l[3])
     dl=g.l[1:]-g.l[:-1] # cell sizes
+    dlhalf=ghalf.l[1:]-ghalf.l[:-1] # cell sizes
     dlleft = dl[0] ; dlright = dl[-1] # 
     #
     
@@ -488,7 +490,11 @@ def alltire():
 
     ulast = u[-1]
     presslast = (press + v**2 * rho)[-1]
-        
+    if not(ufixed):
+        # presslast = None
+        fm, fs, fe = fluxes(rho, v, u, g)
+        energy_inflow = fe[-1]
+    
     dlmin=dl.min()
     dt = dlmin*CFL
     print("dt = "+str(dt))
@@ -510,10 +516,10 @@ def alltire():
     while(t<tmax):
         timer.start_comp("advance")
         # Runge-Kutta, fourth order, one step:
-        k1m, k1s, k1e, ltot1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast)
-        k2m, k2s, k2e, ltot2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast)
-        k3m, k3s, k3e, ltot3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast)
-        k4m, k4s, k4e, ltot4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast)
+        k1m, k1s, k1e, ltot1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast, energy_inflow = energy_inflow)
+        k2m, k2s, k2e, ltot2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast, energy_inflow = energy_inflow)
+        k3m, k3s, k3e, ltot3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast, energy_inflow = energy_inflow)
+        k4m, k4s, k4e, ltot4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast, energy_inflow = energy_inflow)
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
@@ -542,9 +548,13 @@ def alltire():
         dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
         qloss = qloss_separate(rho, v, u, g)
         dt_thermal = Cth * abs(u*g.across/qloss)[where(qloss>0.)].min()
-        dt = 1./(1./dt_CFL + 1./dt_thermal)
+        if(raddiff):
+            dt_diff = Cdiff * (dlhalf * 3.*rho[1:-1]).min() # (dx^2/D)
+        else:
+            dt_diff = dt_CFL * 100. # effectively infinity ;)
+        dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
         #        print("u = "+str(u))
-        #        print("time steps: dtCFL = "+str(dt_CFL)+", dt_thermal = "+str(dt_thermal))
+        #   print("time steps: dtCFL = "+str(dt_CFL)+", dt_thermal = "+str(dt_thermal)+", dt_diff = "+str(dt_diff))
         #        ii = input("UU")
         timer.stop_comp("advance")
         timer.lap("step")
@@ -554,6 +564,7 @@ def alltire():
             #            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
             print("t = "+str(t*tscale)+"s")
             print("dt = "+str(dt*tscale)+"s")
+            print("time steps: dtCFL = "+str(dt_CFL)+", dt_thermal = "+str(dt_thermal)+", dt_diff = "+str(dt_diff))
             print("ltot = "+str(ltot1)+" = "+str(ltot2)+" = "+str(ltot3)+" = "+str(ltot4))
             #            print("tratmax = "+str(tratmax))
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
@@ -566,8 +577,10 @@ def alltire():
                 plots.someplots(g.r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
                                 name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$',
                                 ylog=True, formatsequence=['r-', 'b-'])
-                plots.someplots(g.r, [qloss], name=outdir+'/qloss{:05d}'.format(nout),
-                                ytitle=r'$\frac{d^2 E}{dl dt}$', ylog=True)
+                plots.someplots(g.r, [qloss*g.l, -cumtrapz(qloss[::-1], x=g.l[::-1], initial = 0.)[::-1]],
+                                name=outdir+'/qloss{:05d}'.format(nout),
+                                ytitle=r'$\frac{d^2 E}{d\ln l dt}$', ylog=False,
+                                formatsequence = ['k-', 'r-'])
             mtot=trapz(m, x=g.l)
             etot=trapz(e, x=g.l)
             print("mass = "+str(mtot))
