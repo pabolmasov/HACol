@@ -164,7 +164,7 @@ def diffuse(rho, urad, v, dl, across):
     # -- photon bulk viscosity
     dule_half = ((urad)[1:] - (urad)[:-1])\
                 *across / 3.  / (rtau_left + rtau_right)
-    dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux 
+    #    dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux 
     # -- radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -duls_half, -dule_half 
@@ -243,7 +243,7 @@ def toprim(m, s, e, g):
     press = u/3./(1.-beta/2.)
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
-def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, edot = None, presslast = None):
+def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, edot = None, sdot = None):
     '''
     main advance step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
@@ -258,32 +258,32 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     det[1:-1] = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]
 
     #left boundary conditions:
-    dmt[0] = -(s_half[0]-(-mdotsink))/dlleft+dm[0]
+    dmt[0] = -(s_half[0]-(-mdotsink))/dlleft +dm[0]
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
-    dst[0] = 0. # mdotsink_eff does not enter here, as matter should escape sideways, but near the bottom
+    dst[0] = 0. # mdotsink_eff does not enter here, as matter should escape sideways, but through the bottom
     edotsink_eff = mdotsink * (e[0]/m[0])
     det[0] = -(fe_half[0]-(-edotsink_eff))/dlleft + de[0] # no energy sink anyway
     # right boundary conditions:
     dmt[-1] = -((-mdot)-s_half[-1])/dlright+dm[-1]
     #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
-    if(presslast is None):
+    if(sdot is None):
         dst[-1] = -(0. - p_half[-1])/dlright + ds[-1]
     else:
-        dst[-1] = -(presslast - p_half[-1])/dlright + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
+        dst[-1] = -(sdot - p_half[-1])/dlright + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
     #    edot =  abs(mdot) * 0.5/g.r[-1] + s[-1]/m[-1] * u[-1] # virial equilibrium
     if(edot is None):
         edot = 0.
     det[-1] = -((edot)-s_half[-1])/dlright + de[-1]
     return dmt, dst, det
 
-def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., presslast = None, energy_inflow =  None):
+def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = None, energy_inflow =  None):
     '''
     calculating elementary increments of conserved quantities
     '''
     rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
     u, rho, press = regularize(u, rho, press)
-    if(presslast is None):
-        presslast = press[-1]
+    if(momentum_inflow is None):
+        momentum_inflow = ((press+rho * v**2)*g.across)[-1]
     fm, fs, fe = fluxes(rho, v, u, g)
     g1 = Gamma1(5./3., beta)
     csq=g1*press/rho
@@ -321,7 +321,7 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., presslast = None, en
     ltot=trapz(flux, x=g.l) # no difference
     dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half,
                            dm, ds, de, g, dlleft, dlright,
-                           edot = energy_inflow, presslast = presslast)
+                           edot = energy_inflow, sdot = momentum_inflow)
                            #fe_half[-1])
     return dmt, dst, det, ltot
 
@@ -400,12 +400,14 @@ def alltire():
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
     rhonoise = 1.e-3 * random.random_sample(nx)
     rho *= (rhonoise+1.)
-    vinit *= ((g.r-rstar)/(g.r+rstar))**0.5
+    vinit *= ((g.r-rstar)/(rmax-rstar))**0.5
     v = copy(vinit)
     press = umagtar[-1] * (g.r/r_e) * (rho/rho[-1]+1.)/2.
     beta = betafun_p(Fbeta_press(rho, press))
     u = press * 3. * (1.-beta/2.)
     u, rho, press = regularize(u, rho, press)
+    print("estimated heat contribution to luminosity: "+str((-v*u*g.across)[-1]))
+    ii = input("HL")
     # 3.*umagout+(rho/rho[-1])*0.01/g.r
     print("U = "+str((u/umagtar).min())+" to "+str((u/umagtar).max()))
     m, s, e = cons(rho, vinit, u, g)
@@ -490,11 +492,12 @@ def alltire():
 
     ulast = u[-1]
     presslast = (press + v**2 * rho)[-1]
-    if not(ufixed):
-        # presslast = None
-        fm, fs, fe = fluxes(rho, v, u, g)
-        energy_inflow = fe[-1]
-    
+    #    if not(ufixed):
+    # presslast = None
+    fm, fs, fe = fluxes(rho, v, u, g)
+    energy_inflow = fe[-1]
+    momentum_inflow = fs[-1]
+        
     dlmin=dl.min()
     dt = dlmin*CFL
     print("dt = "+str(dt))
@@ -516,10 +519,10 @@ def alltire():
     while(t<tmax):
         timer.start_comp("advance")
         # Runge-Kutta, fourth order, one step:
-        k1m, k1s, k1e, ltot1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast, energy_inflow = energy_inflow)
-        k2m, k2s, k2e, ltot2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast, energy_inflow = energy_inflow)
-        k3m, k3s, k3e, ltot3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast, energy_inflow = energy_inflow)
-        k4m, k4s, k4e, ltot4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot, presslast = presslast, energy_inflow = energy_inflow)
+        k1m, k1s, k1e, ltot1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow)
+        k2m, k2s, k2e, ltot2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow)
+        k3m, k3s, k3e, ltot3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow)
+        k4m, k4s, k4e, ltot4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow)
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.

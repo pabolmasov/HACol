@@ -5,13 +5,13 @@ from numpy import *
 nx=1000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
-rbasefactor = 0.1 #  
+rbasefactor = 0.5 #  
 CFL = 0.5 # CFL = 0.5 is still noisy!
 Cth = 0.25 # thermal timescale factor
 Cdiff = 0.25
 
 # physical parameters:
-mu30 = 0.01 # magnetic moment, 1e30 units
+mu30 = 0.1 # magnetic moment, 1e30 units
 m1=1.4
 mdot = 10. * 4. * pi
 # 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
@@ -45,7 +45,7 @@ nubulk = 0.5 # bulk viscosity coeff. Coughlin & Begelman (2014) give 8/81, Loeb 
 
 eta = 0.0 # self-illumination efficiency 
 heatingeff = 0.1 # additional heating scaling with mdot
-afac = 1. # part of the longitudes subtended by the flow
+afac = 0.1 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
 dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.05) # radial extent of the flow at r_e
