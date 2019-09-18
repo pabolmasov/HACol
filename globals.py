@@ -2,11 +2,13 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=3000 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
 rbasefactor = 0.5 #  
-CFL = 0.25 # CFL = 0.5 is still noisy!
+CFL = 0.5 # CFL = 0.5 is still noisy!
+Cth = 0.25 # thermal timescale factor
+Cdiff = 0.25
 
 # physical parameters:
 mu30 = 0.1 # magnetic moment, 1e30 units
@@ -30,7 +32,7 @@ ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fix
 squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
 # radiation transfer treatment:
-raddiff = True # if we include radiation diffusion along the field line
+raddiff = False # if we include radiation diffusion along the field line
 xirad = 1. # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 taumax = 1e2 # maximal optical depth
@@ -38,15 +40,15 @@ taumax = 1e2 # maximal optical depth
 mfloor = 1e-15  # crash floor for mass per unit length
 rhofloor = 1e-15 # crash floor for density
 ufloor = 1e-15 # crash floor for energy density
-csqmin = 1e-8
-nubulk = 0.0 # bulk viscosity coeff.
+csqmin = 1e-16
+nubulk = 0.5 # bulk viscosity coeff. Coughlin & Begelman (2014) give 8/81, Loeb & Laor (1992) 40/81 -- check which one is correct! Maybe the definition of zeta is different
 
 eta = 0.0 # self-illumination efficiency 
-heatingeff = 0.0 # additional heating scaling with mdot
+heatingeff = 0.1 # additional heating scaling with mdot
 afac = 0.1 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
-dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
+dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.05) # radial extent of the flow at r_e
 print("Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
 print("magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
 print("Delta re = "+str(dr_e))
@@ -79,8 +81,9 @@ outdir = "out/"
 
 # restart options
 ifrestart = False
+ifhdf_restart = True # if we are restarting from a hdf file (or an ascii snapshot)
 restartfile = outdir + 'tireout2.hdf5'
-restartn = 1110
+restartn = 2580
 restartprefix = outdir+'tireout' # used if we restart from ascii output
 
 # estimating optimal N for a linear grid
@@ -88,5 +91,5 @@ print("nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
 print("nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
 
 # estimated heat flux at the outer boundary:
-print("heat coming from the outer BC "+str(-vout * 4.*pi*r_e*dr_e*4.*pi * 3.*umagout))
+print("heat coming from the outer BC "+str(-vout * 4.*pi*r_e*dr_e * 3.*umagout))
 print("compare to "+str(mdot/rstar))

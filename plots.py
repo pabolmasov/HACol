@@ -102,7 +102,7 @@ def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle='$r$, $GM/c^2$ un
     else:
         pcolormesh(x, y, q, cmap='hot')
     colorbar()
-    contour(x, y, q, levels=[1.], colors='w')
+    #    contour(x, y, q, levels=[1.], colors='k')
     if(xlog):
         xscale('log')
     if(ylog):
@@ -264,7 +264,7 @@ def quasi2d(hname, n1, n2):
     fig=figure()
     contourf(rnew, tar*tscale, lurel, cmap='hot', levels=lulev)
     colorbar()
-#    contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
+    #    contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
@@ -382,13 +382,16 @@ def energytest(fluxfile='out/flux', totfile='out/totals'):
     tene = lines[:,0]/tscale ; ene=lines[:,2] ; mass=lines[:,1]
     enlost = cumtrapz(flu, x=tflux, initial=0.)
     Neff=1./rstar
+    print(Neff)
+    enlostfun = interp1d(tflux, enlost, kind = 'linear')
     clf()
-    plot(tflux*tscale, enlost, color='k', label="radiated")
-    plot(tene*tscale, ene-ene[0], color='r', label="gain")
+    #    plot(tflux*tscale, enlost, color='k', label="radiated")
+    plot(tene*tscale, ene-ene[0]+enlostfun(tene)/2., color='k', label="budget")    
+    plot(tene*tscale, -ene+ene[0], color='r', label="gain")
     plot(tene*tscale, (mass-mass[0])*Neff, color='g', label="gravitational")
     plot(tene*tscale, (tene-tene[0])*mdot*Neff, color='g', linestyle='dotted', label="gravitational, est.")
     legend()
-    ylim(((mass-mass[0])*Neff).min(), ((mass-mass[0])*Neff).max())
+    #    ylim(((mass-mass[0])*Neff).min(), ((mass-mass[0])*Neff).max())
     xlabel('t') 
     ylabel('energy')
     savefig('energytest.png')

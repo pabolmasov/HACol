@@ -47,6 +47,15 @@ def close(hfile):
     hfile.close()
 
 #########################
+def keyshow(filename):
+    '''
+    showing the list of keys (entries) in a given data file
+    '''
+    f = h5py.File(filename,'r', libver='latest')
+    keys = list(f.keys())
+    #    print(list(f.keys()))
+    f.close()
+    return keys
 
 def read(hname, nentry):
     '''

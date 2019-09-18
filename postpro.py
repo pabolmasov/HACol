@@ -231,40 +231,57 @@ def tailfit(prefix = 'out/flux', trange = None):
         t1=t[(t>trange[0])&(t<trange[1])]
         f1=f[(t>trange[0])&(t<trange[1])]
     par, pcov = curve_fit(tailfitfun, t1, f1, p0=[-2.,5., 0., f1.min()])
-    plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3])], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=True, ylog=True, formatsequence=['k.', 'r-'])
+    plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'])
     print("slope ="+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
     print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))
 
 ##################################################################
-def mdotmap(n1, n2, step,  prefix = "out/tireout"):
+def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False):
     # reconstructs the mass flow
     # reding geometry:
     geofile = os.path.dirname(prefix)+"/geo.dat"
+    fluxfile = os.path.dirname(prefix)+"/flux.dat"
+    fluxlines = loadtxt(fluxfile, comments="#")
+    tar=fluxlines[:,0]
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     print(mdot)
-    nr = size(r) ;    n = n2-n1 
-    md2 = zeros([n, nr], dtype=double)
-    t2 = zeros([n, nr], dtype=double)
-    r2 = zeros([n, nr], dtype=double)   
+    nr = size(r) 
+    indices = arange(n1, n2, step)
+    nind = size(indices)
+    md2 = zeros([nind, nr], dtype=double)
+    t2 = zeros([nind, nr], dtype=double)
+    r2 = zeros([nind, nr], dtype=double)   
+
     
-    for k in arange(n):
+    for k in arange(nind): # arange(n1, n2, step):
         hname = prefix + ".hdf5"
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, k+n1)
+        if(ifdat):
+            fname = prefix + hdf.entryname(indices[k], ndig=5) + ".dat"
+            print(fname)
+            lines = loadtxt(fname, comments="#")
+            r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2]
+            t=tar[indices[k]]
+        else:
+            entryname, t, l, r, sth, rho, u, v = hdf.read(hname, indices[k])
         md2[k, :] = (rho * v * across)[:]
         t2[k, :] = t  ;     r2[k, :] = r[:]
 
     # ascii output:
     fmap = open(prefix+"_mdot.dat", "w")
-    for k in arange(n):
+    for k in arange(k):
         for kr in arange(nr):
             fmap.write(str(t2[k, kr])+" "+str(r2[k, kr])+" "+str(md2[k, kr])+"\n")
     fmap.close()
     if(ifplot):
         # graphic output
         nlev=30
-        plots.somemap(r2, t2, -md2/mdot, name=prefix+"_mdot", levels = arange(nlev)/double(nlev-2))
-
+        plots.somemap(r2, t2, -md2/mdot, name=prefix+"_mdot", levels = 2.*arange(nlev)/double(nlev-2))
+        mdmean = -md2.mean(axis=0)
+        plots.someplots(r, [mdmean/(4.*pi), mdmean*0.+mdot/(4.*pi)], name=prefix+"_mdmean",
+                        xtitle='$R/R_*$', ytitle=r"$\dot{M}c^2/L_{\rm Edd}$", formatsequence=['k.', 'r-'])
+        
+        
 def taus(n, prefix = 'out/tireout', ifhdf = True):
     '''
     calculates the optical depths along and across the flow
@@ -286,3 +303,39 @@ def taus(n, prefix = 'out/tireout', ifhdf = True):
     taucrossfun = interp1d(r, taucross, kind = 'linear')
     if(ifplot):
         plots.someplots(rc/rstar, [taucrossfun(rc), taualong], name = prefix+"_tau", xtitle=r'$r/R_{\rm NS}$', ytitle=r'$\tau$', xlog=True, ylog=True, formatsequence=['k-', 'r-'])
+
+def virialratio(n, prefix = 'out/tireout', ifhdf = True):
+    '''
+    checks the virial relations in the flow
+    '''
+    geofile = os.path.dirname(prefix)+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile) 
+    if(ifhdf):
+        hname = prefix + ".hdf5"
+        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n)
+    else:
+        entryname = hdf.entryname(n, ndig=5)
+        fname = prefix + entryname + ".dat"
+        lines = loadtxt(fname, comments="#")
+        rho = lines[:,1]
+    egrav = trapz(rho * across / r, x = l)
+    ethermal = trapz(u * across, x = l)
+    ebulk = trapz(rho * across * v**2/2., x = l)
+
+    return t, egrav, ethermal, ebulk, (ethermal+ebulk)/egrav
+
+def virialtest(n1, n2, prefix = 'out/tireout'):
+    '''
+    tests virial relations as a function of time
+    '''
+    nar = arange(n2-n1)+n1
+
+    virar = zeros(n2-n1) ; tar = zeros(n2-n1)
+    
+    for k in arange(n2-n1):
+        t, egrav, ethermal, ebulk, viratio = virialratio(nar[k], prefix = prefix)
+        virar[k] = viratio ; tar[k] = t
+
+    if(ifplot):
+        plots.someplots(tar, [virar], name = prefix+"_vire", xtitle=r'$t$', ytitle=r'$E_{\rm k} / E_{\rm g}$', xlog=False, ylog=False, formatsequence=['k-'])
