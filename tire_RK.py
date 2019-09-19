@@ -158,13 +158,15 @@ def diffuse(rho, urad, v, dl, across):
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
     rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
+    rtau = rtau_left + rtau_right
+    rtau_exp = tratfac(copy(rtau))
     
     duls_half =  nubulk * (( urad * v)[1:] - ( urad * v)[:-1])\
-                 *across / 3. / (rtau_left + rtau_right)
+                 *across / 3. * rtau_exp #  / (rtau_left + rtau_right)
     # -- photon bulk viscosity
     dule_half = ((urad)[1:] - (urad)[:-1])\
-                *across / 3.  / (rtau_left + rtau_right)
-    #    dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux 
+                *across / 3. * rtau_exp # / (rtau_left + rtau_right)
+    dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux 
     # -- radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -duls_half, -dule_half 
@@ -208,7 +210,7 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = 
         return network, (1./g.r[0]-1./g.r[-1])
     beta = betafun(Fbeta(rho, u))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
-    #    urad = (urad+abs(urad))/2.
+    urad = (urad+abs(urad))/2.
     qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
     irradheating = heatingeff * eta * mdot *afac / g.r * g.sth * sinsum * taufac
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
@@ -228,6 +230,7 @@ def qloss_separate(rho, v, u, g):
     taufac = taufun(tau)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
+    urad = (urad+abs(urad))/2.    
     qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
@@ -295,13 +298,16 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = No
     # sigvel_linearized(v, cs, g1, rho, press)
     # sigvel_isentropic(v, cs, g1, csqmin=csqmin)
     if any(vl>=vm) or any(vm>=vr):
-        print(v)
-        print(cs)
-        print(vl[vl>=vm])
-        print(vm[vl>=vm])
-        print(vr[vr<=vm])
-        print(vm[vr<=vm])
-        ii=input("cs")
+        wwrong = (vl >=vm) | (vm<=vr)
+        print("rho = "+str(rho[wwrong]))
+        print("u = "+str(u[wwrong]))
+        print(vl[wwrong])
+        print(vm[wwrong])
+        print(vr[wwrong])
+        print(vm[wwrong])
+        print("R = "+str(g.r[wwrong]))
+        print("signal velocities crashed")
+        #        ii=input("cs")
         
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
@@ -514,7 +520,9 @@ def alltire():
     if(ifhdf):
         hname = outdir+'/'+'tireout.hdf5'
         hfile = hdf.init(hname, g) # , m1, mdot, eta, afac, re, dre, omega)
-    
+
+    crash = False # we have not crashed (yet)
+        
     timer.start("total")
     while(t<tmax):
         timer.start_comp("advance")
@@ -559,19 +567,15 @@ def alltire():
         if any(isnan(u)) is True:
             print(r[where(isnan(u))])
             print("the code has produced a number of NaN values and will terminate ")
-            # TODO: make a thorough crash output
-            fflux.close()
-            ftot.close()
-            if(ifhdf):
-                hdf.close(hfile)
-            break
+            crash = True
+            nout = -1
             
         # time step adjustment:
         dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
         qloss = qloss_separate(rho, v, u, g)
         dt_thermal = Cth * abs(u*g.across/qloss)[where(qloss>0.)].min()
         if(raddiff):
-            dt_diff = Cdiff * (dlhalf * 3.*rho[1:-1]).min() # (dx^2/D)
+            dt_diff = Cdiff * (dlhalf**2 * 3.*rho[1:-1]).min() # (dx^2/D)
         else:
             dt_diff = dt_CFL * 100. # effectively infinity ;)
         dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
@@ -580,7 +584,7 @@ def alltire():
         #        ii = input("UU")
         timer.stop_comp("advance")
         timer.lap("step")
-        if(t>=tstore):
+        if (t>=tstore) | crash:
             tstore += dtout
             timer.start("io")
             #            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
@@ -633,6 +637,8 @@ def alltire():
                 timer.start("step") #refresh lap counter (avoids IO profiling)
                 timer.purge_comps()
             nout+=1
+            if(crash):
+                break
     fflux.close()
     ftot.close()
     if(ifhdf):
