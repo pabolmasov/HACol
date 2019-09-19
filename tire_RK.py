@@ -87,7 +87,7 @@ def tratfac(x):
     if(size(wnan)>0):
         tt[wnan] = 0.
         print("trat = "+str(x.min())+".."+str(x.max()))
-        ip = input('trat')
+        #        ip = input('trat')
     return tt
 
 # pressure ratios:
@@ -407,7 +407,7 @@ def alltire():
     u = press * 3. * (1.-beta/2.)
     u, rho, press = regularize(u, rho, press)
     print("estimated heat contribution to luminosity: "+str((-v*u*g.across)[-1]))
-    ii = input("HL")
+    #    ii = input("HL")
     # 3.*umagout+(rho/rho[-1])*0.01/g.r
     print("U = "+str((u/umagtar).min())+" to "+str((u/umagtar).max()))
     m, s, e = cons(rho, vinit, u, g)
@@ -526,7 +526,11 @@ def alltire():
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
-        s[0] = -mdotsink ; s[-1] = -mdot
+        s[0] = -mdotsink
+        if v[-1] < 0.:
+            s[-1] = -mdot
+        else:
+            s[-1] = s[-2] # outflowing
         if(ufixed or galyamode or coolNS):
             # imposes a constant-thermal-energy outer BC
             # sort of redundant because it converts the whole variable set instead of the single last point; need to optimize it!
@@ -540,13 +544,28 @@ def alltire():
                 utmp[-1] = minimum(ulast, 0.5*rhotmp[-1]/rmax) # either initial energy density or virial limit
             mtmp, stmp, etmp = cons(rhotmp, vtmp, utmp, g)
             if(ufixed):
-                e[-1] = etmp[-1]
+                if v[-1] <=0.:
+                    e[-1] = etmp[-1]
+                    # only for an inward flow; otherwise there shd be an outflow condition
+                else:
+                    e[-1] = e[-2]
             if(galyamode or coolNS):
                 e[0] = etmp[0]
         ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6.
         t += dt
         csqest = 4./3.*u/rho
         rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
+        # crash case:
+        if any(isnan(u)) is True:
+            print(r[where(isnan(u))])
+            print("the code has produced a number of NaN values and will terminate ")
+            # TODO: make a thorough crash output
+            fflux.close()
+            ftot.close()
+            if(ifhdf):
+                hdf.close(hfile)
+            break
+            
         # time step adjustment:
         dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
         qloss = qloss_separate(rho, v, u, g)

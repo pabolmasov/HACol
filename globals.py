@@ -2,10 +2,10 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=3000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
-rbasefactor = 0.5 #  
+rbasefactor = 0.1 #  
 CFL = 0.5 # CFL = 0.5 is still noisy!
 Cth = 0.25 # thermal timescale factor
 Cdiff = 0.25
@@ -33,7 +33,7 @@ squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
 # radiation transfer treatment:
 raddiff = False # if we include radiation diffusion along the field line
-xirad = 1. # radiation diffusion scaling
+xirad = 0.1 # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 taumax = 1e2 # maximal optical depth
 
@@ -77,7 +77,7 @@ ascalias = 10 # make an ascii file every Nth output step
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
-outdir = "out/"
+outdir = "out"
 
 # restart options
 ifrestart = False
