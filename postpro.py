@@ -155,7 +155,7 @@ def shock_dat(n, prefix = "out/tireout"):
     #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
     return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.
     
-def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot):
+def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = afac):
     '''
     draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
     '''
@@ -204,7 +204,11 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot):
     fout.close()
     fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
     fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')
-    fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
+
+    if isscalar(xs):
+        fglo.write(str(eqlum)+' '+str(xs)+' '+str(rcool/rstar)+'\n')
+    else:
+        fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
     fglo.close()
     # last 0.1s average shock position
 #    tn=copy(s)

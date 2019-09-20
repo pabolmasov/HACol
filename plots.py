@@ -424,11 +424,11 @@ def multishock_plot(fluxfile, frontfile):
     frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
     frontinfo = loadtxt(frontfile+'glo.dat', comments="#", delimiter=" ", unpack=False)
     tf=fluxlines[:,0] ; f=fluxlines[:,1]
-    ts=frontlines[:,0] ; s=frontlines[:,1] ; ds=frontlines[:,2]
+    ts=frontlines[1:,0] ; s=frontlines[1:,1] ; ds=frontlines[1:,2]
     eqlum = frontinfo[0] ; rs = frontinfo[1] ; rcool = frontinfo[2]
     
     # interpolate!
-    fint = interp1d(tf, f)
+    fint = interp1d(tf, f, bounds_error=False)
     
     someplots(ts, [s, s*0. + rs, s*0. + rcool], name = frontfile + "_frontcurve", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
     someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)

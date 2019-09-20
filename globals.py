@@ -32,8 +32,8 @@ ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fix
 squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
 # radiation transfer treatment:
-raddiff = False # if we include radiation diffusion along the field line
-xirad = 0.1 # radiation diffusion scaling
+raddiff = True # if we include radiation diffusion along the field line
+xirad = 1. # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 taumax = 1e2 # maximal optical depth
 
@@ -81,7 +81,7 @@ outdir = "out"
 
 # restart options
 ifrestart = False
-ifhdf_restart = True # if we are restarting from a hdf file (or an ascii snapshot)
+ifhdf_restart = True # if we are restarting from a hdf file (or an ascii snapshot); relevant only if ifrestart = True
 restartfile = outdir + 'tireout2.hdf5'
 restartn = 2580
 restartprefix = outdir+'tireout' # used if we restart from ascii output

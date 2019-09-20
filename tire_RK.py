@@ -299,13 +299,13 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = No
     # sigvel_isentropic(v, cs, g1, csqmin=csqmin)
     if any(vl>=vm) or any(vm>=vr):
         wwrong = (vl >=vm) | (vm<=vr)
-        print("rho = "+str(rho[wwrong]))
-        print("u = "+str(u[wwrong]))
+        print("rho = "+str((rho[1:])[wwrong]))
+        print("u = "+str((u[1:])[wwrong]))
         print(vl[wwrong])
         print(vm[wwrong])
         print(vr[wwrong])
         print(vm[wwrong])
-        print("R = "+str(g.r[wwrong]))
+        print("R = "+str(ghalf.r)[wwrong]))
         print("signal velocities crashed")
         #        ii=input("cs")
         
