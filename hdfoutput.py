@@ -70,7 +70,7 @@ def read(hname, nentry):
     data=hfile["entry"+entry]
     rho=data["rho"][:] ; u=data["u"][:] ; v=data["v"][:] # reading the snapshot
     t=data.attrs["t"]
-    print("t="+str(t))
+    print("t="+str(t)+" ("+str(nentry)+")")
     hfile.close()
     return entry, t, l, r/rstar, sth, rho, u, v 
 

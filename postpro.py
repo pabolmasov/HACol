@@ -105,7 +105,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False):
             fdyns.write(str(tcenter[kt])+' '+str(binfreq[kb])+' '+str(binfreq[kb+1])+' '+str(pds2[kt,kb])+' '+str(dpds2[kt,kb])+" "+str(nbin[kt,kb])+"\n")
     fdyns.close()
     print(t2.max())
-    plots.dynspec(t2,binfreq2, log10(pds2), outfile=infile+'_dyns', nbin=nbin)
+    plots.plot_dynspec(t2,binfreq2, log10(pds2), outfile=infile+'_dyns', nbin=nbin)
 
 #############################################
 def fhist(infile = "out/flux"):
@@ -172,7 +172,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = 
     BSgamma = (2.*across0/delta0**2)/mdot*rstar
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*30.*umag*m1)**0.25*sqrt(delta0)/(rstar)**0.125
-    xs = bs.xis(BSgamma, BSeta, x0=20.)
+    xs = bs.xis(BSgamma, BSeta, x0=2.)
     
     # spherization radius
     rsph =1.5*mdot/4./pi
@@ -191,12 +191,15 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = 
 
     print("predicted shock position: xs = "+str(xs)+" (rstar)")
     print("cooling limit: rcool/rstar = "+str(rcool/rstar))
+    f /= 4.*pi ; eqlum /= 4.*pi
         
     if(ifplot):
         ws=where(s>1.)
         n=n[ws]
-        plots.someplots(t[n], [s[ws], s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
-        plots.someplots(f[n], [s[ws], s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+        plots.someplots(t[n], [s[ws], s*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
+        plots.someplots(f[n], [s[ws], s*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=True, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+        plots.someplots(t[n], [f[n], f[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
+    
     # ascii output
     fout = open(outdir+'/sfront.dat', 'w')
     for k in arange(size(n)):

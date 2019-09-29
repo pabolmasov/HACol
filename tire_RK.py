@@ -305,7 +305,7 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = No
         print(vm[wwrong])
         print(vr[wwrong])
         print(vm[wwrong])
-        print("R = "+str(ghalf.r)[wwrong]))
+        print("R = "+str(ghalf.r[wwrong]))
         print("signal velocities crashed")
         #        ii=input("cs")
         
@@ -462,10 +462,17 @@ def alltire():
             tstore = t
             print("restarted from ascii output "+ascrestartname)
             print("t = "+str(t))
-        if ((size(r1) != nx) | (r.max() < (0.99 * r1.max()))): 
+        print("r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
+        print("r1 from "+str(r1.min())+" to "+str(r1.max()))
+        if(r.max()>(1.01*r1.max()*rstar)):
+            print("restarting: size does not match!")
+            return(1)
+        if ((size(r1) != nx) | (r.max() < (0.99 * r1.max()))):
+            # minimal heat and minimal mass
+            #
+            rhorestartfloor = 1e-5 * mdot / r**1.5 ; urestartfloor = 1e-5 * rhorestartfloor / r
+            rho1 = maximum(rho1, rhorestartfloor) ; u1 = maximum(u1, urestartfloor)
             print("interpolating from "+str(size(r1))+" to "+str(nx))
-            print("r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
-            print("r1 from "+str(r1.min())+" to "+str(r1.max()))
             print("rho1 from "+str(rho1.min())+" to "+str(rho1.max()))
             rhofun = interp1d(log(r1), log(rho1), kind='linear', bounds_error=False, fill_value = (log(rho1[0]), log(rho1[-1])))
             vfun = interp1d(log(r1), v1, kind='linear', bounds_error=False, fill_value = (v1[0], v1[-1]))
@@ -520,7 +527,8 @@ def alltire():
     if(ifhdf):
         hname = outdir+'/'+'tireout.hdf5'
         hfile = hdf.init(hname, g) # , m1, mdot, eta, afac, re, dre, omega)
-
+        print("output to "+hname)
+        
     crash = False # we have not crashed (yet)
         
     timer.start("total")

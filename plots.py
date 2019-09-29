@@ -132,6 +132,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         formatsequence = ["." for x in range(ny)]
 
     clf()
+    fig = figure()
     for k in arange(ny):
         if vertical is not None:
             plot([vertical, vertical], [ys[k].min(), ys[k].max()], 'r-')
@@ -140,7 +141,11 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         xscale('log')
     if(ylog):
         yscale('log')
-    xlabel(xtitle) ; ylabel(ytitle)
+    xlabel(xtitle, fontsize=14) ; ylabel(ytitle, fontsize=14)
+    plt.tick_params(labelsize=12, length=1, width=1., which='minor')
+    plt.tick_params(labelsize=12, length=3, width=1., which='major')
+    fig.set_size_inches(4, 4)
+    fig.tight_layout()
     savefig(name+'.png')
     close('all')
   
@@ -169,7 +174,7 @@ def binplot_short(freq, dfreq, pds, dpds, outfile='binnedpds'):
     savefig(outfile+'.png')
     close()
     
-def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
+def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
 
     nbin0=2
     
@@ -220,7 +225,9 @@ def quasi2d(hname, n1, n2):
         uar[k, :] = ufun(rnew)
         tar[k] = t
     nv=30
-    vlev=linspace(var.min(), var.max(), nv, endpoint=True)
+    vmin = round(var.min(),2)
+    vmax = round(var.max(),2)
+    vlev=linspace(vmin, vmax, nv, endpoint=True)
     print(var.min())
     print(var.max())
     varmean = var.mean(axis=0)
@@ -228,7 +235,8 @@ def quasi2d(hname, n1, n2):
     # velocity
     clf()
     fig=figure()
-    pcolormesh(rnew, tar*tscale, var, vmin=var.min(), vmax=var.max(),cmap='hot')
+    contourf(rnew, tar*tscale, var, vlev, cmap='hot')
+    #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
     colorbar()
 #    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
@@ -258,7 +266,9 @@ def quasi2d(hname, n1, n2):
     #    print(umag)
     for k in arange(nrnew):
         lurel[:,k] = log10(uar[:,k]/umagtar[k])
-    lulev = linspace(lurel[uar>0.].min(), lurel[uar>0.].max(), 20, endpoint=True)
+    umin = round(lurel[uar>0.].min(),2)
+    umax = round(lurel[uar>0.].max(),2)
+    lulev = linspace(umin, umax, nv, endpoint=True)
     print(lulev)
     clf()
     fig=figure()
@@ -426,16 +436,54 @@ def multishock_plot(fluxfile, frontfile):
     tf=fluxlines[:,0] ; f=fluxlines[:,1]
     ts=frontlines[1:,0] ; s=frontlines[1:,1] ; ds=frontlines[1:,2]
     eqlum = frontinfo[0] ; rs = frontinfo[1] ; rcool = frontinfo[2]
+
+    f /= 4.*pi # ; eqlum /= 4.*pi
     
     # interpolate!
     fint = interp1d(tf, f, bounds_error=False)
     
     someplots(ts, [s, s*0. + rs, s*0. + rcool], name = frontfile + "_frontcurve", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
-    someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+    someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+    someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
+    
+def twomultishock_plot(fluxfile1, frontfile1, fluxfile2, frontfile2):
+    '''
+    plotting two shock fronts together
+    '''
+    # twomultishock_plot("titania_fidu/flux", "titania_fidu/sfront", "titania_rot/flux", "titania_rot/sfront")
+    fluxlines1 = loadtxt(fluxfile1+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontlines1 = loadtxt(frontfile1+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontinfo1 = loadtxt(frontfile1+'glo.dat', comments="#", delimiter=" ", unpack=False)
+    fluxlines2 = loadtxt(fluxfile2+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontlines2 = loadtxt(frontfile2+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontinfo2 = loadtxt(frontfile2+'glo.dat', comments="#", delimiter=" ", unpack=False)
+    tf1=fluxlines1[:,0] ; f1=fluxlines1[:,1]
+    ts1=frontlines1[1:,0] ; s1=frontlines1[1:,1] ; ds1=frontlines1[1:,2]
+    tf2=fluxlines2[:,0] ; f2=fluxlines2[:,1]
+    ts2=frontlines2[1:,0] ; s2=frontlines2[1:,1] ; ds2=frontlines2[1:,2]
+    eqlum = frontinfo1[0] ; rs = frontinfo1[1]
 
+    f1 /= 4.*pi ; f2 /= 4.*pi  # ; eqlum /= 4.*pi
+    
+    # interpolate!
+    fint1 = interp1d(tf1, f1, bounds_error=False)
+    fint2 = interp1d(tf2, f2, bounds_error=False)
+    sint = interp1d(ts2, s2, bounds_error=False) # second shock position
+
+    clf()
+    plot(fint1(ts1), s1, 'g--', linewidth = 2)
+    plot(fint2(ts2), s2, 'k-')
+    plot([minimum(f1.min(), f2.min()), maximum(f1.max(), f2.max())], [rs, rs], 'r-')
+    plot([eqlum, eqlum], [minimum(s1.min(), s2.min()), maximum(s1.max(), s2.max())], 'r-')
+    xlabel(r'$L/L_{\rm Edd}$', fontsize=14) ; ylabel(r'$R_{\rm shock}/R_*$', fontsize=14)
+    savefig("twofluxfronts.png") ;   savefig("twofluxfronts.eps")
+    close('all')
+    
+    #    someplots(fint1(ts1), [s1, sint(ts1), s1*0. + rs], name = "twofluxfronts", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+    
 #############################################################
 def allfluxes():
-    dirs = [ 'titania_fidu', 'titania_rot', 'titaniaW', 'titaniaI']
+    dirs = [ 'titania_fidu', 'titania_rot', 'titania_wide', 'titania_irr']
     labels = ['F', 'R', 'W', 'I']
     fmtseq = ['-k', '-r', '-g', '-b']
 
@@ -450,6 +498,7 @@ def allfluxes():
         plot(t, f/4./pi, fmtseq[k], label=labels[k])
         
     legend()
-    yscale('log') ; ylim(0.2,20.); xlim(0.0,0.4)
+    yscale('log') ; ylim(1.,20.); xlim(0.0,0.4)
     xlabel(r'$t$, s') ; ylabel(r'$L/L_{\rm Edd}$')
     savefig('allfluxes.png')
+    close('all')
