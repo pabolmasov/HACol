@@ -346,3 +346,19 @@ def virialtest(n1, n2, prefix = 'out/tireout'):
 
     if(ifplot):
         plots.someplots(tar, [virar], name = prefix+"_vire", xtitle=r'$t$', ytitle=r'$E_{\rm k} / E_{\rm g}$', xlog=False, ylog=False, formatsequence=['k-'])
+
+def filteredflux(hfile, n1, n2, rfraction = 0.9):
+    '''
+    calculates the flux excluding several outer points affected by the outer BC
+    hfile is the input HDF5 file
+    n1 is the number of the first entry
+    n2 is the last one
+    rfraction is the rangle of radii where the flux is being calculated
+    '''
+    r, theta, alpha, across, l, delta = geo.gread(geofile)
+    wr = r < (r.max()*rfraction)
+    
+    for k in arange(n2-n1)+n1:
+        entryname, t, l, r, sth, rho, u, v = hdf.read(hfile, k)
+        print(entryname)
+        

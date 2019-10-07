@@ -470,8 +470,8 @@ def alltire():
         if ((size(r1) != nx) | (r.max() < (0.99 * r1.max()))):
             # minimal heat and minimal mass
             #
-            rhorestartfloor = 1e-5 * mdot / r**1.5 ; urestartfloor = 1e-5 * rhorestartfloor / r
-            rho1 = maximum(rho1, rhorestartfloor) ; u1 = maximum(u1, urestartfloor)
+            #            rhorestartfloor = 1e-5 * mdot / r**1.5 ; urestartfloor = 1e-5 * rhorestartfloor / r
+            rho1 = maximum(rho1, rhofloor) ; u1 = maximum(u1, ufloor)
             print("interpolating from "+str(size(r1))+" to "+str(nx))
             print("rho1 from "+str(rho1.min())+" to "+str(rho1.max()))
             rhofun = interp1d(log(r1), log(rho1), kind='linear', bounds_error=False, fill_value = (log(rho1[0]), log(rho1[-1])))
@@ -626,7 +626,7 @@ def alltire():
             ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
             ftot.flush()
             if(ifhdf):
-                hdf.dump(hfile, nout, t, rho, v, u)
+                hdf.dump(hfile, nout, t, rho, v, u, qloss)
             if not(ifhdf) or (nout%ascalias == 0):
                 # ascii output:
                 print(nout)
