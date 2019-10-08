@@ -27,7 +27,7 @@ betacoeff = 1.788e-5 * (m1)**(-0.25)/mow # coefficient used to calculate gas-to-
 galyamode = False # if on, limits the internal energy density by MF energy density at the inner boundary
 coolNS = False # if on (and galyamode is off), internal energy is constant at the inner boundary
 # a test with coolNS converges well, but it is completely unphysical
-ufixed = False # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
+ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
 # (setting ufixed = False leads to unpredictable results if v changes at the outer boundary, as the heat flux is (u+p)v)
 squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
@@ -48,7 +48,7 @@ heatingeff = 0.1 # additional heating scaling with mdot
 afac = 0.1 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
-dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.05) # radial extent of the flow at r_e
+dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
 print("Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
 print("magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
 print("Delta re = "+str(dr_e))
@@ -64,7 +64,7 @@ massscale = 6.23091e10*m1**2 # (GMsun/c**2)**2/kappa
 #
 tmax = 1000./tscale # maximal time in tscales
 dtout = 0.0001/tscale # output time step in tscales
-omega = sqrt(0.9)*r_e**(-1.5) # in Keplerian units on the outer rim
+omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)

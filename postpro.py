@@ -355,10 +355,29 @@ def filteredflux(hfile, n1, n2, rfraction = 0.9):
     n2 is the last one
     rfraction is the rangle of radii where the flux is being calculated
     '''
+    geofile = os.path.dirname(hfile)+"/geo.dat"
     r, theta, alpha, across, l, delta = geo.gread(geofile)
     wr = r < (r.max()*rfraction)
+
+    lint = zeros(n2-n1)
+    ltot = zeros(n2-n1)
+    tar = zeros(n2-n1)
     
     for k in arange(n2-n1)+n1:
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hfile, k)
+        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hfile, k)
         print(entryname)
-        
+        lint[k] = simps(qloss[wr], x=l[wr])
+        ltot[k] = simps(qloss, x=l)
+        tar[k] = t
+    ltot /= 4.*pi ; lint /= 4.*pi # convert to Eddington units
+    if(ifplot):
+        # overplotting with the total flux
+        plots.someplots(tar, [lint, ltot, mdot*0.2], xlog=False, formatsequence = ['k-', 'g--', 'r-'], xtitle='t, s', ytitle='$L/L_{\rm Edd}$')
+
+    # ascii output:
+    fout = open(os.path.dirname(hfile)+"/cutflux.dat", "w")
+    for k in arange(n2-n1)+n1:
+        fout.write(str(tar[k])+" "+str(lint[k])+" "+str(ltot[k])+"\n")
+        fout.flush()
+    fout.close()
+    
