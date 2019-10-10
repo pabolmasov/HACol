@@ -206,7 +206,7 @@ def quasi2d(hname, n1, n2):
     
     nt=n2-n1
     # first frame
-    entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1)
+    entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n1)
     nr=size(r)
     nrnew = 500 # radial mesh interpolated to nrnew
     rnew = (r.max()/r.min())**(arange(nrnew)/double(nrnew-1))*r.min()
@@ -214,13 +214,16 @@ def quasi2d(hname, n1, n2):
     sthnew = sthfun(rnew)
     var = zeros([nt, nrnew], dtype=double)
     uar = zeros([nt, nrnew], dtype=double)
+    qar = zeros([nt, nrnew], dtype=double)
     lurel = zeros([nt, nrnew], dtype=double)
     tar = zeros(nt, dtype=double)
     #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
     for k in arange(n2-n1):
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1+k)
+        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n1+k)
         vfun = interp1d(r, v, kind = 'linear')
         var[k, :] = vfun(rnew)
+        qfun = interp1d(r, qloss, kind = 'linear')
+        qar[k, :] = qfun(rnew)
         ufun = interp1d(r, u, kind = 'linear')
         uar[k, :] = ufun(rnew)
         tar[k] = t
@@ -281,6 +284,20 @@ def quasi2d(hname, n1, n2):
     savefig(outdir+'/q2d_u.png')
     savefig(outdir+'/q2d_u.eps')
     close('all')
+    # Q-:
+    clf()
+    fig=figure()
+    contourf(rnew, tar*tscale, log10(qar), cmap='hot')
+    #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
+    colorbar()
+#    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
+    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
+    fig.set_size_inches(4, 6)
+    fig.tight_layout()
+    savefig(outdir+'/q2d_q.png')
+    savefig(outdir+'/q2d_q.eps')
+    close('all')
+    
 
 def postplot(hname, nentry, ifdat = True):
     '''
@@ -297,7 +314,7 @@ def postplot(hname, nentry, ifdat = True):
         lines = loadtxt(fname, comments="#")
         r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3]
     else:
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, nentry)
+        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, nentry)
     #    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
     #    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
     someplots(r, [-v*rho*across, v*rho*across], name=hname+entryname+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])

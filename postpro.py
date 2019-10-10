@@ -134,7 +134,7 @@ def shock_hdf(n, infile = "out/tireout.hdf5"):
     '''
     finds the position of the shock in a given entry of the infile
     '''
-    entryname, t, l, r, sth, rho, u, v = hdf.read(infile, n)
+    entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(infile, n)
 
     #find maximal compression:
     dvdl = (v[1:]-v[:-1])/(l[1:]-l[:-1])
@@ -270,7 +270,7 @@ def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False):
             r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2]
             t=tar[indices[k]]
         else:
-            entryname, t, l, r, sth, rho, u, v = hdf.read(hname, indices[k])
+            entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, indices[k])
         md2[k, :] = (rho * v * across)[:]
         t2[k, :] = t  ;     r2[k, :] = r[:]
 
@@ -298,7 +298,7 @@ def taus(n, prefix = 'out/tireout', ifhdf = True):
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     if(ifhdf):
         hname = prefix + ".hdf5"
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n)
+        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n)
     else:
         entryname = hdf.entryname(n, ndig=5)
         fname = prefix + entryname + ".dat"
@@ -320,7 +320,7 @@ def virialratio(n, prefix = 'out/tireout', ifhdf = True):
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     if(ifhdf):
         hname = prefix + ".hdf5"
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n)
+        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n)
     else:
         entryname = hdf.entryname(n, ndig=5)
         fname = prefix + entryname + ".dat"
@@ -365,14 +365,13 @@ def filteredflux(hfile, n1, n2, rfraction = 0.9):
     
     for k in arange(n2-n1)+n1:
         entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hfile, k)
-        print(entryname)
         lint[k] = simps(qloss[wr], x=l[wr])
         ltot[k] = simps(qloss, x=l)
         tar[k] = t
-    ltot /= 4.*pi ; lint /= 4.*pi # convert to Eddington units
+        #    ltot /= 4.*pi ; lint /= 4.*pi # convert to Eddington units
     if(ifplot):
         # overplotting with the total flux
-        plots.someplots(tar, [lint, ltot, mdot*0.2], xlog=False, formatsequence = ['k-', 'g--', 'r-'], xtitle='t, s', ytitle='$L/L_{\rm Edd}$')
+        plots.someplots(tar, [lint, ltot, ltot-lint, lint*0.+mdot*0.2], xlog=False, formatsequence = ['k-', 'g--', 'b--', 'r-'], xtitle='t, s', ytitle=r'$L/L_{\rm Edd}$', name= os.path.dirname(hfile)+'/cutflux')
 
     # ascii output:
     fout = open(os.path.dirname(hfile)+"/cutflux.dat", "w")
