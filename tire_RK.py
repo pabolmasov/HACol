@@ -102,6 +102,7 @@ def Fbeta(rho, u):
     if(size(wpos)>0):
         beta[wpos]=betacoeff * rho[wpos] / u[wpos]**0.75
     return beta 
+
 def Fbeta_press(rho, press):
     '''
     calculates a function of 
@@ -139,6 +140,8 @@ def betafun_press_define():
 # define once and globally
 betafun = betafun_define() # defines the interpolated function for beta
 betafun_p = betafun_press_define() # defines the interpolated function for beta
+
+##############################################################################
 
 def cons(rho, v, u, g):
     '''
@@ -201,6 +204,7 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = 
     #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
     tau = rho * g.delta
     taufac = taufun(tau)    # 1.-exp(-tau)
+    #    taufac = 1. # !!! temporary
     gamefac = tratfac(tau)
     gamedd = eta * ltot * gamefac
     sinsum = copy(g.sina*g.cth+g.cosa*g.sth) # sin(theta+alpha)
