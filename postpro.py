@@ -210,7 +210,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = 
         plots.someplots(t[n], [s[ws], s*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
         plots.someplots(f[n], [s[ws], s*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=True, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
         plots.someplots(t[n], [f[n], f[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
-        plots.someplots(t[n], [dv[ws], -v2[ws], s*0.+1./7./sqrt(xs)], name = outdir+"/vleap",xtitle=r'$t$, s', ytitle=r'$\Delta v \sqrt{r}$', xlog=False, formatsequence = ['k-', 'b:', 'r-'])
+        plots.someplots(t[n], [-v1[ws], -v2[ws], sqrt(2./s[ws]/rstar), sqrt(2./s[ws]/rstar)/7.], name = outdir+"/vleap",xtitle=r'$t$, s', ytitle=r'$ v /c$', xlog=False, formatsequence = ['k-', 'b:', 'r-', 'r-'])
 
     print("effective compression factor "+str(compression[isfinite(compression)].mean()))
     # ascii output
@@ -231,7 +231,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = 
     if t[n].max() > (t[n].min() + 0.1):
         wlaten = (t[n] > (t.max()-0.1))
         wlate = (t > (t.max()-0.1))
-        xmean = s[wlaten].mean() ; xrms = s[wlaten].std()+ds[wlate].mean()
+        xmean = s[wlaten].mean() ; xrms = s[wlaten].std()+ds[wlaten].mean()
         print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
         fmean = f[wlate].mean() ; frms = f[wlate].std()
         print("flux = "+str(fmean/4./pi)+"+/-"+str(frms/4./pi)+"\n")

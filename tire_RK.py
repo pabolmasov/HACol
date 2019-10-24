@@ -444,7 +444,7 @@ def alltire():
     if(ifrestart):
         if(ifhdf_restart):
             # restarting from a HDF5 file
-            entryname, t, l1, r1, sth1, rho1, u1, v1 = hdf.read(restartfile, restartn)
+            entryname, t, l1, r1, sth1, rho1, u1, v1, qloss1 = hdf.read(restartfile, restartn)
             tstore = t
             print("restarted from file "+restartfile+", entry "+entryname)
         else:
