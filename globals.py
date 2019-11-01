@@ -2,10 +2,10 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=3000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
-rbasefactor = 0.5 #  
+rbasefactor = 0.1 #  
 CFL = 0.5 # CFL = 0.5 is still noisy!
 Cth = 0.25 # thermal timescale factor
 Cdiff = 0.25
@@ -32,8 +32,8 @@ ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fix
 squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
 # radiation transfer treatment:
-raddiff = False # if we include radiation diffusion along the field line
-xirad = 1. # radiation diffusion scaling
+raddiff = True # if we include radiation diffusion along the field line
+xirad = 1.5 # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 taumax = 1e2 # maximal optical depth
 
@@ -48,7 +48,7 @@ heatingeff = 0.1 # additional heating scaling with mdot
 afac = 0.1 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
 r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
-dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.05) # radial extent of the flow at r_e
+dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
 print("Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
 print("magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
 print("Delta re = "+str(dr_e))
@@ -68,7 +68,7 @@ omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
-vout = -1./sqrt(r_e) / 15.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+vout = -1./sqrt(r_e) / 5.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 # plotting options:
 ifplot = True
@@ -77,11 +77,11 @@ ascalias = 10 # make an ascii file every Nth output step
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
-outdir = "out/"
+outdir = "out_fast"
 
 # restart options
 ifrestart = False
-ifhdf_restart = True # if we are restarting from a hdf file (or an ascii snapshot)
+ifhdf_restart = True # if we are restarting from a hdf file (or an ascii snapshot); relevant only if ifrestart = True
 restartfile = outdir + 'tireout2.hdf5'
 restartn = 2580
 restartprefix = outdir+'tireout' # used if we restart from ascii output

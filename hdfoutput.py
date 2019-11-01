@@ -31,7 +31,7 @@ def init(hname, g): # , m1, mdot, eta, afac, re, dre, omega):
     hfile.flush()
     return hfile # returns file stream reference
     
-def dump(hfile, nout, t, rho, v, u):
+def dump(hfile, nout, t, rho, v, u, qloss):
     '''
     writing one snapshot
     '''
@@ -41,6 +41,7 @@ def dump(hfile, nout, t, rho, v, u):
     grp.create_dataset("rho", data=rho)
     grp.create_dataset("v", data=v)
     grp.create_dataset("u", data=u)
+    grp.create_dataset("qloss", data=qloss)
     hfile.flush()
 
 def close(hfile):
@@ -69,10 +70,11 @@ def read(hname, nentry):
     l=geom["l"][:]  ;  r=geom["r"][:] ;  sth=geom["sth"][:] # reading geometry
     data=hfile["entry"+entry]
     rho=data["rho"][:] ; u=data["u"][:] ; v=data["v"][:] # reading the snapshot
+    qloss = data["qloss"][:]
     t=data.attrs["t"]
-    print("t="+str(t))
+    print("t="+str(t)+" ("+str(nentry)+")")
     hfile.close()
-    return entry, t, l, r/rstar, sth, rho, u, v 
+    return entry, t, l, r/rstar, sth, rho, u, v, qloss
 
 def toasc(hname='tireout.hdf5', nentry=0):
     '''

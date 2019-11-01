@@ -2,6 +2,7 @@ from numpy import *
 from scipy.integrate import *
 from scipy.interpolate import *
 from scipy.optimize import curve_fit
+from scipy.signal import savgol_filter
 import os
 
 from globals import *
@@ -11,6 +12,8 @@ import geometry as geo
 import bassun as bs
 if ifplot:
     import plots
+    from matplotlib.pyplot import ioff
+    ioff()
 
 def rcoolfun(geometry, mdot):
     '''
@@ -105,7 +108,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False):
             fdyns.write(str(tcenter[kt])+' '+str(binfreq[kb])+' '+str(binfreq[kb+1])+' '+str(pds2[kt,kb])+' '+str(dpds2[kt,kb])+" "+str(nbin[kt,kb])+"\n")
     fdyns.close()
     print(t2.max())
-    plots.dynspec(t2,binfreq2, log10(pds2), outfile=infile+'_dyns', nbin=nbin)
+    plots.plot_dynspec(t2,binfreq2, log10(pds2), outfile=infile+'_dyns', nbin=nbin)
 
 #############################################
 def fhist(infile = "out/flux"):
@@ -130,21 +133,36 @@ def fhist(infile = "out/flux"):
     plots.binplot(binedges, fn, dfn, fname=infile+"_hist", fit = exp(p[0]*log(binedges)+p[1]))
 
 #####################################################################
-def shock_hdf(n, infile = "out/tireout.hdf5"):
+def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 3):
     '''
     finds the position of the shock in a given entry of the infile
+    kleap allows to measure the velocity difference using several cells
     '''
-    entryname, t, l, r, sth, rho, u, v = hdf.read(infile, n)
-
+    entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(infile, n)
+    n=size(r)
+    #    v=medfilt(v, kernel_size=3)
+    v1=savgol_filter(copy(v), 2*kleap+1, 1) # Savitzky-Golay filter
     #find maximal compression:
-    dvdl = (v[1:]-v[:-1])/(l[1:]-l[:-1])
+    dvdl = (v[kleap:]-v[:-kleap])/(l[kleap:]-l[:-kleap])
     wcomp = (dvdl).argmin()
-    print("maximal compression found at r="+str(r[wcomp]))
-    return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.
+    wcomp1 = maximum((wcomp-kleap),0)
+    wcomp2 = minimum((wcomp+kleap),n-1)
+    print("maximal compression found at r="+str((r[wcomp1]+r[wcomp2])/2.)+" +/- "+str((-r[wcomp1]+r[wcomp2])/2.))
+    if isnan(r[wcomp]):
+        print("t = "+str(t))
+        print(dvdl.min(), dvdl.max())
+        print(dvdl[wcomp])
+        plots.someplots(r[1:], [v[1:], v1[1:], dvdl], name = "shocknan", xtitle=r'$r$', ytitle=r'$v$', xlog=False, formatsequence = ['k.', 'r-', 'b'])
+        ii=input('r')
+    return (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2]
+    #    return (r[wcomp:wcomp1]).mean(), r[wcomp:wcomp1],v[wcomp], v[wcomp1]
+# v[wcomp], v[wcomp+1]
 
-def shock_dat(n, prefix = "out/tireout"):
+def shock_dat(n, prefix = "out/tireout", kleap = 1):
     '''
-    finds the position of the shock from a given dat-file ID
+    finds the position of the shock and the velocity leap 
+    from a given dat-file ID
+    kleap allows to measure the velocity difference using several cells
     '''
     fname = prefix + hdf.entryname(n, ndig=5) + ".dat"
     lines = loadtxt(fname, comments="#")
@@ -153,9 +171,9 @@ def shock_dat(n, prefix = "out/tireout"):
     dvdl = (v[1:]-v[:-1])/(r[1:]-r[:-1])
     wcomp = (dvdl).argmin()
     #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
-    return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.
+    return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.,v[maximum(wcomp-kleap,00)], v[minimum(wcomp+1+kleap, size(r)-1)]
     
-def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot):
+def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = afac, kleap = 1):
     '''
     draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
     '''
@@ -163,6 +181,10 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot):
     n=arange(n1, n2, dn, dtype=int)
     s=arange(size(n), dtype=double)
     ds=arange(size(n), dtype=double)
+    dv=arange(size(n), dtype=double)
+    v2=arange(size(n), dtype=double)
+    v1=arange(size(n), dtype=double)
+    compression=arange(size(n), dtype=double)
     print(size(n))
     outdir = os.path.dirname(prefix)
     fluxlines = loadtxt(outdir+"/flux.dat", comments="#", delimiter=" ", unpack=False)
@@ -172,8 +194,9 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot):
     BSgamma = (2.*across0/delta0**2)/mdot*rstar
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*30.*umag*m1)**0.25*sqrt(delta0)/(rstar)**0.125
-    xs = bs.xis(BSgamma, BSeta, x0=20.)
-    
+    xs = bs.xis(BSgamma, BSeta, x0=3.0)
+    #     print("xs = "+str(xs))
+    #    ii=input("xs")
     # spherization radius
     rsph =1.5*mdot/4./pi
     eqlum = mdot/rstar
@@ -184,39 +207,50 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot):
     rcool = rcoolfun(geometry, mdot)
     for k in arange(size(n)):
         if(dat):
-            stmp, dstmp = shock_dat(n[k], prefix=prefix)
+            stmp, dstmp, v1tmp, v2tmp = shock_dat(n[k], prefix=prefix, kleap = kleap)
         else:
-            stmp, dstmp = shock_hdf(n[k], infile = prefix+".hdf5")
+            stmp, dstmp, v1tmp, v2tmp = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap)
         s[k] = stmp ; ds[k] = dstmp
+        v1[k] = v1tmp   ; v2[k] =  v2tmp
+        dv[k] = v1tmp - v2tmp
+        compression[k] = v2tmp/v1tmp
 
     print("predicted shock position: xs = "+str(xs)+" (rstar)")
     print("cooling limit: rcool/rstar = "+str(rcool/rstar))
+    f /= 4.*pi  ; eqlum /= 4.*pi
         
     if(ifplot):
         ws=where(s>1.)
         n=n[ws]
-        plots.someplots(t[n], [s[ws], s*0.+xs, s*0.+rcool/rstar], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
-        plots.someplots(f[n], [s[ws], s*0.+xs, s*0.+rcool/rstar], name=outdir+"/fluxshock", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+        plots.someplots(t[n], [s[ws], s*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
+        plots.someplots(f[n], [s[ws], s*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=True, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+        plots.someplots(t[n], [f[n], f[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
+        plots.someplots(t[n], [-v1[ws], -v2[ws], sqrt(2./s[ws]/rstar), sqrt(2./s[ws]/rstar)/7.], name = outdir+"/vleap",xtitle=r'$t$, s', ytitle=r'$ v /c$', xlog=False, formatsequence = ['k-', 'b:', 'r-', 'r-'])
+
+    print("effective compression factor "+str(compression[isfinite(compression)].mean()))
     # ascii output
     fout = open(outdir+'/sfront.dat', 'w')
+    fout.write("# time -- shock position -- downstream velocity -- upstream velocity \n")
     for k in arange(size(n)):
-        fout.write(str(t[n[k]])+" "+str(s[k])+" "+str(ds[k])+"\n")
+        fout.write(str(t[n[k]])+" "+str(s[k])+" "+str(v1[k])+" "+str(v2[k])+"\n")
     fout.close()
     fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
     fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')
-    fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
+
+    if isscalar(xs):
+        fglo.write(str(eqlum)+' '+str(xs)+' '+str(rcool/rstar)+'\n')
+    else:
+        fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
     fglo.close()
     # last 0.1s average shock position
-#    tn=copy(s)
-#    tn[:] = t[n[:]]
-#    print(tn)
-#    print("tmax = "+str(t.max()))
-    wlate = (t[n] > (t.max()-0.1))
-    xmean = s[wlate].mean() ; xrms = s[wlate].std()+ds[wlate].mean()
-    print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
-    fmean = f[t>(t.max()-0.1)].mean() ; frms = f[t>(t.max()-0.1)].std()
-    print("flux = "+str(fmean/4./pi)+"+/-"+str(frms/4./pi)+"\n")
-         
+    if t[n].max() > (t[n].min() + 0.1):
+        wlaten = (t[n] > (t[n].max()-0.1))
+        wlate = (t > (t.max()-0.1))
+        xmean = s[wlaten].mean() ; xrms = s[wlaten].std()+ds[wlaten].mean()
+        print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
+        fmean = f[wlate].mean() ; frms = f[wlate].std()
+        print("flux = "+str(fmean)+"+/-"+str(frms)+"\n")
+        
 ###############################
 def tailfitfun(x, p, n, x0, y0):
     return ((x-x0)**2)**(p/2.)*n+y0
@@ -263,7 +297,7 @@ def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False):
             r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2]
             t=tar[indices[k]]
         else:
-            entryname, t, l, r, sth, rho, u, v = hdf.read(hname, indices[k])
+            entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, indices[k])
         md2[k, :] = (rho * v * across)[:]
         t2[k, :] = t  ;     r2[k, :] = r[:]
 
@@ -291,7 +325,7 @@ def taus(n, prefix = 'out/tireout', ifhdf = True):
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     if(ifhdf):
         hname = prefix + ".hdf5"
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n)
+        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n)
     else:
         entryname = hdf.entryname(n, ndig=5)
         fname = prefix + entryname + ".dat"
@@ -313,7 +347,7 @@ def virialratio(n, prefix = 'out/tireout', ifhdf = True):
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     if(ifhdf):
         hname = prefix + ".hdf5"
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n)
+        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n)
     else:
         entryname = hdf.entryname(n, ndig=5)
         fname = prefix + entryname + ".dat"
@@ -339,3 +373,37 @@ def virialtest(n1, n2, prefix = 'out/tireout'):
 
     if(ifplot):
         plots.someplots(tar, [virar], name = prefix+"_vire", xtitle=r'$t$', ytitle=r'$E_{\rm k} / E_{\rm g}$', xlog=False, ylog=False, formatsequence=['k-'])
+
+def filteredflux(hfile, n1, n2, rfraction = 0.9):
+    '''
+    calculates the flux excluding several outer points affected by the outer BC
+    hfile is the input HDF5 file
+    n1 is the number of the first entry
+    n2 is the last one
+    rfraction is the rangle of radii where the flux is being calculated
+    '''
+    geofile = os.path.dirname(hfile)+"/geo.dat"
+    r, theta, alpha, across, l, delta = geo.gread(geofile)
+    wr = r < (r.max()*rfraction)
+
+    lint = zeros(n2-n1)
+    ltot = zeros(n2-n1)
+    tar = zeros(n2-n1)
+    
+    for k in arange(n2-n1)+n1:
+        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hfile, k)
+        lint[k] = simps(qloss[wr], x=l[wr])
+        ltot[k] = simps(qloss, x=l)
+        tar[k] = t
+        #    ltot /= 4.*pi ; lint /= 4.*pi # convert to Eddington units
+    if(ifplot):
+        # overplotting with the total flux
+        plots.someplots(tar, [lint, ltot, ltot-lint, lint*0.+mdot*0.2], xlog=False, formatsequence = ['k-', 'g--', 'b--', 'r-'], xtitle='t, s', ytitle=r'$L/L_{\rm Edd}$', name= os.path.dirname(hfile)+'/cutflux')
+
+    # ascii output:
+    fout = open(os.path.dirname(hfile)+"/cutflux.dat", "w")
+    for k in arange(n2-n1)+n1:
+        fout.write(str(tar[k])+" "+str(lint[k])+" "+str(ltot[k])+"\n")
+        fout.flush()
+    fout.close()
+    

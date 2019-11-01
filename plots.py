@@ -20,6 +20,7 @@ matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"]
 import hdfoutput as hdf
 import geometry as geo
 from globals import *
+from beta import *
 
 close('all')
 ioff()
@@ -132,6 +133,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         formatsequence = ["." for x in range(ny)]
 
     clf()
+    fig = figure()
     for k in arange(ny):
         if vertical is not None:
             plot([vertical, vertical], [ys[k].min(), ys[k].max()], 'r-')
@@ -140,7 +142,11 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         xscale('log')
     if(ylog):
         yscale('log')
-    xlabel(xtitle) ; ylabel(ytitle)
+    xlabel(xtitle, fontsize=14) ; ylabel(ytitle, fontsize=14)
+    plt.tick_params(labelsize=12, length=1, width=1., which='minor')
+    plt.tick_params(labelsize=12, length=3, width=1., which='major')
+    fig.set_size_inches(4, 4)
+    fig.tight_layout()
     savefig(name+'.png')
     close('all')
   
@@ -169,7 +175,7 @@ def binplot_short(freq, dfreq, pds, dpds, outfile='binnedpds'):
     savefig(outfile+'.png')
     close()
     
-def dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
+def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
 
     nbin0=2
     
@@ -199,9 +205,11 @@ def quasi2d(hname, n1, n2):
     '''
     outdir = os.path.dirname(hname)
     
+    betafun = betafun_define() # defines the interpolated function for beta
+
     nt=n2-n1
     # first frame
-    entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1)
+    entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n1)
     nr=size(r)
     nrnew = 500 # radial mesh interpolated to nrnew
     rnew = (r.max()/r.min())**(arange(nrnew)/double(nrnew-1))*r.min()
@@ -209,18 +217,28 @@ def quasi2d(hname, n1, n2):
     sthnew = sthfun(rnew)
     var = zeros([nt, nrnew], dtype=double)
     uar = zeros([nt, nrnew], dtype=double)
+    par = zeros([nt, nrnew], dtype=double)
+    qar = zeros([nt, nrnew], dtype=double)
     lurel = zeros([nt, nrnew], dtype=double)
     tar = zeros(nt, dtype=double)
     #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
     for k in arange(n2-n1):
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, n1+k)
+        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n1+k)
         vfun = interp1d(r, v, kind = 'linear')
         var[k, :] = vfun(rnew)
+        qfun = interp1d(r, qloss, kind = 'linear')
+        qar[k, :] = qfun(rnew)
         ufun = interp1d(r, u, kind = 'linear')
         uar[k, :] = ufun(rnew)
+        beta = betafun(Fbeta(rho, u))
+        press = u/3./(1.-beta/2.)
+        pfun = interp1d(r, press, kind = 'linear')
+        par[k, :] = pfun(rnew)
         tar[k] = t
     nv=30
-    vlev=linspace(var.min(), var.max(), nv, endpoint=True)
+    vmin = round(var.min(),2)
+    vmax = round(var.max(),2)
+    vlev=linspace(vmin, vmax, nv, endpoint=True)
     print(var.min())
     print(var.max())
     varmean = var.mean(axis=0)
@@ -228,7 +246,8 @@ def quasi2d(hname, n1, n2):
     # velocity
     clf()
     fig=figure()
-    pcolormesh(rnew, tar*tscale, var, vmin=var.min(), vmax=var.max(),cmap='hot')
+    contourf(rnew, tar*tscale, var, vlev, cmap='hot')
+    #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
     colorbar()
 #    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
@@ -258,19 +277,35 @@ def quasi2d(hname, n1, n2):
     #    print(umag)
     for k in arange(nrnew):
         lurel[:,k] = log10(uar[:,k]/umagtar[k])
-    lulev = linspace(lurel[uar>0.].min(), lurel[uar>0.].max(), 20, endpoint=True)
+    umin = round(lurel[uar>0.].min(),2)
+    umax = round(lurel[uar>0.].max(),2)
+    lulev = linspace(umin, umax, nv, endpoint=True)
     print(lulev)
     clf()
     fig=figure()
     contourf(rnew, tar*tscale, lurel, cmap='hot', levels=lulev)
     colorbar()
-    #    contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
+    contour(rnew, tar*tscale, par/umagtar, levels=[0.9], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
     savefig(outdir+'/q2d_u.png')
     savefig(outdir+'/q2d_u.eps')
     close('all')
+    # Q-:
+    clf()
+    fig=figure()
+    contourf(rnew, tar*tscale, log10(qar), cmap='hot')
+    #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
+    colorbar()
+#    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
+    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
+    fig.set_size_inches(4, 6)
+    fig.tight_layout()
+    savefig(outdir+'/q2d_q.png')
+    savefig(outdir+'/q2d_q.eps')
+    close('all')
+    
 
 def postplot(hname, nentry, ifdat = True):
     '''
@@ -287,7 +322,7 @@ def postplot(hname, nentry, ifdat = True):
         lines = loadtxt(fname, comments="#")
         r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3]
     else:
-        entryname, t, l, r, sth, rho, u, v = hdf.read(hname, nentry)
+        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, nentry)
     #    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
     #    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
     someplots(r, [-v*rho*across, v*rho*across], name=hname+entryname+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])
@@ -424,32 +459,77 @@ def multishock_plot(fluxfile, frontfile):
     frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
     frontinfo = loadtxt(frontfile+'glo.dat', comments="#", delimiter=" ", unpack=False)
     tf=fluxlines[:,0] ; f=fluxlines[:,1]
-    ts=frontlines[:,0] ; s=frontlines[:,1] ; ds=frontlines[:,2]
+    ts=frontlines[1:,0] ; s=frontlines[1:,1] ; ds=frontlines[1:,2]
     eqlum = frontinfo[0] ; rs = frontinfo[1] ; rcool = frontinfo[2]
+
+    f /= 4.*pi # ; eqlum /= 4.*pi
     
     # interpolate!
-    fint = interp1d(tf, f)
+    fint = interp1d(tf, f, bounds_error=False)
     
     someplots(ts, [s, s*0. + rs, s*0. + rcool], name = frontfile + "_frontcurve", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
-    someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+    someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+    someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
+    
+def twomultishock_plot(fluxfile1, frontfile1, fluxfile2, frontfile2):
+    '''
+    plotting two shock fronts together
+    '''
+    # twomultishock_plot("titania_fidu/flux", "titania_fidu/sfront", "titania_rot/flux", "titania_rot/sfront")
+    fluxlines1 = loadtxt(fluxfile1+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontlines1 = loadtxt(frontfile1+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontinfo1 = loadtxt(frontfile1+'glo.dat', comments="#", delimiter=" ", unpack=False)
+    fluxlines2 = loadtxt(fluxfile2+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontlines2 = loadtxt(frontfile2+'.dat', comments="#", delimiter=" ", unpack=False)
+    frontinfo2 = loadtxt(frontfile2+'glo.dat', comments="#", delimiter=" ", unpack=False)
+    tf1=fluxlines1[:,0] ; f1=fluxlines1[:,1]
+    ts1=frontlines1[1:,0] ; s1=frontlines1[1:,1] ; ds1=frontlines1[1:,2]
+    tf2=fluxlines2[:,0] ; f2=fluxlines2[:,1]
+    ts2=frontlines2[1:,0] ; s2=frontlines2[1:,1] ; ds2=frontlines2[1:,2]
+    eqlum = frontinfo1[0] ; rs = frontinfo1[1]
 
+    f1 /= 4.*pi ; f2 /= 4.*pi  # ; eqlum /= 4.*pi
+    
+    # interpolate!
+    fint1 = interp1d(tf1, f1, bounds_error=False)
+    fint2 = interp1d(tf2, f2, bounds_error=False)
+    sint = interp1d(ts2, s2, bounds_error=False) # second shock position
+
+    clf()
+    plot(fint1(ts1), s1, 'g--', linewidth = 2)
+    plot(fint2(ts2), s2, 'k-')
+    plot([minimum(f1.min(), f2.min()), maximum(f1.max(), f2.max())], [rs, rs], 'r-')
+    plot([eqlum, eqlum], [minimum(s1.min(), s2.min()), maximum(s1.max(), s2.max())], 'r-')
+    xlabel(r'$L/L_{\rm Edd}$', fontsize=14) ; ylabel(r'$R_{\rm shock}/R_*$', fontsize=14)
+    savefig("twofluxfronts.png") ;   savefig("twofluxfronts.eps")
+    close('all')
+    
+    #    someplots(fint1(ts1), [s1, sint(ts1), s1*0. + rs], name = "twofluxfronts", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+    
 #############################################################
 def allfluxes():
-    dirs = [ 'titania_fidu', 'titania_rot', 'titaniaW', 'titaniaI']
-    labels = ['F', 'R', 'W', 'I']
-    fmtseq = ['-k', '-r', '-g', '-b']
+    dirs = [ 'titania_fidu', 'titania_rot', 'titania_irr']
+    labels = ['F', 'R', 'I']
+    fmtseq = ['-k', '--r', 'g:', '-.b']
 
-    eta = 0.21
+    eta = 0.206
     
     clf()
-    
+    fig = figure()
     plot([0., 0.4], [10.*eta,10.*eta], 'gray')
     for k in arange(size(dirs)):
         fluxlines = loadtxt(dirs[k]+'/flux.dat', comments="#", delimiter=" ", unpack=False)
         t = fluxlines[:,0] ; f = fluxlines[:,1]
         plot(t, f/4./pi, fmtseq[k], label=labels[k])
         
-    legend()
-    yscale('log') ; ylim(0.2,20.); xlim(0.0,0.4)
-    xlabel(r'$t$, s') ; ylabel(r'$L/L_{\rm Edd}$')
+        #    legend()
+    #    yscale('log') ; ylim(1.,20.);
+    xlim(0.001,0.1)  ; ylim(1.5,3.) ; xscale('log')
+    xlabel(r'$t$, s', fontsize=18) ; ylabel(r'$L/L_{\rm Edd}$', fontsize=18)
+    plt.tick_params(labelsize=14, length=1, width=1., which='minor')
+    plt.tick_params(labelsize=14, length=3, width=1., which='major')
+    fig.set_size_inches(4, 4)
+    fig.tight_layout()
     savefig('allfluxes.png')
+    savefig('allfluxes.eps')
+    close('all')

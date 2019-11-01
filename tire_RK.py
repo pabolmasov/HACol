@@ -87,58 +87,15 @@ def tratfac(x):
     if(size(wnan)>0):
         tt[wnan] = 0.
         print("trat = "+str(x.min())+".."+str(x.max()))
-        ip = input('trat')
+        #        ip = input('trat')
     return tt
 
-# pressure ratios:
-def Fbeta(rho, u):
-    '''
-    calculates a function of 
-    beta = pg/p from rho and u (dimensionless units)
-    F(beta) itself is F = beta / (1-beta)**0.25 / (1-beta/2)**0.75
-    '''
-    beta = rho*0.+1.
-    wpos=where(u>ufloor)
-    if(size(wpos)>0):
-        beta[wpos]=betacoeff * rho[wpos] / u[wpos]**0.75
-    return beta 
-def Fbeta_press(rho, press):
-    '''
-    calculates a function of 
-    beta = pg/p from rho and pressure (dimensionless units)
-    F(beta) itself is F = beta / (1-beta)**0.25
-    '''
-    beta = rho*0.+1.
-    wpos=where(press>ufloor)
-    if(size(wpos)>0):
-        beta[wpos]=betacoeff * rho[wpos] / (press[wpos]*3.)**0.75 
-    return beta 
-
-def betafun_define():
-    '''
-    defines the function to calculate beta as a function of rho/u**0.75
-    '''
-    bepsilon = 1e-8 ; nb = 1e4
-    b1 = 0. ; b2 = 1.-bepsilon
-    b = (b2-b1)*arange(nb+1)/double(nb)+b1
-    fb = b / (1.-b)**0.25 / (1.-b/2.)**0.75
-    bfun = interp1d(fb, b, kind='linear', bounds_error=False, fill_value=1.)
-    return bfun
-
-def betafun_press_define():
-    '''
-    defines the function to calculate beta as a function of rho/p**0.75
-    '''
-    bepsilon = 1e-8 ; nb = 1e4
-    b1 = 0. ; b2 = 1.-bepsilon
-    b = (b2-b1)*arange(nb+1)/double(nb)+b1
-    fb = b / (1.-b)**0.25
-    bfun = interp1d(fb, b, kind='linear', bounds_error=False, fill_value=1.)
-    return bfun
-
 # define once and globally
+from beta import *
 betafun = betafun_define() # defines the interpolated function for beta
 betafun_p = betafun_press_define() # defines the interpolated function for beta
+
+##############################################################################
 
 def cons(rho, v, u, g):
     '''
@@ -158,13 +115,15 @@ def diffuse(rho, urad, v, dl, across):
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
     rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
     rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
+    rtau = rtau_left + rtau_right
+    rtau_exp = tratfac(copy(rtau))
     
     duls_half =  nubulk * (( urad * v)[1:] - ( urad * v)[:-1])\
-                 *across / 3. / (rtau_left + rtau_right)
+                 *across / 3. * rtau_exp #  / (rtau_left + rtau_right)
     # -- photon bulk viscosity
     dule_half = ((urad)[1:] - (urad)[:-1])\
-                *across / 3.  / (rtau_left + rtau_right)
-    #    dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux 
+                *across / 3. * rtau_exp # / (rtau_left + rtau_right)
+    dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux 
     # -- radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
     return -duls_half, -dule_half 
@@ -199,6 +158,7 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = 
     #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
     tau = rho * g.delta
     taufac = taufun(tau)    # 1.-exp(-tau)
+    #    taufac = 1. # !!! temporary
     gamefac = tratfac(tau)
     gamedd = eta * ltot * gamefac
     sinsum = copy(g.sina*g.cth+g.cosa*g.sth) # sin(theta+alpha)
@@ -208,7 +168,7 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = 
         return network, (1./g.r[0]-1./g.r[-1])
     beta = betafun(Fbeta(rho, u))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
-    #    urad = (urad+abs(urad))/2.
+    urad = (urad+abs(urad))/2.
     qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
     irradheating = heatingeff * eta * mdot *afac / g.r * g.sth * sinsum * taufac
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
@@ -228,6 +188,7 @@ def qloss_separate(rho, v, u, g):
     taufac = taufun(tau)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
+    urad = (urad+abs(urad))/2.    
     qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
@@ -295,13 +256,16 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = No
     # sigvel_linearized(v, cs, g1, rho, press)
     # sigvel_isentropic(v, cs, g1, csqmin=csqmin)
     if any(vl>=vm) or any(vm>=vr):
-        print(v)
-        print(cs)
-        print(vl[vl>=vm])
-        print(vm[vl>=vm])
-        print(vr[vr<=vm])
-        print(vm[vr<=vm])
-        ii=input("cs")
+        wwrong = (vl >=vm) | (vm<=vr)
+        print("rho = "+str((rho[1:])[wwrong]))
+        print("u = "+str((u[1:])[wwrong]))
+        print(vl[wwrong])
+        print(vm[wwrong])
+        print(vr[wwrong])
+        print(vm[wwrong])
+        print("R = "+str(ghalf.r[wwrong]))
+        print("signal velocities crashed")
+        #        ii=input("cs")
         
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
@@ -407,7 +371,7 @@ def alltire():
     u = press * 3. * (1.-beta/2.)
     u, rho, press = regularize(u, rho, press)
     print("estimated heat contribution to luminosity: "+str((-v*u*g.across)[-1]))
-    ii = input("HL")
+    #    ii = input("HL")
     # 3.*umagout+(rho/rho[-1])*0.01/g.r
     print("U = "+str((u/umagtar).min())+" to "+str((u/umagtar).max()))
     m, s, e = cons(rho, vinit, u, g)
@@ -434,7 +398,7 @@ def alltire():
     if(ifrestart):
         if(ifhdf_restart):
             # restarting from a HDF5 file
-            entryname, t, l1, r1, sth1, rho1, u1, v1 = hdf.read(restartfile, restartn)
+            entryname, t, l1, r1, sth1, rho1, u1, v1, qloss1 = hdf.read(restartfile, restartn)
             tstore = t
             print("restarted from file "+restartfile+", entry "+entryname)
         else:
@@ -456,10 +420,17 @@ def alltire():
             tstore = t
             print("restarted from ascii output "+ascrestartname)
             print("t = "+str(t))
-        if ((size(r1) != nx) | (r.max() < (0.99 * r1.max()))): 
+        print("r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
+        print("r1 from "+str(r1.min())+" to "+str(r1.max()))
+        if(r.max()>(1.01*r1.max()*rstar)):
+            print("restarting: size does not match!")
+            return(1)
+        if ((size(r1) != nx) | (r.max() < (0.99 * r1.max()))):
+            # minimal heat and minimal mass
+            #
+            #            rhorestartfloor = 1e-5 * mdot / r**1.5 ; urestartfloor = 1e-5 * rhorestartfloor / r
+            rho1 = maximum(rho1, rhofloor) ; u1 = maximum(u1, ufloor)
             print("interpolating from "+str(size(r1))+" to "+str(nx))
-            print("r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
-            print("r1 from "+str(r1.min())+" to "+str(r1.max()))
             print("rho1 from "+str(rho1.min())+" to "+str(rho1.max()))
             rhofun = interp1d(log(r1), log(rho1), kind='linear', bounds_error=False, fill_value = (log(rho1[0]), log(rho1[-1])))
             vfun = interp1d(log(r1), v1, kind='linear', bounds_error=False, fill_value = (v1[0], v1[-1]))
@@ -514,7 +485,10 @@ def alltire():
     if(ifhdf):
         hname = outdir+'/'+'tireout.hdf5'
         hfile = hdf.init(hname, g) # , m1, mdot, eta, afac, re, dre, omega)
-    
+        print("output to "+hname)
+        
+    crash = False # we have not crashed (yet)
+        
     timer.start("total")
     while(t<tmax):
         timer.start_comp("advance")
@@ -526,7 +500,11 @@ def alltire():
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
-        s[0] = -mdotsink ; s[-1] = -mdot
+        s[0] = -mdotsink
+        if v[-1] < 0.:
+            s[-1] = -mdot
+        else:
+            s[-1] = s[-2] # outflowing
         if(ufixed or galyamode or coolNS):
             # imposes a constant-thermal-energy outer BC
             # sort of redundant because it converts the whole variable set instead of the single last point; need to optimize it!
@@ -540,19 +518,30 @@ def alltire():
                 utmp[-1] = minimum(ulast, 0.5*rhotmp[-1]/rmax) # either initial energy density or virial limit
             mtmp, stmp, etmp = cons(rhotmp, vtmp, utmp, g)
             if(ufixed):
-                e[-1] = etmp[-1]
+                if v[-1] <=0.:
+                    e[-1] = etmp[-1]
+                    # only for an inward flow; otherwise there shd be an outflow condition
+                else:
+                    e[-1] = e[-2]
             if(galyamode or coolNS):
                 e[0] = etmp[0]
         ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6.
         t += dt
         csqest = 4./3.*u/rho
         rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
+        # crash case:
+        if any(isnan(u)) is True:
+            print(r[where(isnan(u))])
+            print("the code has produced a number of NaN values and will terminate ")
+            crash = True
+            nout = -1
+            
         # time step adjustment:
         dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
         qloss = qloss_separate(rho, v, u, g)
         dt_thermal = Cth * abs(u*g.across/qloss)[where(qloss>0.)].min()
         if(raddiff):
-            dt_diff = Cdiff * (dlhalf * 3.*rho[1:-1]).min() # (dx^2/D)
+            dt_diff = Cdiff * (dlhalf**2 * 3.*rho[1:-1]).min() # (dx^2/D)
         else:
             dt_diff = dt_CFL * 100. # effectively infinity ;)
         dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
@@ -561,7 +550,7 @@ def alltire():
         #        ii = input("UU")
         timer.stop_comp("advance")
         timer.lap("step")
-        if(t>=tstore):
+        if (t>=tstore) | crash:
             tstore += dtout
             timer.start("io")
             #            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
@@ -595,7 +584,7 @@ def alltire():
             ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
             ftot.flush()
             if(ifhdf):
-                hdf.dump(hfile, nout, t, rho, v, u)
+                hdf.dump(hfile, nout, t, rho, v, u, qloss)
             if not(ifhdf) or (nout%ascalias == 0):
                 # ascii output:
                 print(nout)
@@ -614,6 +603,8 @@ def alltire():
                 timer.start("step") #refresh lap counter (avoids IO profiling)
                 timer.purge_comps()
             nout+=1
+            if(crash):
+                break
     fflux.close()
     ftot.close()
     if(ifhdf):
