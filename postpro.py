@@ -2,6 +2,7 @@ from numpy import *
 from scipy.integrate import *
 from scipy.interpolate import *
 from scipy.optimize import curve_fit
+from scipy.signal import savgol_filter
 import os
 
 from globals import *
@@ -11,6 +12,8 @@ import geometry as geo
 import bassun as bs
 if ifplot:
     import plots
+    from matplotlib.pyplot import ioff
+    ioff()
 
 def rcoolfun(geometry, mdot):
     '''
@@ -130,18 +133,29 @@ def fhist(infile = "out/flux"):
     plots.binplot(binedges, fn, dfn, fname=infile+"_hist", fit = exp(p[0]*log(binedges)+p[1]))
 
 #####################################################################
-def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 1):
+def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 3):
     '''
     finds the position of the shock in a given entry of the infile
     kleap allows to measure the velocity difference using several cells
     '''
     entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(infile, n)
-
+    n=size(r)
+    #    v=medfilt(v, kernel_size=3)
+    v1=savgol_filter(copy(v), 2*kleap+1, 1) # Savitzky-Golay filter
     #find maximal compression:
-    dvdl = (v[1:]-v[:-1])/(l[1:]-l[:-1])
+    dvdl = (v[kleap:]-v[:-kleap])/(l[kleap:]-l[:-kleap])
     wcomp = (dvdl).argmin()
-    print("maximal compression found at r="+str(r[wcomp]))
-    return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.,v[maximum(wcomp-kleap,00)], v[minimum(wcomp+1+kleap, size(r)-1)]
+    wcomp1 = maximum((wcomp-kleap),0)
+    wcomp2 = minimum((wcomp+kleap),n-1)
+    print("maximal compression found at r="+str((r[wcomp1]+r[wcomp2])/2.)+" +/- "+str((-r[wcomp1]+r[wcomp2])/2.))
+    if isnan(r[wcomp]):
+        print("t = "+str(t))
+        print(dvdl.min(), dvdl.max())
+        print(dvdl[wcomp])
+        plots.someplots(r[1:], [v[1:], v1[1:], dvdl], name = "shocknan", xtitle=r'$r$', ytitle=r'$v$', xlog=False, formatsequence = ['k.', 'r-', 'b'])
+        ii=input('r')
+    return (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2]
+    #    return (r[wcomp:wcomp1]).mean(), r[wcomp:wcomp1],v[wcomp], v[wcomp1]
 # v[wcomp], v[wcomp+1]
 
 def shock_dat(n, prefix = "out/tireout", kleap = 1):
@@ -180,8 +194,9 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = 
     BSgamma = (2.*across0/delta0**2)/mdot*rstar
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*30.*umag*m1)**0.25*sqrt(delta0)/(rstar)**0.125
-    xs = bs.xis(BSgamma, BSeta, x0=2.)
-    
+    xs = bs.xis(BSgamma, BSeta, x0=3.0)
+    #     print("xs = "+str(xs))
+    #    ii=input("xs")
     # spherization radius
     rsph =1.5*mdot/4./pi
     eqlum = mdot/rstar
@@ -202,7 +217,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = 
 
     print("predicted shock position: xs = "+str(xs)+" (rstar)")
     print("cooling limit: rcool/rstar = "+str(rcool/rstar))
-    f /= 4.*pi ; eqlum /= 4.*pi
+    f /= 4.*pi  ; eqlum /= 4.*pi
         
     if(ifplot):
         ws=where(s>1.)
@@ -229,12 +244,12 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = 
     fglo.close()
     # last 0.1s average shock position
     if t[n].max() > (t[n].min() + 0.1):
-        wlaten = (t[n] > (t.max()-0.1))
+        wlaten = (t[n] > (t[n].max()-0.1))
         wlate = (t > (t.max()-0.1))
         xmean = s[wlaten].mean() ; xrms = s[wlaten].std()+ds[wlaten].mean()
         print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
         fmean = f[wlate].mean() ; frms = f[wlate].std()
-        print("flux = "+str(fmean/4./pi)+"+/-"+str(frms/4./pi)+"\n")
+        print("flux = "+str(fmean)+"+/-"+str(frms)+"\n")
         
 ###############################
 def tailfitfun(x, p, n, x0, y0):

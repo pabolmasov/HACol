@@ -20,6 +20,7 @@ matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"]
 import hdfoutput as hdf
 import geometry as geo
 from globals import *
+from beta import *
 
 close('all')
 ioff()
@@ -204,6 +205,8 @@ def quasi2d(hname, n1, n2):
     '''
     outdir = os.path.dirname(hname)
     
+    betafun = betafun_define() # defines the interpolated function for beta
+
     nt=n2-n1
     # first frame
     entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n1)
@@ -214,6 +217,7 @@ def quasi2d(hname, n1, n2):
     sthnew = sthfun(rnew)
     var = zeros([nt, nrnew], dtype=double)
     uar = zeros([nt, nrnew], dtype=double)
+    par = zeros([nt, nrnew], dtype=double)
     qar = zeros([nt, nrnew], dtype=double)
     lurel = zeros([nt, nrnew], dtype=double)
     tar = zeros(nt, dtype=double)
@@ -226,6 +230,10 @@ def quasi2d(hname, n1, n2):
         qar[k, :] = qfun(rnew)
         ufun = interp1d(r, u, kind = 'linear')
         uar[k, :] = ufun(rnew)
+        beta = betafun(Fbeta(rho, u))
+        press = u/3./(1.-beta/2.)
+        pfun = interp1d(r, press, kind = 'linear')
+        par[k, :] = pfun(rnew)
         tar[k] = t
     nv=30
     vmin = round(var.min(),2)
@@ -277,7 +285,7 @@ def quasi2d(hname, n1, n2):
     fig=figure()
     contourf(rnew, tar*tscale, lurel, cmap='hot', levels=lulev)
     colorbar()
-    #    contour(rnew, tar*tscale, lurel, levels=[0.], colors='k')
+    contour(rnew, tar*tscale, par/umagtar, levels=[0.9], colors='k')
     xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
@@ -500,22 +508,28 @@ def twomultishock_plot(fluxfile1, frontfile1, fluxfile2, frontfile2):
     
 #############################################################
 def allfluxes():
-    dirs = [ 'titania_fidu', 'titania_rot', 'titania_wide', 'titania_irr']
-    labels = ['F', 'R', 'W', 'I']
-    fmtseq = ['-k', '-r', '-g', '-b']
+    dirs = [ 'titania_fidu', 'titania_rot', 'titania_irr']
+    labels = ['F', 'R', 'I']
+    fmtseq = ['-k', '--r', 'g:', '-.b']
 
-    eta = 0.21
+    eta = 0.206
     
     clf()
-    
+    fig = figure()
     plot([0., 0.4], [10.*eta,10.*eta], 'gray')
     for k in arange(size(dirs)):
         fluxlines = loadtxt(dirs[k]+'/flux.dat', comments="#", delimiter=" ", unpack=False)
         t = fluxlines[:,0] ; f = fluxlines[:,1]
         plot(t, f/4./pi, fmtseq[k], label=labels[k])
         
-    legend()
-    yscale('log') ; ylim(1.,20.); xlim(0.0,0.4)
-    xlabel(r'$t$, s') ; ylabel(r'$L/L_{\rm Edd}$')
+        #    legend()
+    #    yscale('log') ; ylim(1.,20.);
+    xlim(0.001,0.1)  ; ylim(1.5,3.) ; xscale('log')
+    xlabel(r'$t$, s', fontsize=18) ; ylabel(r'$L/L_{\rm Edd}$', fontsize=18)
+    plt.tick_params(labelsize=14, length=1, width=1., which='minor')
+    plt.tick_params(labelsize=14, length=3, width=1., which='major')
+    fig.set_size_inches(4, 4)
+    fig.tight_layout()
     savefig('allfluxes.png')
+    savefig('allfluxes.eps')
     close('all')
