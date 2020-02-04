@@ -5,16 +5,16 @@ from numpy import *
 nx=3000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
-rbasefactor = 0.1 #  
+rbasefactor = 0.1 #
+# factors used in timestep evaluation, 
 CFL = 0.5 # CFL = 0.5 is still noisy!
 Cth = 0.25 # thermal timescale factor
-Cdiff = 0.25
+Cdiff = 0.25 # diffusion time scale factor, dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
 
 # physical parameters:
 mu30 = 0.1 # magnetic moment, 1e30 units
-m1=1.4
-mdot = 10. * 4. * pi
-# 6291.12 * 1.734 * 4.*pi /m1 # mass accretion rate 
+m1=1.4 # NS mass, Solar units
+mdot = 10. * 4. * pi # mass accretion rate, internal units (Eddington ratio * 4\pi)
 mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 6291.12*4.*pi/m1
 rstar = 6.8/m1 # GM/c**2 units
@@ -24,7 +24,7 @@ mow = 0.6 # molecular weight
 betacoeff = 1.788e-5 * (m1)**(-0.25)/mow # coefficient used to calculate gas-to-total pressure ratio
 
 # BC modes:
-galyamode = False # if on, limits the internal energy density by MF energy density at the inner boundary
+BSmode = False # if on, limits the internal energy density by MF energy density at the inner boundary
 coolNS = False # if on (and galyamode is off), internal energy is constant at the inner boundary
 # a test with coolNS converges well, but it is completely unphysical
 ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fixes the heat flux
@@ -42,6 +42,7 @@ rhofloor = 1e-15 # crash floor for density
 ufloor = 1e-15 # crash floor for energy density
 csqmin = 1e-16
 nubulk = 0.5 # bulk viscosity coeff. Coughlin & Begelman (2014) give 8/81, Loeb & Laor (1992) 40/81 -- check which one is correct! Maybe the definition of zeta is different
+weinberg = True # a flag indicating if the bulk viscosity should disappear when gamma=4/3
 
 eta = 0.0 # self-illumination efficiency 
 heatingeff = 0.1 # additional heating scaling with mdot

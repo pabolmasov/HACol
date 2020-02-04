@@ -173,7 +173,7 @@ def shock_dat(n, prefix = "out/tireout", kleap = 1):
     #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
     return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.,v[maximum(wcomp-kleap,00)], v[minimum(wcomp+1+kleap, size(r)-1)]
     
-def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = afac, kleap = 1):
+def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = afac, kleap = 1, realxirad = xirad):
     '''
     draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
     '''
@@ -191,9 +191,9 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = 
     geometry = loadtxt(outdir+"/geo.dat", comments="#", delimiter=" ", unpack=False)
     t=fluxlines[:,0] ; f=fluxlines[:,1]
     across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
-    BSgamma = (2.*across0/delta0**2)/mdot*rstar
+    BSgamma = (2.*across0/delta0**2)/mdot*rstar / (realxirad/1.5)
     # umag is magnetic pressure
-    BSeta = (8./21./sqrt(2.)*30.*umag*m1)**0.25*sqrt(delta0)/(rstar)**0.125
+    BSeta = (8./21./sqrt(2.)*30.*umag*m1 * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
     xs = bs.xis(BSgamma, BSeta, x0=3.0)
     #     print("xs = "+str(xs))
     #    ii=input("xs")
