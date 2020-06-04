@@ -92,8 +92,8 @@ def tratfac(x):
 
 # define once and globally
 from beta import *
-betafun = betafun_define() # defines the interpolated function for beta
-betafun_p = betafun_press_define() # defines the interpolated function for beta
+betafun = betafun_define() # defines the interpolated function for beta (\rho, U)
+betafun_p = betafun_press_define() # defines the interpolated function for beta (\rho, P)
 
 ##############################################################################
 
@@ -295,6 +295,8 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = No
     return dmt, dst, det, ltot
 
 ################################################################################
+print("if you want to start the simulation, now type `alltire()` ")
+
 def alltire():
     '''
     the main routine bringing all together
@@ -327,6 +329,7 @@ def alltire():
     #    print(luni)
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
+    print("Across(0) = "+str(g.across[0]))
     r=rnew # set a grid uniform in l=luni
     r_half=rfun(luni_half) # half-step radial coordinates
     ghalf = geometry_initialize(r_half, r_e, dr_e, afac=afac) # mid-step geometry in r
@@ -367,11 +370,11 @@ def alltire():
     
     # setting the initial distributions of the primitive variables:
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
-    rhonoise = 1.e-3 * random.random_sample(nx)
-    rho *= (rhonoise+1.)
     vinit *= ((g.r-rstar)/(rmax-rstar))**0.5
     v = copy(vinit)
     press = umagtar[-1] * (g.r/r_e) * (rho/rho[-1]+1.)/2.
+    rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
+    rho *= (rhonoise+1.)
     beta = betafun_p(Fbeta_press(rho, press))
     u = press * 3. * (1.-beta/2.)
     u, rho, press = regularize(u, rho, press)

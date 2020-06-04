@@ -2,7 +2,7 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=3000 # the actual number of points in use
+nx=300 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
 rbasefactor = 0.1 #
@@ -41,7 +41,7 @@ mfloor = 1e-15  # crash floor for mass per unit length
 rhofloor = 1e-15 # crash floor for density
 ufloor = 1e-15 # crash floor for energy density
 csqmin = 1e-16
-nubulk = 0.5 # bulk viscosity coeff. Coughlin & Begelman (2014) give 8/81, Loeb & Laor (1992) 40/81 -- check which one is correct! Maybe the definition of zeta is different
+nubulk = 0.0 # bulk viscosity coeff. Coughlin & Begelman (2014) give 8/81, Loeb & Laor (1992) 40/81 -- check which one is correct! Maybe the definition of zeta is different
 weinberg = True # a flag indicating if the bulk viscosity should disappear when gamma=4/3
 
 eta = 0.0 # self-illumination efficiency 
@@ -67,9 +67,10 @@ tmax = 1000./tscale # maximal time in tscales
 dtout = 0.0001/tscale # output time step in tscales
 omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
+print("replenishment time "+str(afac / xifac * dr_e/xifac / rstar )+"s")
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
-vout = -1./sqrt(r_e) / 5.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
+vout = -1./sqrt(r_e) / 15.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 
 # plotting options:
 ifplot = True
@@ -78,13 +79,13 @@ ascalias = 10 # make an ascii file every Nth output step
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
-outdir = "out_fast"
+outdir = "out"
 
 # restart options
 ifrestart = False
 ifhdf_restart = True # if we are restarting from a hdf file (or an ascii snapshot); relevant only if ifrestart = True
-restartfile = outdir + 'tireout2.hdf5'
-restartn = 2580
+restartfile = outdir + '/tireout1.hdf5'
+restartn = 70
 restartprefix = outdir+'tireout' # used if we restart from ascii output
 
 # estimating optimal N for a linear grid
