@@ -92,8 +92,8 @@ def tratfac(x):
 
 # define once and globally
 from beta import *
-betafun = betafun_define() # defines the interpolated function for beta
-betafun_p = betafun_press_define() # defines the interpolated function for beta
+betafun = betafun_define() # defines the interpolated function for beta (\rho, U)
+betafun_p = betafun_press_define() # defines the interpolated function for beta (\rho, P)
 
 ##############################################################################
 
@@ -106,7 +106,7 @@ def cons(rho, v, u, g):
     e=(u+rho*(v**2/2.- 1./g.r - 0.5*(omega*g.r*g.sth)**2))*g.across  # total energy (thermal + mechanic) per unit length
     return m, s, e
 
-def diffuse(rho, urad, v, dl, across):
+def diffuse(rho, urad, v, dl, across, gamma):
     '''
     radial energy diffusion;
     calculates energy flux contribution already at the cell boundary
@@ -118,8 +118,13 @@ def diffuse(rho, urad, v, dl, across):
     rtau = rtau_left + rtau_right
     rtau_exp = tratfac(copy(rtau))
     
-    duls_half =  nubulk * (( urad * v)[1:] - ( urad * v)[:-1])\
+    duls_half =  nubulk  * (( urad * v)[1:] - ( urad * v)[:-1])\
                  *across / 3. * rtau_exp #  / (rtau_left + rtau_right)
+    if (weinberg):
+        gamma_half = (gamma[1:]+gamma[:-1])/2.
+        duls_half *= (gamma_half-4./3.)**2 # Weinberg 1972: 2.11.28
+        # bulk viscosity in monatomic gas + radiation disappears is gamma=4/3
+        # note that bulk viscosity is mediated, in this approximation, by photons only
     # -- photon bulk viscosity
     dule_half = ((urad)[1:] - (urad)[:-1])\
                 *across / 3. * rtau_exp # / (rtau_left + rtau_right)
@@ -269,7 +274,7 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = No
         
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
-        duls_half, dule_half = diffuse(rho, urad, v, dl, ghalf.across)
+        duls_half, dule_half = diffuse(rho, urad, v, dl, ghalf.across, g1)
         fs_half += duls_half ;   fe_half += dule_half
     if(squeezemode):
         umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
@@ -290,6 +295,8 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = No
     return dmt, dst, det, ltot
 
 ################################################################################
+print("if you want to start the simulation, now type `alltire()` ")
+
 def alltire():
     '''
     the main routine bringing all together
@@ -322,6 +329,7 @@ def alltire():
     #    print(luni)
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
+    print("Across(0) = "+str(g.across[0]))
     r=rnew # set a grid uniform in l=luni
     r_half=rfun(luni_half) # half-step radial coordinates
     ghalf = geometry_initialize(r_half, r_e, dr_e, afac=afac) # mid-step geometry in r
@@ -362,11 +370,11 @@ def alltire():
     
     # setting the initial distributions of the primitive variables:
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
-    rhonoise = 1.e-3 * random.random_sample(nx)
-    rho *= (rhonoise+1.)
     vinit *= ((g.r-rstar)/(rmax-rstar))**0.5
     v = copy(vinit)
     press = umagtar[-1] * (g.r/r_e) * (rho/rho[-1]+1.)/2.
+    rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
+    rho *= (rhonoise+1.)
     beta = betafun_p(Fbeta_press(rho, press))
     u = press * 3. * (1.-beta/2.)
     u, rho, press = regularize(u, rho, press)
@@ -455,7 +463,7 @@ def alltire():
             plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie_restart', umagtar = umagtar)
             plots.vplot(g.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie_restart')
             plots.someplots(g.r, [u/rho**(4./3.)], name=outdir+'/entropy_restart', ytitle=r'$S$', ylog=True)
-            plots.someplots(g.r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
+            plots.someplots(g.r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
                             name=outdir+'/beta_restart', ytitle=r'$\beta$, $1-\beta$', ylog=True)
 
         m, s, e = cons(rho, v, u, g)
@@ -505,11 +513,11 @@ def alltire():
             s[-1] = -mdot
         else:
             s[-1] = s[-2] # outflowing
-        if(ufixed or galyamode or coolNS):
+        if(ufixed or BSmode or coolNS):
             # imposes a constant-thermal-energy outer BC
             # sort of redundant because it converts the whole variable set instead of the single last point; need to optimize it!
             rhotmp, vtmp, utmp, uradtmp, betatmp, presstmp = toprim(m, s, e, g)
-            if(galyamode):
+            if(BSmode):
                 utmp[0] = minimum(utmp[0], 3.*umagtar[0]) # limits the thermal energy by 3*Umag at the inner boundary
             else:
                 if(coolNS):
@@ -523,7 +531,7 @@ def alltire():
                     # only for an inward flow; otherwise there shd be an outflow condition
                 else:
                     e[-1] = e[-2]
-            if(galyamode or coolNS):
+            if(BSmode or coolNS):
                 e[0] = etmp[0]
         ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6.
         t += dt

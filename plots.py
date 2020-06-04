@@ -1,6 +1,7 @@
 import matplotlib
 from matplotlib import rc
 from matplotlib import axes
+from matplotlib import interactive, use
 from numpy import *
 from pylab import *
 from scipy.integrate import cumtrapz
@@ -24,6 +25,7 @@ from beta import *
 
 close('all')
 ioff()
+use('Agg')
 
 #############################################################
 # Plotting block 

@@ -2,7 +2,7 @@ from scipy.interpolate import interp1d
 from numpy import *
 from globals import *
 
-# pressure ratios:
+# calculating beta = pgas / p as a function of rho and P, and back 
 def Fbeta(rho, u):
     '''
     calculates a function of 
