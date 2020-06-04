@@ -15,6 +15,8 @@ Cdiff = 0.25 # diffusion time scale factor, dt = 1./(1./dt_CFL + 1./dt_thermal +
 mu30 = 0.1 # magnetic moment, 1e30 units
 m1=1.4 # NS mass, Solar units
 mdot = 10. * 4. * pi # mass accretion rate, internal units (Eddington ratio * 4\pi)
+# note that this value of mdot will be used to estimate the size of the magnetosphere r_e!
+# if you want to switch off the mass source, use the "ifturnoff" feature below
 mdotsink = 0. # mass sink rate at the inner edge
 # 1e21g/s --> 6291.12*4.*pi/m1
 rstar = 6.8/m1 # GM/c**2 units
@@ -53,6 +55,11 @@ dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
 print("Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
 print("magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
 print("Delta re = "+str(dr_e))
+#######
+# use this if you want to the the mass accretion rate to zero without changing the size of the magnetosphere
+ifturnoff = False
+if ifturnoff:
+    mdot *= 0.
 
 # conversion to CGS units:
 tscale = 4.92594e-06*m1 # GMsun/c**3
@@ -68,6 +75,7 @@ dtout = 0.0001/tscale # output time step in tscales
 omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
 print("replenishment time "+str(afac / xifac * dr_e/xifac / rstar )+"s")
+
 umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
 vout = -1./sqrt(r_e) / 15.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
