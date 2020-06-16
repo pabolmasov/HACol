@@ -14,7 +14,7 @@ if ifplot:
     import plots
     from matplotlib.pyplot import ioff
     ioff()
-
+    
 def rcoolfun(geometry, mdot):
     '''
     calculates the cooling radius from the known geometry
@@ -407,3 +407,22 @@ def filteredflux(hfile, n1, n2, rfraction = 0.9):
         fout.flush()
     fout.close()
     
+def massplot(prefix = "out/tireout"):
+    geofile = os.path.dirname(prefix)+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile) 
+    totfile = os.path.dirname(prefix)+"/totals"
+    lines = loadtxt(totfile+".dat", comments="#", delimiter=" ", unpack=False)
+    tene = lines[:,0] ;  mass = lines[:,1]
+
+    print(umag)
+    mcol = across[0] * umag * rstar**2 * 2.
+
+    tfilter = tene < 0.05
+    tene = tene[tfilter]
+    mass = mass[tfilter]
+
+    mass *= massscale/1e16
+    mcol *= massscale/1e16
+    
+    plots.someplots(tene, [mass, mdot * tene/tscale * massscale/1e16+mass[0], mass*0. + mcol], formatsequence = ['k-', 'r:', 'g--'], name = os.path.dirname(prefix)+"/masstest", xtitle='t, s', ytitle=r'$M$, $10^{16}$g', xlog = False, ylog = False)

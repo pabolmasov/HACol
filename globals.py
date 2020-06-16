@@ -2,7 +2,7 @@ from numpy import *
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=300 # the actual number of points in use
+nx=1000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
 rbasefactor = 0.1 #
@@ -12,9 +12,9 @@ Cth = 0.25 # thermal timescale factor
 Cdiff = 0.25 # diffusion time scale factor, dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
 
 # physical parameters:
-mu30 = 0.1 # magnetic moment, 1e30 units
+mu30 = 0.3 # magnetic moment, 1e30 units
 m1=1.4 # NS mass, Solar units
-mdot = 10. * 4. * pi # mass accretion rate, internal units (Eddington ratio * 4\pi)
+mdot = 100. * 4. * pi # mass accretion rate, internal units (Eddington ratio * 4\pi)
 # note that this value of mdot will be used to estimate the size of the magnetosphere r_e!
 # if you want to switch off the mass source, use the "ifturnoff" feature below
 mdotsink = 0. # mass sink rate at the inner edge
@@ -34,7 +34,7 @@ ufixed = True # if on, fixes the internal energy at the outer rim, otherwise fix
 squeezemode = True # if on, press>umag at the inner boundary leads to mass loss
 
 # radiation transfer treatment:
-raddiff = True # if we include radiation diffusion along the field line
+raddiff = False # if we include radiation diffusion along the field line
 xirad = 1.5 # radiation diffusion scaling
 taumin = 1e-4 # minimal optical depth to consider the low-tau limit
 taumax = 1e2 # maximal optical depth
@@ -50,7 +50,8 @@ eta = 0.0 # self-illumination efficiency
 heatingeff = 0.1 # additional heating scaling with mdot
 afac = 0.1 # part of the longitudes subtended by the flow
 xifac = 0.5 # magnetospheric radius in Alfven units
-r_e = 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
+r_e = 3251.61 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac
+# 4376.31 * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetospheric radius
 dr_e = minimum(1.5*mdot/(4.*pi), r_e*0.5) # radial extent of the flow at r_e
 print("Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
 print("magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
@@ -74,9 +75,9 @@ tmax = 1000./tscale # maximal time in tscales
 dtout = 0.0001/tscale # output time step in tscales
 omega = sqrt(0.0)*r_e**(-1.5) # in Keplerian units on the outer rim
 print("spin period "+str(2.*pi/omega*tscale)+"s")
-print("replenishment time "+str(afac / xifac * dr_e/xifac / rstar )+"s")
+print("replenishment time "+str(afac * dr_e/r_e /xifac / rstar )+"s")
 
-umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretorvtie00010.png
+umag = b12**2*2.29e6*m1 # magnetic energy density at the surface, for a 1.4Msun accretor
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic field pressure at the outer rim of the disc (1/2 factor from equatorial plane)
 vout = -1./sqrt(r_e) / 15.  # initial poloidal velocity at the outer boundary ; set to scale with magnetic pressure. 
 

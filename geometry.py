@@ -16,7 +16,7 @@ def geometry_initialize(r, r_e, dr_e, writeout=None, afac = 1.):
     '''
     computes all the geometrical quantities. Sufficient to run once before the start of the simulation.
     Output: sin(theta), cos(theta), sin(alpha), cos(alpha), tangential cross-section area, 
-    l (zero at the surface, growing with radius), and tagnential thickness delta
+    l (zero at the surface, growing with radius), and tangential thickness delta
     adding nontrivial writeout key allows to write the geometry to an ascii file 
     '''
     #    theta=arcsin(sqrt(r/r_e))

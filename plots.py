@@ -125,11 +125,18 @@ def plot_somemap(fname):
     somemap(x, y, -q/mdot, name=fname+".png", levels=arange(50)/30.,
             xlog=False, xtitle='$r/R_*$')
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, multix = False):
     '''
     plots a series of curves  
+    if multix is off, we assume that the independent variable is the same for all the data 
     '''
     ny=shape(ys)[0]
+
+    if multix:
+        nx = shape(x)[0]
+        if nx != ny:
+            print("X and Y arrays do not match")
+            return 0
 
     if formatsequence is None:
         formatsequence = ["." for x in range(ny)]
@@ -139,7 +146,10 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     for k in arange(ny):
         if vertical is not None:
             plot([vertical, vertical], [ys[k].min(), ys[k].max()], 'r-')
-        plot(x, ys[k], formatsequence[k])
+        if multix:
+            plot(x[k], ys[k], formatsequence[k])
+        else:
+            plot(x, ys[k], formatsequence[k])
     if(xlog):
         xscale('log')
     if(ylog):
@@ -151,7 +161,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     fig.tight_layout()
     savefig(name+'.png')
     close('all')
-  
+    
 #########################################################################
 # post-processing PDS plot:
 
@@ -240,6 +250,7 @@ def quasi2d(hname, n1, n2):
     nv=30
     vmin = round(var.min(),2)
     vmax = round(var.max(),2)
+    vmin = maximum(vmin, -1.) ; vmax = minimum(vmax, 1.)
     vlev=linspace(vmin, vmax, nv, endpoint=True)
     print(var.min())
     print(var.max())
@@ -393,6 +404,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
     plot(r, -1./7./sqrt(r*rstar), ':k', label=r'$\frac{1}{7}$ virial')
     legend()
     xscale('log')
+    vmin = maximum(vmin, -1.) ; vmax = minimum(vmax, 1.)
     ylim(vmin, vmax)
     xlabel(r'$R/R_*$') ; ylabel(r'$v/c$')
     savefig("Vcurvestack.png")

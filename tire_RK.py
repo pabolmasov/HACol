@@ -12,15 +12,16 @@ import os.path
 import imp
 import sys
 
+import multiprocessing
+from multiprocessing import Pool
+
+
 if(size(sys.argv)>1):
     print("launched with arguments "+str(', '.join(sys.argv)))
     # new conf file
     conf=sys.argv[1]
 else:
     conf = 'globals'
-'''
-A trick (borrowed from where???) that allows to load an arbitrary configuration file instead of the standard "globals.py"
-'''
 fp, pathname, description = imp.find_module(conf)
 imp.load_module('globals', fp, pathname, description)
 fp.close()
@@ -295,12 +296,30 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = No
     return dmt, dst, det, ltot
 
 ################################################################################
-print("if you want to start the simulation, now type `alltire()` ")
+print("if you want to start the simulation, now type `alltire(`globals')` \n")
+print("alternatively, you can arrange for a proper config file list in multitire and launch it as multitire()")
 
-def alltire():
+def alltire(glofile):
     '''
     the main routine bringing all together
     '''
+    if glofile is not None:
+        conf = glofile
+        fp, pathname, description = imp.find_module(conf)
+        imp.load_module('globals', fp, pathname, description)
+        fp.close()
+        '''
+        A trick (borrowed from where???) that allows to load an arbitrary configuration file instead of the standard "globals.py"
+        '''
+
+        from globals import nx, nx0, logmesh, rbasefactor
+        from globals import mdot, mu30, umag, umagout, raddiff, outdir
+        from globals import omega, r_e, dr_e, afac, eta, heatingeff, xirad
+        # re-import of the global variables
+        print("now mdot = "+str(mdot/4./pi))
+        print("now raddiff = "+str(raddiff))
+        print("output directory "+str(outdir))
+    
     timer.start("total")
 
     # if the outpur directory does not exist:
@@ -330,6 +349,9 @@ def alltire():
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
     print("Across(0) = "+str(g.across[0]))
+    # basic estimate for the replenishment time scale:
+    print("t_r = A_\perp u_mag / g / dot{M} = "+str(g.across[0] * umag * rstar**2 / mdot*tscale)+"s")
+    #    iii = input("s")
     r=rnew # set a grid uniform in l=luni
     r_half=rfun(luni_half) # half-step radial coordinates
     ghalf = geometry_initialize(r_half, r_e, dr_e, afac=afac) # mid-step geometry in r
@@ -549,9 +571,10 @@ def alltire():
         qloss = qloss_separate(rho, v, u, g)
         dt_thermal = Cth * abs(u*g.across/qloss)[where(qloss>0.)].min()
         if(raddiff):
-            dt_diff = Cdiff * (dlhalf**2 * 3.*rho[1:-1]).min() # (dx^2/D)
+            ctmp = dlhalf**2 * 3.*rho[1:-1]
+            dt_diff = Cdiff * quantile(ctmp[where(ctmp>0.)], 0.1) # (dx^2/D)
         else:
-            dt_diff = dt_CFL * 100. # effectively infinity ;)
+            dt_diff = dt_CFL * 5. # effectively infinity ;)
         dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
         #        print("u = "+str(u))
         #   print("time steps: dtCFL = "+str(dt_CFL)+", dt_thermal = "+str(dt_thermal)+", dt_diff = "+str(dt_diff))
@@ -620,5 +643,19 @@ def alltire():
 # if you want to make a movie of how the velocity changes with time:
 # ffmpeg -f image2 -r 15 -pattern_type glob -i 'out/vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
 # if you want the main procedure to start running immediately after the compilation, uncomment the following:
-# alltire()
+# alltire('globals')
+# or you can arrange for a proper list of configuration files and run multiple processes in parallel as
+# multitire()
+
+def multitire():
+
+    nproc = 2
+
+    glolist = ['globals_fidu', 'globals_fidu_noD']
+    nglo = size(glolist)
+    pool = multiprocessing.Pool(nproc)
+    pool.map(alltire, glolist)
+    #    for k in arange(nglo):
+    #        Process(target=alltire, args=(glolist[k],))    
+    pool.close()
 

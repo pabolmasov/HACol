@@ -43,7 +43,7 @@ def dump(hfile, nout, t, rho, v, u, qloss):
     grp.create_dataset("u", data=u)
     grp.create_dataset("qloss", data=qloss)
     hfile.flush()
-    print("HDF5 output, file "+hfile+", entry"+entry+"\n", flush=True)
+    print("HDF5 output, entry"+entry+"\n", flush=True)
 
 def close(hfile):
     hfile.close()
