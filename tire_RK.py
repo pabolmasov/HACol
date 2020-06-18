@@ -18,7 +18,7 @@ conffile = 'globals.conf'
 config = cp.ConfigParser(inline_comment_prefixes="#")
 config.read(conffile)
 ifplot = config['DEFAULT'].getboolean('ifplot')
-ifhdf = config['DEFAULT'].getboolean('ifplot')
+ifhdf = config['DEFAULT'].getboolean('ifhdf')
 #
 
 # loading local modules:

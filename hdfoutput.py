@@ -64,9 +64,13 @@ def read(hname, nentry):
     '''
     read a single entry from an HDF5
     '''
+    glosave = dict()
     hfile = h5py.File(hname, "r")
     geom=hfile["geometry"]
     glo=hfile["globals"]
+    glosave["rstar"] = glo.attrs["rstar"]
+    glosave["mdot"] = glo.attrs["mdot"]
+    glosave["umag"] = glo.attrs["umag"]
     rstar=glo.attrs["rstar"]
     entry = entryname(nentry)
     l=geom["l"][:]  ;  r=geom["r"][:] ;  sth=geom["sth"][:] # reading geometry
@@ -76,7 +80,7 @@ def read(hname, nentry):
     t=data.attrs["t"]
     print("t="+str(t)+" ("+str(nentry)+")")
     hfile.close()
-    return entry, t, l, r/rstar, sth, rho, u, v, qloss, glo
+    return entry, t, l, r/rstar, sth, rho, u, v, qloss, glosave
 
 def toasc(hname='tireout.hdf5', nentry=0):
     '''

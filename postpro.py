@@ -8,15 +8,87 @@ import os
 import hdfoutput as hdf
 import geometry as geo
 import bassun as bs
+import beta as beta
 
 import configparser as cp
-from tire_RK import config
+conffile = 'globals.conf'
+config = cp.ConfigParser(inline_comment_prefixes="#")
+config.read(conffile)
 
 ifplot =  config['DEFAULT'].getboolean('ifplot')
+
 if ifplot:
     import plots
     from matplotlib.pyplot import ioff
     ioff()
+
+def readtireout(infile, ncol = 0):
+    '''
+    reading a tireout ASCII file
+    ncol = 1 for rho
+    ncol = 2 for v
+    ncol = 3 for U/Umag
+    '''
+    lines = loadtxt(infile+'.dat', comments="#")
+    r = squeeze(lines[:,0])
+    if size(ncol) <= 1:
+        q = squeeze(lines[:,ncol])
+    else:
+        q = []
+        for k in arange(size(ncol)):
+            q.append(squeeze(lines[:,ncol[k]]))
+    return r, q
+
+def galjaread(infile):
+    '''
+    reads the results of BS-type stationary solution and outputs x = R/RNS and
+    u=u/umag
+    '''
+    lines = loadtxt(infile+'.dat', comments="#", delimiter="\t", unpack=False)
+    
+    x = squeeze(lines[:,0]) ; u = 3.*squeeze(lines[:,3]) ; v = squeeze(lines[:,5])
+    prat =  squeeze(lines[:,11])
+
+    #    plots.someplots(x, [v], name=infile+'_u', ylog=True, formatsequence=['k-'])
+    
+    return x, u, v, prat
+
+def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf = 'DEFAULT'):
+
+    xg, ug, vg, pratg = galjaread(ingalja)
+    
+    rstar = config[conf].getfloat('rstar')
+    m1 = config[conf].getfloat('m1')
+    mu30 = config[conf].getfloat('mu30')
+    mdot = config[conf].getfloat('mdot') * 4.*pi
+    afac = config[conf].getfloat('afac')
+    realxirad = config[conf].getfloat('xirad')
+    mow = config[conf].getfloat('mow')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    umag = b12**2*2.29e6*m1
+    betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
+
+    if vnorm is not None:
+        vg *= vnorm 
+
+    if ifhdf:
+        entry, t, l, xp, sth, rho, up, vp, qloss, glo  = read(inhdf, nentry)
+    else:
+        xp, qp = readtireout(inpasha, ncol = [3, 2, 1])
+        up, vp, rhop = qp
+    geofile = os.path.dirname(inpasha)+"/geo.dat"
+    r, theta, alpha, across, l, delta = geo.gread(geofile)
+
+    umagtar = umag * (1.+3.*cos(theta)**2)/4. * xp**(-6.)
+    
+    betap = beta.Fbeta(rhop, up * umagtar, betacoeff)
+    pratp = betap / (1.-betap)
+    
+    plots.someplots([xg, xp], [ug, up], name='BScompare_u', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
+    plots.someplots([xg, xp], [vg, vp], name='BScompare_v', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$v/c$', multix = True)
+    plots.someplots([xg, xp], [pratg, pratp], name='BScompare_p', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$P_{\rm gas} / P_{\rm rad}$', multix = True)
+# comparer('galia_F/BS_solution_F', 'titania_fidu/tireout01000', vnorm = -0.000173023, conf = 'FIDU')
+
     
 def rcoolfun(geometry, mdot):
     '''
@@ -176,19 +248,21 @@ def shock_dat(n, prefix = "out/tireout", kleap = 1):
     #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
     return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.,v[maximum(wcomp-kleap,00)], v[minimum(wcomp+1+kleap, size(r)-1)]
     
-def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=None, afac = None, kleap = 1, realxirad = None):
+def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap = 5):
     '''
     draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
     '''
-    rstar = config['DEFAULT'].getfloat('rstar')
-    m1 = config['DEFAULT'].getfloat('m1')
-    if mdot is None:
-        mdot = config['DEFAULT'].getfloat('mdot')
-    if afac is None:
-        afac = config['DEFAULT'].getfloat('afac')
-    if realxirad is None:
-        realxirad = config['DEFAULT'].getfloat('xirad')
-    
+    if conf is None:
+        conf = 'DEFAULT'
+    rstar = config[conf].getfloat('rstar')
+    m1 = config[conf].getfloat('m1')
+    mu30 = config[conf].getfloat('mu30')
+    mdot = config[conf].getfloat('mdot') * 4.*pi
+    afac = config[conf].getfloat('afac')
+    realxirad = config[conf].getfloat('xirad')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    umag = b12**2*2.29e6*m1
+
     n=arange(n1, n2, dn, dtype=int)
     s=arange(size(n), dtype=double)
     ds=arange(size(n), dtype=double)
@@ -205,7 +279,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=None, afac = 
     BSgamma = (2.*across0/delta0**2)/mdot*rstar / (realxirad/1.5)
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*30.*umag*m1 * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
-    xs = bs.xis(BSgamma, BSeta, x0=3.0)
+    xs = bs.xis(BSgamma, BSeta, x0=4.0)
     #     print("xs = "+str(xs))
     #    ii=input("xs")
     # spherization radius

@@ -22,6 +22,9 @@ from hdfoutput import read, entryname
 import geometry as geo
 from beta import *
 import configparser as cp
+conffile = 'globals.conf'
+config = cp.ConfigParser(inline_comment_prefixes="#")
+config.read(conffile)
 
 close('all')
 ioff()
@@ -214,7 +217,7 @@ def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     close()
 
 #############################################
-def quasi2d(hname, n1, n2):
+def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     '''
     makes quasi-2D Rt plots
     '''
@@ -228,6 +231,19 @@ def quasi2d(hname, n1, n2):
 
     rstar = glo['rstar']
     umag = glo['umag']
+    
+    tscale = config[conf].getfloat('tscale')
+    rstar = config[conf].getfloat('rstar')
+    m1 = config[conf].getfloat('m1')
+    mu30 = config[conf].getfloat('mu30')
+    mdot = config[conf].getfloat('mdot') * 4.*pi
+    afac = config[conf].getfloat('afac')
+    realxirad = config[conf].getfloat('xirad')
+    mow = config[conf].getfloat('mow')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    umag1 = b12**2*2.29e6*m1
+    print("Umag = "+str(umag)+" = "+str(umag1)+"\n")
+    betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
     
     nr=size(r)
     nrnew = 500 # radial mesh interpolated to nrnew
@@ -249,7 +265,7 @@ def quasi2d(hname, n1, n2):
         qar[k, :] = qfun(rnew)
         ufun = interp1d(r, u, kind = 'linear')
         uar[k, :] = ufun(rnew)
-        beta = betafun(Fbeta(rho, u))
+        beta = betafun(Fbeta(rho, u, betacoeff))
         press = u/3./(1.-beta/2.)
         pfun = interp1d(r, press, kind = 'linear')
         par[k, :] = pfun(rnew)

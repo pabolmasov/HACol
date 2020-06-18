@@ -3,7 +3,7 @@ import os
 
 import plots
 import beta
-from globals import umag
+# from globals import umag
 import geometry as geo
 
 '''
