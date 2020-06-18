@@ -1,9 +1,12 @@
 from scipy.interpolate import interp1d
 from numpy import *
-from globals import *
+
+# TODO: merge these values with the config file
+ufloor = 1e-15
+rhofloor = 1e-15
 
 # calculating beta = pgas / p as a function of rho and P, and back 
-def Fbeta(rho, u):
+def Fbeta(rho, u, betacoeff):
     '''
     calculates a function of 
     beta = pg/p from rho and u (dimensionless units)
@@ -15,7 +18,7 @@ def Fbeta(rho, u):
         beta[wpos]=betacoeff * rho[wpos] / u[wpos]**0.75
     return beta 
 
-def Fbeta_press(rho, press):
+def Fbeta_press(rho, press, betacoeff):
     '''
     calculates a function of 
     beta = pg/p from rho and pressure (dimensionless units)

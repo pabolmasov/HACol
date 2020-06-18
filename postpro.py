@@ -5,11 +5,14 @@ from scipy.optimize import curve_fit
 from scipy.signal import savgol_filter
 import os
 
-from globals import *
-
 import hdfoutput as hdf
 import geometry as geo
 import bassun as bs
+
+import configparser as cp
+from tire_RK import config
+
+ifplot =  config['DEFAULT'].getboolean('ifplot')
 if ifplot:
     import plots
     from matplotlib.pyplot import ioff
@@ -138,7 +141,7 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 3):
     finds the position of the shock in a given entry of the infile
     kleap allows to measure the velocity difference using several cells
     '''
-    entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(infile, n)
+    entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(infile, n)
     n=size(r)
     #    v=medfilt(v, kernel_size=3)
     v1=savgol_filter(copy(v), 2*kleap+1, 1) # Savitzky-Golay filter
@@ -173,10 +176,18 @@ def shock_dat(n, prefix = "out/tireout", kleap = 1):
     #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
     return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.,v[maximum(wcomp-kleap,00)], v[minimum(wcomp+1+kleap, size(r)-1)]
     
-def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=mdot, afac = afac, kleap = 1, realxirad = xirad):
+def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, mdot=None, afac = None, kleap = 1, realxirad = None):
     '''
     draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
     '''
+    rstar = config['DEFAULT'].getfloat('rstar')
+    m1 = config['DEFAULT'].getfloat('m1')
+    if mdot is None:
+        mdot = config['DEFAULT'].getfloat('mdot')
+    if afac is None:
+        afac = config['DEFAULT'].getfloat('afac')
+    if realxirad is None:
+        realxirad = config['DEFAULT'].getfloat('xirad')
     
     n=arange(n1, n2, dn, dtype=int)
     s=arange(size(n), dtype=double)
@@ -270,9 +281,11 @@ def tailfit(prefix = 'out/flux', trange = None):
     print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))
 
 ##################################################################
-def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False):
+def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False, mdot = None):
     # reconstructs the mass flow
     # reding geometry:
+    if mdot is None:
+        mdot = config['DEFAULT'].getfloat('mdot')
     geofile = os.path.dirname(prefix)+"/geo.dat"
     fluxfile = os.path.dirname(prefix)+"/flux.dat"
     fluxlines = loadtxt(fluxfile, comments="#")
@@ -325,7 +338,7 @@ def taus(n, prefix = 'out/tireout', ifhdf = True):
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     if(ifhdf):
         hname = prefix + ".hdf5"
-        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n)
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, n)
     else:
         entryname = hdf.entryname(n, ndig=5)
         fname = prefix + entryname + ".dat"
@@ -347,7 +360,7 @@ def virialratio(n, prefix = 'out/tireout', ifhdf = True):
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     if(ifhdf):
         hname = prefix + ".hdf5"
-        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n)
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, n)
     else:
         entryname = hdf.entryname(n, ndig=5)
         fname = prefix + entryname + ".dat"
@@ -391,7 +404,8 @@ def filteredflux(hfile, n1, n2, rfraction = 0.9):
     tar = zeros(n2-n1)
     
     for k in arange(n2-n1)+n1:
-        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hfile, k)
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hfile, k)
+        mdot = glo['mdot']
         lint[k] = simps(qloss[wr], x=l[wr])
         ltot[k] = simps(qloss, x=l)
         tar[k] = t
@@ -409,6 +423,8 @@ def filteredflux(hfile, n1, n2, rfraction = 0.9):
     
 def massplot(prefix = "out/tireout"):
     geofile = os.path.dirname(prefix)+"/geo.dat"
+    tscale = config['DEFAULT'].getfloat('tscale')
+    massscale = config['DEFAULT'].getfloat('massscale')
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     totfile = os.path.dirname(prefix)+"/totals"

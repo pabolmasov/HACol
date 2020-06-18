@@ -1,26 +1,27 @@
-from globals import *
-
-if(ifhdf):
-    import h5py
+# from tire_RK import configactual, m1, mdot, eta, afac, r_e, dr_e, omega, rstar
+import h5py
 
 def entryname(n, ndig = 6):
     entry = str(n).rjust(ndig, '0') # allows for 6 positions (hundreds of thousand of entries)
     return entry
 
-def init(hname, g): # , m1, mdot, eta, afac, re, dre, omega):
+def init(hname, g, configactual): # , m1, mdot, eta, afac, re, dre, omega):
     '''
     writing globals and geometry to the output HDF5 file
     '''
     hfile = h5py.File(hname, "w")
     glo = hfile.create_group("globals")
-    glo.attrs['m1']      = m1
-    glo.attrs['mdot']      = mdot
-    glo.attrs['eta']      = eta
-    glo.attrs['afac']      = afac
-    glo.attrs['re']      = r_e
-    glo.attrs['dre']      = dr_e
-    glo.attrs['omega']      = omega
-    glo.attrs['rstar']      = rstar
+    print(configactual['outdir']+": omega = "+str(configactual.getfloat('omega')))
+    #    input("oo")
+    glo.attrs['m1']      = configactual.getfloat('m1')
+    glo.attrs['mdot']      = configactual.getfloat('mdot')
+    glo.attrs['eta']      = configactual.getfloat('eta')
+    glo.attrs['afac']      = configactual.getfloat('afac')
+    glo.attrs['re']      = configactual.getfloat('r_e')
+    glo.attrs['dre']      = configactual.getfloat('dr_e')
+    glo.attrs['omega']      = configactual.getfloat('omega')
+    glo.attrs['rstar']      = configactual.getfloat('rstar')
+    glo.attrs['umag']      = configactual.getfloat('umag')
 
     geom = hfile.create_group("geometry")
     geom.create_dataset("l", data=g.l)
@@ -75,7 +76,7 @@ def read(hname, nentry):
     t=data.attrs["t"]
     print("t="+str(t)+" ("+str(nentry)+")")
     hfile.close()
-    return entry, t, l, r/rstar, sth, rho, u, v, qloss
+    return entry, t, l, r/rstar, sth, rho, u, v, qloss, glo
 
 def toasc(hname='tireout.hdf5', nentry=0):
     '''

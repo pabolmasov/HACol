@@ -18,10 +18,10 @@ rc('text', usetex=True)
 # #add amsmath to the preamble
 matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
-import hdfoutput as hdf
+from hdfoutput import read, entryname
 import geometry as geo
-from globals import *
 from beta import *
+import configparser as cp
 
 close('all')
 ioff()
@@ -29,11 +29,17 @@ use('Agg')
 
 #############################################################
 # Plotting block 
-def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None):
+def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None, configactual = None):
     '''
     energy u supplemented by rest-mass energy rho c^2
     '''
-    if(umag is None):
+    if configactual is None:
+        umag = 1. # no normalization
+        omega = 0.
+    else:
+        umag = configactual.getfloat('umag')
+        omega = configactual.getfloat('omega')
+    if umagtar is None:
         umagtar = umag*(rstar/r)**6
     ioff()
     clf()
@@ -49,9 +55,6 @@ def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None):
     B=u*4./3.+rho*(-1./r-0.5*(r*omega*sth)**2+v**2/2.)
     plot(r, B/umagtar, 'g', label='$B$', linestyle='dotted')
     plot(r, -B/umagtar, 'g', label='$-B$')
-    #    plot(x, y0, 'b')
-    #    xscale('log')
-    #    ylim(umag*((rstar/r)**6).min(), umag)
     ylim(((u/umagtar)[u>0.]).min(), (u/umagtar).max())
     xlabel('$r$, $GM/c^2$ units')
     ylabel(r'$U/U_{\rm mag}$')
@@ -221,7 +224,11 @@ def quasi2d(hname, n1, n2):
 
     nt=n2-n1
     # first frame
-    entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n1)
+    entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, n1)
+
+    rstar = glo['rstar']
+    umag = glo['umag']
+    
     nr=size(r)
     nrnew = 500 # radial mesh interpolated to nrnew
     rnew = (r.max()/r.min())**(arange(nrnew)/double(nrnew-1))*r.min()
@@ -235,7 +242,7 @@ def quasi2d(hname, n1, n2):
     tar = zeros(nt, dtype=double)
     #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
     for k in arange(n2-n1):
-        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n1+k)
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, n1+k)
         vfun = interp1d(r, v, kind = 'linear')
         var[k, :] = vfun(rnew)
         qfun = interp1d(r, qloss, kind = 'linear')
@@ -329,13 +336,13 @@ def postplot(hname, nentry, ifdat = True):
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     if(ifdat):
-        fname = hname + hdf.entryname(nentry, ndig=5) + ".dat"
-        entryname = hdf.entryname(nentry, ndig=5)
+        fname = hname + entryname(nentry, ndig=5) + ".dat"
+        entryname = entryname(nentry, ndig=5)
         print(fname)
         lines = loadtxt(fname, comments="#")
         r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3]
     else:
-        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, nentry)
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, nentry)
     #    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
     #    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
     someplots(r, [-v*rho*across, v*rho*across], name=hname+entryname+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])
@@ -355,7 +362,7 @@ def curvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat"):
     '''
     clf()
     for k in arange(n1,n2,step):
-        fname = prefix + hdf.entryname(k, ndig=5) + postfix
+        fname = prefix + entryname(k, ndig=5) + postfix
         print(fname)
         lines = loadtxt(fname, comments="#")
         print(shape(lines))
@@ -378,7 +385,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
     
     clf()
     for k in arange(n1,n2,step):
-        fname = prefix + hdf.entryname(k, ndig=5) + postfix
+        fname = prefix + entryname(k, ndig=5) + postfix
         print(fname)
         lines = loadtxt(fname, comments="#")
         print(shape(lines))

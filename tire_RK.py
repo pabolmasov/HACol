@@ -12,26 +12,20 @@ import os.path
 import imp
 import sys
 
-import multiprocessing
-from multiprocessing import Pool
-
-
-if(size(sys.argv)>1):
-    print("launched with arguments "+str(', '.join(sys.argv)))
-    # new conf file
-    conf=sys.argv[1]
-else:
-    conf = 'globals'
-fp, pathname, description = imp.find_module(conf)
-imp.load_module('globals', fp, pathname, description)
-fp.close()
-
-from globals import *
+# configuration file:
+import configparser as cp
+conffile = 'globals.conf'
+config = cp.ConfigParser(inline_comment_prefixes="#")
+config.read(conffile)
+ifplot = config['DEFAULT'].getboolean('ifplot')
+ifhdf = config['DEFAULT'].getboolean('ifplot')
+#
 
 # loading local modules:
 if ifplot:
     import plots
-import hdfoutput as hdf
+if ifhdf:
+    import hdfoutput as hdf
 import bassun as bs
 import solvers as solv
 from sigvel import *
@@ -144,7 +138,7 @@ def fluxes(rho, v, u, g):
     Note: fluxes do not include diffusion (added separately)
     '''
     s = rho*v*g.across # mass flux (identical to momentum per unit length -- can we use it?)
-    beta = betafun(Fbeta(rho, u))
+    beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
     p = g.across*(rho*v**2+press) # momentum flux
     fe = g.across*v*(u+press+(v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion
@@ -172,7 +166,7 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = 
     if(forcecheck):
         network = simps(force/(rho*g.across), x=g.l)
         return network, (1./g.r[0]-1./g.r[-1])
-    beta = betafun(Fbeta(rho, u))
+    beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.
     qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
@@ -192,7 +186,7 @@ def qloss_separate(rho, v, u, g):
     '''
     tau = rho * g.delta
     taufac = taufun(tau)    # 1.-exp(-tau)
-    beta = betafun(Fbeta(rho, u))
+    beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.    
     qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
@@ -206,7 +200,7 @@ def toprim(m, s, e, g):
     v=s/m
     u=(e-m*(v**2/2.-1./g.r-0.5*(g.r*g.sth*omega)**2))/g.across
     #    umin = u.min()
-    beta = betafun(Fbeta(rho, u))
+    beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
@@ -243,7 +237,7 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     det[-1] = -((edot)-s_half[-1])/dlright + de[-1]
     return dmt, dst, det
 
-def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = None, energy_inflow =  None):
+def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, momentum_inflow = None, energy_inflow =  None):
     '''
     calculating elementary increments of conserved quantities
     '''
@@ -278,7 +272,8 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = No
         duls_half, dule_half = diffuse(rho, urad, v, dl, ghalf.across, g1)
         fs_half += duls_half ;   fe_half += dule_half
     if(squeezemode):
-        umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
+        if umagtar is None:
+            umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
         dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/g.delta
         desqueeze = dmsqueeze * (e+press* g.across) / m # (e-u*g.across)/m
     else:
@@ -295,31 +290,111 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., momentum_inflow = No
                            #fe_half[-1])
     return dmt, dst, det, ltot
 
-################################################################################
-print("if you want to start the simulation, now type `alltire(`globals')` \n")
-print("alternatively, you can arrange for a proper config file list in multitire and launch it as multitire()")
 
-def alltire(glofile):
+
+################################################################################
+print("if you want to start the simulation, now type `alltire(`conf')` \n")
+
+def alltire(conf):
     '''
     the main routine bringing all together
     '''
-    if glofile is not None:
-        conf = glofile
-        fp, pathname, description = imp.find_module(conf)
-        imp.load_module('globals', fp, pathname, description)
-        fp.close()
-        '''
-        A trick (borrowed from where???) that allows to load an arbitrary configuration file instead of the standard "globals.py"
-        '''
-
-        from globals import nx, nx0, logmesh, rbasefactor
-        from globals import mdot, mu30, umag, umagout, raddiff, outdir
-        from globals import omega, r_e, dr_e, afac, eta, heatingeff, xirad
-        # re-import of the global variables
-        print("now mdot = "+str(mdot/4./pi))
-        print("now raddiff = "+str(raddiff))
-        print("output directory "+str(outdir))
+    global configactual
+    global ufloor, rhofloor, betacoeff, csqmin
+    global raddiff, squeezemode
+    global taumin, taumax
+    global m1, mdot, mdotsink, afac, r_e, dr_e, omega, rstar, umag, xirad
+    global eta, heatingeff
     
+    # initializing variables:
+    if conf is None:
+        configactual = config['DEFAULT']
+    else:
+        configactual = config[conf]
+    # geometry:
+    nx = configactual.getint('nx')
+    nx0 = configactual.getint('nx0factor') * nx
+    logmesh = configactual.getboolean('logmesh')
+    rbasefactor = configactual.getfloat('rbasefactor')
+
+    # numerical parameters:
+    CFL = configactual.getfloat('CFL')
+    Cth = configactual.getfloat('Cth')
+    Cdiff = configactual.getfloat('Cdiff')
+    ufloor = configactual.getfloat('ufloor')
+    rhofloor = configactual.getfloat('rhofloor')
+    csqmin = configactual.getfloat('csqmin')
+    
+    # physics:
+    mu30 = configactual.getfloat('mu30')
+    m1 = configactual.getfloat('m1')
+    mdot = configactual.getfloat('mdot') * 4. *pi # internal units
+    mdotsink = configactual.getfloat('mdotsink') * 4. *pi # internal units
+    rstar = configactual.getfloat('rstar')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    mow = configactual.getfloat('mow')
+    betacoeff = configactual.getfloat('betacoeff') * (m1)**(-0.25)/mow
+
+    # BC modes:
+    BSmode = configactual.getboolean('BSmode')
+    coolNS = configactual.getboolean('coolNS')
+    ufixed = configactual.getboolean('ufixed')
+    squeezemode = configactual.getboolean('squeezemode')
+
+    # radiation transfer:
+    raddiff = configactual.getboolean('raddiff')
+    xirad = configactual.getfloat('xirad')
+    taumin = configactual.getfloat('taumin')
+    taumax = configactual.getfloat('taumax')
+
+    # additional parameters:
+    xifac = configactual.getfloat('xifac')
+    afac = configactual.getfloat('afac')
+    nubulk = configactual.getfloat('nubulk')
+    weinberg = configactual.getboolean('weinberg')
+    eta = configactual.getfloat('eta')
+    heatingeff = configactual.getfloat('heatingeff')
+    
+    # derived quantities:
+    r_e = configactual.getfloat('r_e_coeff') * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetosphere radius
+    dr_e = configactual.getfloat('drrat') * r_e
+    omega = configactual.getfloat('omegafactor')*r_e**(-1.5)
+    print(conf+": "+str(omega))
+    vout = configactual.getfloat('voutfactor')  /sqrt(r_e) # velocity at the outer boundary
+    umag = b12**2*2.29e6*m1
+    umagout = 0.5**2*umag*(rstar/r_e)**6
+    config.set(conf,'r_e', str(r_e))
+    config.set(conf,'dr_e', str(dr_e))
+    config.set(conf,'umag', str(umag))
+    config.set(conf,'omega', str(omega))
+    config.set(conf,'vout', str(vout))
+
+    # physical scales:
+    tscale = configactual.getfloat('tscale') * m1
+    rscale = configactual.getfloat('rscale') * m1
+    rhoscale = configactual.getfloat('rhoscale') / m1
+
+    # print("spin period "+str(2.*pi/omega*tscale)+"s")
+    
+    # output options
+    tr = afac * dr_e/r_e /xifac / rstar * r_e**2.5 # replenishment time scale of the column
+    print("replenishment time "+str(tr))
+    tmax = tr * configactual.getfloat('tmax')
+    dtout = 0.0001/tscale                    # tr * configactual.getfloat('dtout')
+    ifplot = configactual.getboolean('ifplot')
+    ifhdf = configactual.getboolean('ifhdf')
+    plotalias = configactual.getint('plotalias')
+    ascalias = configactual.getint('ascalias')
+    outdir = configactual.get('outdir')
+    ifrestart = configactual.getboolean('ifrestart')
+
+    print("Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
+    print("magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
+    
+    # estimating optimal N for a linear grid
+    print("nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
+    print("nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
+
     timer.start("total")
 
     # if the outpur directory does not exist:
@@ -369,9 +444,9 @@ def alltire(glofile):
     #
     
     # testing bassun.py
-    print("delta = "+str((g.across/(4.*pi*afac*g.r*g.sth))[0]))
-    print("delta = "+str((g.sth*g.r/sqrt(1.+3.*g.cth**2))[0] * dr_e/r_e))
-    print("delta = "+str(g.delta[0]))
+    #    print("delta = "+str((g.across/(4.*pi*afac*g.r*g.sth))[0]))
+    #    print("delta = "+str((g.sth*g.r/sqrt(1.+3.*g.cth**2))[0] * dr_e/r_e))
+    #    print("delta = "+str(g.delta[0]))
     BSgamma = (g.across/g.delta**2)[0]/mdot*rstar
     BSeta = (8./21./sqrt(2.)*umag)**0.25*sqrt(g.delta[0])/(rstar)**0.125
     print("BS parameters:")
@@ -397,7 +472,7 @@ def alltire(glofile):
     press = umagtar[-1] * (g.r/r_e) * (rho/rho[-1]+1.)/2.
     rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
     rho *= (rhonoise+1.)
-    beta = betafun_p(Fbeta_press(rho, press))
+    beta = betafun_p(Fbeta_press(rho, press, betacoeff))
     u = press * 3. * (1.-beta/2.)
     u, rho, press = regularize(u, rho, press)
     print("estimated heat contribution to luminosity: "+str((-v*u*g.across)[-1]))
@@ -426,13 +501,17 @@ def alltire(glofile):
     # if we want to restart from a stored configuration
     # works so far correctly ONLY if the mesh is identical!
     if(ifrestart):
+        ifhdf_restart = configactual.getboolean('ifhdf_restart')
         if(ifhdf_restart):
             # restarting from a HDF5 file
+            restartfile = configactual.get('restartfile')
             entryname, t, l1, r1, sth1, rho1, u1, v1, qloss1 = hdf.read(restartfile, restartn)
             tstore = t
             print("restarted from file "+restartfile+", entry "+entryname)
         else:
             # restarting from an ascii output
+            restartprefix = configactual.get('restartprefix')
+            restartn = configactual.get('restartn')
             restartdir = os.path.dirname(restartprefix)
             ascrestartname = restartprefix + hdf.entryname(restartn, ndig=5) + ".dat"
             lines = loadtxt(ascrestartname, comments="#")
@@ -478,7 +557,7 @@ def alltire(glofile):
             #        print(r)
             #        print(r1)
             #        ii = input('r')
-        beta = betafun(Fbeta(rho, u))
+        beta = betafun(Fbeta(rho, u, betacoeff))
         press = u / (3.*(1.-beta/2.))
         if ifplot:
             print("plotting")
@@ -514,7 +593,7 @@ def alltire(glofile):
 
     if(ifhdf):
         hname = outdir+'/'+'tireout.hdf5'
-        hfile = hdf.init(hname, g) # , m1, mdot, eta, afac, re, dre, omega)
+        hfile = hdf.init(hname, g, configactual) # , m1, mdot, eta, afac, re, dre, omega)
         print("output to "+hname)
         
     crash = False # we have not crashed (yet)
@@ -523,10 +602,10 @@ def alltire(glofile):
     while(t<tmax):
         timer.start_comp("advance")
         # Runge-Kutta, fourth order, one step:
-        k1m, k1s, k1e, ltot1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow)
-        k2m, k2s, k2e, ltot2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow)
-        k3m, k3s, k3e, ltot3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow)
-        k4m, k4s, k4e, ltot4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow)
+        k1m, k1s, k1e, ltot1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow, umagtar = umagtar)
+        k2m, k2s, k2e, ltot2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow, umagtar = umagtar)
+        k3m, k3s, k3e, ltot3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow, umagtar = umagtar)
+        k4m, k4s, k4e, ltot4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow, umagtar = umagtar)
         m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
@@ -644,18 +723,4 @@ def alltire(glofile):
 # ffmpeg -f image2 -r 15 -pattern_type glob -i 'out/vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
 # if you want the main procedure to start running immediately after the compilation, uncomment the following:
 # alltire('globals')
-# or you can arrange for a proper list of configuration files and run multiple processes in parallel as
-# multitire()
-
-def multitire():
-
-    nproc = 2
-
-    glolist = ['globals_fidu', 'globals_fidu_noD']
-    nglo = size(glolist)
-    pool = multiprocessing.Pool(nproc)
-    pool.map(alltire, glolist)
-    #    for k in arange(nglo):
-    #        Process(target=alltire, args=(glolist[k],))    
-    pool.close()
 
