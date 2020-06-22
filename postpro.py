@@ -248,7 +248,7 @@ def shock_dat(n, prefix = "out/tireout", kleap = 1):
     #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
     return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.,v[maximum(wcomp-kleap,00)], v[minimum(wcomp+1+kleap, size(r)-1)]
     
-def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap = 5):
+def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap = 5, xest = 4.):
     '''
     draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
     '''
@@ -279,7 +279,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap
     BSgamma = (2.*across0/delta0**2)/mdot*rstar / (realxirad/1.5)
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*30.*umag*m1 * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
-    xs = bs.xis(BSgamma, BSeta, x0=4.0)
+    xs = bs.xis(BSgamma, BSeta, x0=30.0)
     #     print("xs = "+str(xs))
     #    ii=input("xs")
     # spherization radius
@@ -327,14 +327,13 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap
     else:
         fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
     fglo.close()
-    # last 0.1s average shock position
-    if t[n].max() > (t[n].min() + 0.1):
-        wlaten = (t[n] > (t[n].max()-0.1))
-        wlate = (t > (t.max()-0.1))
-        xmean = s[wlaten].mean() ; xrms = s[wlaten].std()+ds[wlaten].mean()
-        print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
-        fmean = f[wlate].mean() ; frms = f[wlate].std()
-        print("flux = "+str(fmean)+"+/-"+str(frms)+"\n")
+    # last 10% average shock position
+    wlaten = (t[n] > (t[n].max()*0.9))
+    wlate = (t > (t.max()*0.9))
+    xmean = s[wlaten].mean() ; xrms = s[wlaten].std()+ds[wlaten].mean()
+    print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
+    fmean = f[wlate].mean() ; frms = f[wlate].std()
+    print("flux = "+str(fmean)+"+/-"+str(frms)+"\n")
         
 ###############################
 def tailfitfun(x, p, n, x0, y0):
@@ -483,7 +482,7 @@ def filteredflux(hfile, n1, n2, rfraction = 0.9):
         lint[k] = simps(qloss[wr], x=l[wr])
         ltot[k] = simps(qloss, x=l)
         tar[k] = t
-        #    ltot /= 4.*pi ; lint /= 4.*pi # convert to Eddington units
+    ltot /= 4.*pi ; lint /= 4.*pi # convert to Eddington units
     if(ifplot):
         # overplotting with the total flux
         plots.someplots(tar, [lint, ltot, ltot-lint, lint*0.+mdot*0.2], xlog=False, formatsequence = ['k-', 'g--', 'b--', 'r-'], xtitle='t, s', ytitle=r'$L/L_{\rm Edd}$', name= os.path.dirname(hfile)+'/cutflux')
@@ -494,6 +493,13 @@ def filteredflux(hfile, n1, n2, rfraction = 0.9):
         fout.write(str(tar[k])+" "+str(lint[k])+" "+str(ltot[k])+"\n")
         fout.flush()
     fout.close()
+    # flux during the last 10% of the curve:
+    w = (tar > (tar.max()*0.9))
+    ffilteredmean = lint[w].mean()
+    fmean = ltot[w].mean()
+    fstd = ltot[w].std()
+    print("Fmean = "+str(fmean)+"+/-"+str(fstd)+" ("+str(fmean-ffilteredmean)+")")
+    
     
 def massplot(prefix = "out/tireout"):
     geofile = os.path.dirname(prefix)+"/geo.dat"

@@ -275,6 +275,8 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, mome
         if umagtar is None:
             umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
         dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/g.delta
+        if squeezeothersides:
+            dmsqueeze += 4. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/ (g.across / g.delta)
         desqueeze = dmsqueeze * (e+press* g.across) / m # (e-u*g.across)/m
     else:
         dmsqueeze = 0.
@@ -301,10 +303,10 @@ def alltire(conf):
     '''
     global configactual
     global ufloor, rhofloor, betacoeff, csqmin
-    global raddiff, squeezemode
+    global raddiff, squeezemode, ufixed, squeezeothersides
     global taumin, taumax
     global m1, mdot, mdotsink, afac, r_e, dr_e, omega, rstar, umag, xirad
-    global eta, heatingeff
+    global eta, heatingeff, nubulk, weinberg
     
     # initializing variables:
     if conf is None:
@@ -340,6 +342,7 @@ def alltire(conf):
     coolNS = configactual.getboolean('coolNS')
     ufixed = configactual.getboolean('ufixed')
     squeezemode = configactual.getboolean('squeezemode')
+    squeezeothersides = configactual.getboolean('squeezeothersides')
 
     # radiation transfer:
     raddiff = configactual.getboolean('raddiff')
@@ -493,6 +496,7 @@ def alltire(conf):
     print("primitive-conserved")
     print("rhomin = "+str(rho.min())+" = "+str(rho1.min()))
     print("umin = "+str(u.min())+" = "+str(u1.min()))
+    print("raddiff = "+str(raddiff))
     #    input("P")
     m0=m
     

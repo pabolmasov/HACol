@@ -30,6 +30,8 @@ close('all')
 ioff()
 use('Agg')
 
+formatsequence = ['k-', 'r:', 'g--', 'b-.']
+
 #############################################################
 # Plotting block 
 def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None, configactual = None):
@@ -508,40 +510,40 @@ def multishock_plot(fluxfile, frontfile):
     someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
     
-def twomultishock_plot(fluxfile1, frontfile1, fluxfile2, frontfile2):
+def multimultishock_plot(prefices):
+        # fluxfile1, frontfile1, fluxfile2, frontfile2):
     '''
-    plotting two shock fronts together
+    plotting many shock fronts together
     '''
-    # twomultishock_plot("titania_fidu/flux", "titania_fidu/sfront", "titania_rot/flux", "titania_rot/sfront")
-    fluxlines1 = loadtxt(fluxfile1+'.dat', comments="#", delimiter=" ", unpack=False)
-    frontlines1 = loadtxt(frontfile1+'.dat', comments="#", delimiter=" ", unpack=False)
-    frontinfo1 = loadtxt(frontfile1+'glo.dat', comments="#", delimiter=" ", unpack=False)
-    fluxlines2 = loadtxt(fluxfile2+'.dat', comments="#", delimiter=" ", unpack=False)
-    frontlines2 = loadtxt(frontfile2+'.dat', comments="#", delimiter=" ", unpack=False)
-    frontinfo2 = loadtxt(frontfile2+'glo.dat', comments="#", delimiter=" ", unpack=False)
-    tf1=fluxlines1[:,0] ; f1=fluxlines1[:,1]
-    ts1=frontlines1[1:,0] ; s1=frontlines1[1:,1] ; ds1=frontlines1[1:,2]
-    tf2=fluxlines2[:,0] ; f2=fluxlines2[:,1]
-    ts2=frontlines2[1:,0] ; s2=frontlines2[1:,1] ; ds2=frontlines2[1:,2]
-    eqlum = frontinfo1[0] ; rs = frontinfo1[1]
+    # multimultishock_plot(["titania_fidu", "titania_v5", "titania_v30"])
 
-    f1 /= 4.*pi ; f2 /= 4.*pi  # ; eqlum /= 4.*pi
-    
-    # interpolate!
-    fint1 = interp1d(tf1, f1, bounds_error=False)
-    fint2 = interp1d(tf2, f2, bounds_error=False)
-    sint = interp1d(ts2, s2, bounds_error=False) # second shock position
+    nf = size(prefices)
+    tlist = [] ;   flist = [];   slist = [] ;  dslist = []
 
+    for k in arange(nf):
+        fluxfile = prefices[k]+'/flux'
+        frontfile = prefices[k]+'/sfront'
+        fluxlines = loadtxt(fluxfile+'.dat', comments="#", delimiter=" ", unpack=False)
+        frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
+        frontinfo = loadtxt(frontfile+'glo.dat', comments="#", delimiter=" ", unpack=False)
+        
+        tf=fluxlines[:,0] ; f=fluxlines[:,1]
+        ts=frontlines[1:,0] ; s=frontlines[1:,1] ; ds=frontlines[1:,2]
+        tlist.append(ts) 
+        fint = interp1d(tf, f, bounds_error=False)        
+        slist.append(s); flist.append(fint(ts)/4./pi)
+
+        if k == 0:
+            eqlum = frontinfo[0] ; rs = frontinfo[1]
     clf()
-    plot(fint1(ts1), s1, 'g--', linewidth = 2)
-    plot(fint2(ts2), s2, 'k-')
-    plot([minimum(f1.min(), f2.min()), maximum(f1.max(), f2.max())], [rs, rs], 'r-')
-    plot([eqlum, eqlum], [minimum(s1.min(), s2.min()), maximum(s1.max(), s2.max())], 'r-')
+    for k in arange(nf):
+        plot(flist[k], slist[k], formatsequence[k])
+
+    plot([minimum(flist[0].min(), flist[1].min()), maximum(flist[0].max(), flist[-1].max())], [rs, rs], 'r-')
+    plot([eqlum, eqlum], [minimum(slist[0].min(), slist[-1].min()), maximum(slist[0].max(), slist[-1].max())], 'r-')
     xlabel(r'$L/L_{\rm Edd}$', fontsize=14) ; ylabel(r'$R_{\rm shock}/R_*$', fontsize=14)
-    savefig("twofluxfronts.png") ;   savefig("twofluxfronts.eps")
+    savefig("manyfluxfronts.png") ;   savefig("manyfluxfronts.eps")
     close('all')
-    
-    #    someplots(fint1(ts1), [s1, sint(ts1), s1*0. + rs], name = "twofluxfronts", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     
 #############################################################
 def allfluxes():
