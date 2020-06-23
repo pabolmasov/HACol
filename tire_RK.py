@@ -156,8 +156,10 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = 
     '''
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
-    tau = rho * g.delta
-    taufac = taufun(tau)    # 1.-exp(-tau)
+    tau = rho * g.delta # tau in transverse direction
+    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
+    taueff = copy(1./(1./tau + 1./tauphi))
+    taufac = taufun(taueff)    # 1.-exp(-tau)
     #    taufac = 1. # !!! temporary
     gamefac = tratfac(tau)
     gamedd = eta * ltot * gamefac
@@ -169,8 +171,8 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = 
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.
-    qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
-    irradheating = heatingeff * eta * mdot *afac / g.r * g.sth * sinsum * taufac
+    qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
+    irradheating = heatingeff * eta * mdot *afac / g.r * g.sth * sinsum * taufun(tau)
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = copy(rho*0.-dmsqueeze)
     dudt = copy(v*force-qloss+irradheating)
@@ -185,11 +187,13 @@ def qloss_separate(rho, v, u, g):
     standalone estimate for flux distribution
     '''
     tau = rho * g.delta
-    taufac = taufun(tau)    # 1.-exp(-tau)
+    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
+    taueff = copy(1./(1./tau + 1./tauphi))
+    taufac = taufun(taueff)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.    
-    qloss = copy(urad/(xirad*tau+1.)*8.*pi*g.r*g.sth*afac*taufac)  # diffusion approximation; energy lost from 4 sides
+    qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
 def toprim(m, s, e, g):
@@ -467,7 +471,8 @@ def alltire(conf):
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
     vinit=vout *sqrt(rmax/g.r) # initial velocity
-    
+
+    # Initial Conditions:
     # setting the initial distributions of the primitive variables:
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
     vinit *= ((g.r-rstar)/(rmax-rstar))**0.5
