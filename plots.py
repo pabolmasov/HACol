@@ -60,7 +60,7 @@ def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None, configa
     B=u*4./3.+rho*(-1./r-0.5*(r*omega*sth)**2+v**2/2.)
     plot(r, B/umagtar, 'g', label='$B$', linestyle='dotted')
     plot(r, -B/umagtar, 'g', label='$-B$')
-    ylim(((u/umagtar)[u>0.]).min(), (u/umagtar).max())
+    ylim(((u/umagtar)[u>0.]).min(), maximum((u/umagtar).max(), 1.))
     xlabel('$r$, $GM/c^2$ units')
     ylabel(r'$U/U_{\rm mag}$')
     yscale('log')
@@ -374,11 +374,12 @@ def multiplots(hname, n1, n2):
         postplot(hname, k)
 
 #####################################
-def curvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat"):
+def curvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", conf = 'DEFAULT'):
     '''
     plots a series of U/Umag curves from the ascii output
     '''
     clf()
+    fig = figure()
     for k in arange(n1,n2,step):
         fname = prefix + entryname(k, ndig=5) + postfix
         print(fname)
@@ -391,17 +392,22 @@ def curvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat"):
     legend()
     xscale('log') ; yscale('log')
     xlabel(r'$R/R_*$') ; ylabel(r'$U/U_{\rm mag}$')
+    fig.set_size_inches(5, 4)
+    fig.tight_layout()
     savefig("curvestack.png")
     close('all')
 
-def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=False):
+def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=False, conf = 'DEFAULT'):
     '''
     plots a series of velocity curves from the ascii output
     '''
+    rstar = config[conf].getfloat('rstar')
+
     kctr = 0
     vmin=0. ; vmax=0.
     
     clf()
+    fig = figure()
     for k in arange(n1,n2,step):
         fname = prefix + entryname(k, ndig=5) + postfix
         print(fname)
@@ -432,6 +438,8 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
     vmin = maximum(vmin, -1.) ; vmax = minimum(vmax, 1.)
     ylim(vmin, vmax)
     xlabel(r'$R/R_*$') ; ylabel(r'$v/c$')
+    fig.set_size_inches(5, 4)
+    fig.tight_layout()
     savefig("Vcurvestack.png")
     if(plot2d):
         nv=20

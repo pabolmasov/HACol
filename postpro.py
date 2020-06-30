@@ -402,10 +402,18 @@ def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False, mdot = None):
                         xtitle='$R/R_*$', ytitle=r"$\dot{M}c^2/L_{\rm Edd}$", formatsequence=['k.', 'r-'])
         
         
-def taus(n, prefix = 'out/tireout', ifhdf = True):
+def taus(n, prefix = 'out/tireout', ifhdf = True, conf = 'DEFAULT'):
     '''
     calculates the optical depths along and across the flow
     '''
+
+    rstar = config[conf].getfloat('rstar')
+    m1 = config[conf].getfloat('m1')
+    mu30 = config[conf].getfloat('mu30')
+    mdot = config[conf].getfloat('mdot') * 4.*pi
+    afac = config[conf].getfloat('afac')
+    realxirad = config[conf].getfloat('xirad')
+
     geofile = os.path.dirname(prefix)+"/geo.dat"
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile) 

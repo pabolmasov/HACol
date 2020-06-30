@@ -6,7 +6,7 @@ from tire_RK import alltire
 
 print("now you can arrange for a proper config file list in multitire and launch it as multitire()")
 
-def multitire(glolist = ['FOURSIDES', 'WUF'], nproc = None):
+def multitire(glolist = ['WIDE', 'WIDENOD', 'WUF'], nproc = None):
 
     nglo = size(glolist)
     if nproc is None:

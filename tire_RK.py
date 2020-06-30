@@ -16,9 +16,10 @@ import sys
 import configparser as cp
 conffile = 'globals.conf'
 config = cp.ConfigParser(inline_comment_prefixes="#")
-config.read(conffile)
+config.read(conffile) 
 ifplot = config['DEFAULT'].getboolean('ifplot')
 ifhdf = config['DEFAULT'].getboolean('ifhdf')
+verbose = config['DEFAULT'].getboolean('verbose')
 #
 
 # loading local modules:
@@ -123,9 +124,13 @@ def diffuse(rho, urad, v, dl, across, gamma):
     # -- photon bulk viscosity
     dule_half = ((urad)[1:] - (urad)[:-1])\
                 *across / 3. * rtau_exp # / (rtau_left + rtau_right)
-    dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux 
+    dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux
+
     # -- radial diffusion
     # introducing exponential factors helps reduce the numerical noise from rho variations
+
+    # no diffusion for the last cell:
+    #    dule_half[-1] = 0. ; duls_half[-1] = 0.
     return -duls_half, -dule_half 
 
 def fluxes(rho, v, u, g):
@@ -206,6 +211,7 @@ def toprim(m, s, e, g):
     #    umin = u.min()
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
+    u, rho, press = regularize(u, rho, press)
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
 def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, edot = None, sdot = None):
@@ -232,13 +238,14 @@ def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlri
     dmt[-1] = -((-mdot)-s_half[-1])/dlright+dm[-1]
     #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
     if(sdot is None):
-        dst[-1] = -(0. - p_half[-1])/dlright + ds[-1]
+        dst[-1] = 0. # -(0. - p_half[-1])/dlright + ds[-1]
     else:
         dst[-1] = -(sdot - p_half[-1])/dlright + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
     #    edot =  abs(mdot) * 0.5/g.r[-1] + s[-1]/m[-1] * u[-1] # virial equilibrium
     if(edot is None):
-        edot = 0.
-    det[-1] = -((edot)-s_half[-1])/dlright + de[-1]
+        det[-1] = 0.
+    else:
+        det[-1] = -((-edot)-s_half[-1])/dlright # + de[-1]
     return dmt, dst, det
 
 def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, momentum_inflow = None, energy_inflow =  None):
@@ -246,9 +253,9 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, mome
     calculating elementary increments of conserved quantities
     '''
     rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
-    u, rho, press = regularize(u, rho, press)
-    if(momentum_inflow is None):
-        momentum_inflow = ((press+rho * v**2)*g.across)[-1]
+    # u, rho, press = regularize(u, rho, press) !!! 
+    #    if(momentum_inflow is None):
+    #        momentum_inflow = ((press+rho * v**2)*g.across)[-1]
     fm, fs, fe = fluxes(rho, v, u, g)
     g1 = Gamma1(5./3., beta)
     csq=g1*press/rho
@@ -274,7 +281,10 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, mome
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
         duls_half, dule_half = diffuse(rho, urad, v, dl, ghalf.across, g1)
-        fs_half += duls_half ;   fe_half += dule_half
+        # radial diffusion suppressed, if transverse optical depth is small:
+        duls_half *= 1.-exp(-ghalf.delta * (rho[1:]+rho[:-1])/2.)
+        dule_half *= 1.-exp(-ghalf.delta * (rho[1:]+rho[:-1])/2.)
+        fs_half += duls_half ; fe_half += dule_half
     if(squeezemode):
         if umagtar is None:
             umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
@@ -366,10 +376,16 @@ def alltire(conf):
     r_e = configactual.getfloat('r_e_coeff') * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetosphere radius
     dr_e = configactual.getfloat('drrat') * r_e
     omega = configactual.getfloat('omegafactor')*r_e**(-1.5)
-    print(conf+": "+str(omega))
+    if verbose:
+        print(conf+": "+str(omega))
+        print(conf+": spin period "+str(2.*pi/omega*tscale)+"s")
+
     vout = configactual.getfloat('voutfactor')  /sqrt(r_e) # velocity at the outer boundary
     umag = b12**2*2.29e6*m1
     umagout = 0.5**2*umag*(rstar/r_e)**6
+    csqout = vout**2
+    if verbose:
+        print(conf+": "+str(csqout))
     config.set(conf,'r_e', str(r_e))
     config.set(conf,'dr_e', str(dr_e))
     config.set(conf,'umag', str(umag))
@@ -380,12 +396,11 @@ def alltire(conf):
     tscale = configactual.getfloat('tscale') * m1
     rscale = configactual.getfloat('rscale') * m1
     rhoscale = configactual.getfloat('rhoscale') / m1
-
-    # print("spin period "+str(2.*pi/omega*tscale)+"s")
     
     # output options
     tr = afac * dr_e/r_e /xifac / rstar * r_e**2.5 # replenishment time scale of the column
-    print("replenishment time "+str(tr))
+    if verbose:
+        print(conf+": replenishment time "+str(tr))
     tmax = tr * configactual.getfloat('tmax')
     dtout = 0.0001/tscale                    # tr * configactual.getfloat('dtout')
     ifplot = configactual.getboolean('ifplot')
@@ -395,12 +410,13 @@ def alltire(conf):
     outdir = configactual.get('outdir')
     ifrestart = configactual.getboolean('ifrestart')
 
-    print("Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
-    print("magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
+    if verbose:
+        print(conf+": Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
+        print(conf+": magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
     
-    # estimating optimal N for a linear grid
-    print("nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
-    print("nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
+        # estimating optimal N for a linear grid
+        print(conf+": nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
+        print(conf+": nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
 
     timer.start("total")
 
@@ -426,29 +442,19 @@ def alltire(conf):
     g.l -= rbase ; luni -= rbase
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(g.l, g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
-    #    print(g.l)
-    #    print(luni)
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
-    print("Across(0) = "+str(g.across[0]))
-    # basic estimate for the replenishment time scale:
-    print("t_r = A_\perp u_mag / g / dot{M} = "+str(g.across[0] * umag * rstar**2 / mdot*tscale)+"s")
-    #    iii = input("s")
+    if verbose:
+        print(conf+": Across(0) = "+str(g.across[0]))
+        # basic estimate for the replenishment time scale:
+        print(conf+": t_r = A_\perp u_mag / g / dot{M} = "+str(g.across[0] * umag * rstar**2 / mdot*tscale)+"s")
     r=rnew # set a grid uniform in l=luni
     r_half=rfun(luni_half) # half-step radial coordinates
     ghalf = geometry_initialize(r_half, r_e, dr_e, afac=afac) # mid-step geometry in r
     ghalf.l += g.l[1]/2. # mid-step mesh starts halfstep later
-    #    print(str((g.r).min()) + " = " + str(rstar)+"?")
-    #    ii = input("rbase")
-    print("half-step Delta l = "+str(fabs(luni_half-ghalf.l).max()))
-    print("half-step l step = "+str(fabs(ghalf.l[:-1]-ghalf.l[1:]).min()))
-    #    ii = input("Dl")
-    #    dlleft = ghalf.l[1]-ghalf.l[0] # 2.*(ghalf.l[1]-ghalf.l[0])-(ghalf.l[2]-ghalf.l[1])
-    #    dlright = ghalf.l[-1]-ghalf.l[-2] # 2.*(ghalf.l[-1]-ghalf.l[-2])-(ghalf.l[-2]-ghalf.l[3])
     dl=g.l[1:]-g.l[:-1] # cell sizes
     dlhalf=ghalf.l[1:]-ghalf.l[:-1] # cell sizes
     dlleft = dl[0] ; dlright = dl[-1] # 
-    #
     
     # testing bassun.py
     #    print("delta = "+str((g.across/(4.*pi*afac*g.r*g.sth))[0]))
@@ -456,9 +462,10 @@ def alltire(conf):
     #    print("delta = "+str(g.delta[0]))
     BSgamma = (g.across/g.delta**2)[0]/mdot*rstar
     BSeta = (8./21./sqrt(2.)*umag)**0.25*sqrt(g.delta[0])/(rstar)**0.125
-    print("BS parameters:")
-    print("   gamma = "+str(BSgamma))
-    print("   eta = "+str(BSeta))
+    if verbose:
+        print(conf+" BS parameters:")
+        print(conf+"   gamma = "+str(BSgamma))
+        print(conf+"   eta = "+str(BSeta))
     x1 = 1. ; x2 = 1000. ; nxx=1000
     xtmp=(x2/x1)**(arange(nxx)/double(nxx))*x1
     if(ifplot):
@@ -474,8 +481,8 @@ def alltire(conf):
 
     # Initial Conditions:
     # setting the initial distributions of the primitive variables:
-    rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across
-    vinit *= ((g.r-rstar)/(rmax-rstar))**0.5
+    rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across*0.5
+    vinit *= ((g.r-rstar)/(rmax-rstar))**0.5 # to fit the v=0 condition at the surface of the star
     v = copy(vinit)
     press = umagtar[-1] * (g.r/r_e) * (rho/rho[-1]+1.)/2.
     rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
@@ -483,26 +490,26 @@ def alltire(conf):
     beta = betafun_p(Fbeta_press(rho, press, betacoeff))
     u = press * 3. * (1.-beta/2.)
     u, rho, press = regularize(u, rho, press)
-    print("estimated heat contribution to luminosity: "+str((-v*u*g.across)[-1]))
-    #    ii = input("HL")
-    # 3.*umagout+(rho/rho[-1])*0.01/g.r
-    print("U = "+str((u/umagtar).min())+" to "+str((u/umagtar).max()))
+    if verbose:
+        print(conf+": U = "+str((u/umagtar).min())+" to "+str((u/umagtar).max()))
     m, s, e = cons(rho, vinit, u, g)
-    ulast = u[-1] # 
-    print("U/Umag(Rout) = "+str((u/umagtar)[-1]))
+    ulast = u[-1] #
+    rholast = rho[-1]
+    if verbose:
+        print(conf+": U/Umag(Rout) = "+str((u/umagtar)[-1]))
+        print(conf+": V(Rout) = "+str(v[-1]))
     #    ii=input('m')
     
     rho1, v1, u1, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
     workout, dphi = sources(rho1, v1, u1, g, forcecheck = True) # checking whether the force corresponds to the potential
-    print("potential at the surface = "+str(-workout)+" = "+str(dphi))
-    print(str((rho-rho1).std())) 
-    print(str((vinit-v1).std()))
-    print(str((u-u1).std())) # accuracy 1e-14
-    print("primitive-conserved")
-    print("rhomin = "+str(rho.min())+" = "+str(rho1.min()))
-    print("umin = "+str(u.min())+" = "+str(u1.min()))
-    print("raddiff = "+str(raddiff))
-    #    input("P")
+    if verbose:
+        print(conf+": potential at the surface = "+str(-workout)+" = "+str(dphi))
+        # print(str((rho-rho1).std())) 
+        # print(str((vinit-v1).std()))
+        # print(str((u-u1).std())) # accuracy 1e-14
+        # print("primitive-conserved")
+        print(conf+": rhomin = "+str(rho.min())+" = "+str(rho1.min())+" (primitive-conserved and back)")
+        print(conf+": umin = "+str(u.min())+" = "+str(u1.min()))
     m0=m
     
     t=0.;  tstore=0.  ; nout=0
@@ -538,8 +545,9 @@ def alltire(conf):
             tstore = t
             print("restarted from ascii output "+ascrestartname)
             print("t = "+str(t))
-        print("r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
-        print("r1 from "+str(r1.min())+" to "+str(r1.max()))
+        if verbose:
+            print(conf+": r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
+            print(conf+": r1 from "+str(r1.min())+" to "+str(r1.max()))
         if(r.max()>(1.01*r1.max()*rstar)):
             print("restarting: size does not match!")
             return(1)
@@ -569,7 +577,6 @@ def alltire(conf):
         beta = betafun(Fbeta(rho, u, betacoeff))
         press = u / (3.*(1.-beta/2.))
         if ifplot:
-            print("plotting")
             plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie_restart', umagtar = umagtar)
             plots.vplot(g.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie_restart')
             plots.someplots(g.r, [u/rho**(4./3.)], name=outdir+'/entropy_restart', ytitle=r'$S$', ylog=True)
@@ -580,16 +587,23 @@ def alltire(conf):
         nout = restartn
 
     ulast = u[-1]
+    if ulast < 0.:
+        print("negative internal energy in the IC\n")
+        print(ulast)
+        ii = input("C")
     presslast = (press + v**2 * rho)[-1]
-    #    if not(ufixed):
-    # presslast = None
     fm, fs, fe = fluxes(rho, v, u, g)
-    energy_inflow = fe[-1]
-    momentum_inflow = fs[-1]
+    if not(ufixed):
+        energy_inflow = - mdot / rmax * 0.
+        #        print(conf+": "+str(energy_inflow)+" is not none")
+        #        ii = input('inflow')
+    else:
+        energy_inflow = None
+    momentum_inflow = None # fs[-1]
         
     dlmin=dl.min()
-    dt = dlmin*CFL
-    print("dt = "+str(dt))
+    dt = dlmin*CFL*0.01
+
     #    ti=input("dt")
     
     ltot=0. # estimated total luminosity
@@ -610,6 +624,19 @@ def alltire(conf):
     timer.start("total")
     while(t<tmax):
         timer.start_comp("advance")
+        
+        # time step adjustment:
+        csqest = 4./3.*u/rho
+        dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
+        qloss = qloss_separate(rho, v, u, g)
+        dt_thermal = Cth * abs(u*g.across/qloss)[where((u*qloss)>0.)].min()
+        if(raddiff):
+            ctmp = dlhalf**2 * 3.*rho[1:-1]
+            dt_diff = Cdiff * quantile(ctmp[where(ctmp>0.)], 0.1) # (dx^2/D)
+        else:
+            dt_diff = dt_CFL * 5. # effectively infinity ;)
+        dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
+        
         # Runge-Kutta, fourth order, one step:
         k1m, k1s, k1e, ltot1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow, umagtar = umagtar)
         k2m, k2s, k2e, ltot2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow, umagtar = umagtar)
@@ -619,33 +646,14 @@ def alltire(conf):
         s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
         e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
         s[0] = -mdotsink
-        if v[-1] < 0.:
-            s[-1] = -mdot
-        else:
-            s[-1] = s[-2] # outflowing
-        if(ufixed or BSmode or coolNS):
-            # imposes a constant-thermal-energy outer BC
-            # sort of redundant because it converts the whole variable set instead of the single last point; need to optimize it!
-            rhotmp, vtmp, utmp, uradtmp, betatmp, presstmp = toprim(m, s, e, g)
-            if(BSmode):
-                utmp[0] = minimum(utmp[0], 3.*umagtar[0]) # limits the thermal energy by 3*Umag at the inner boundary
-            else:
-                if(coolNS):
-                    utmp[0] = utmp[1] # + 3. * (rhotmp[0]+rhotmp[1])/2. / rstar**2 * dlleft #  hydrostatics
-            if(ufixed):
-                utmp[-1] = minimum(ulast, 0.5*rhotmp[-1]/rmax) # either initial energy density or virial limit
-            mtmp, stmp, etmp = cons(rhotmp, vtmp, utmp, g)
-            if(ufixed):
-                if v[-1] <=0.:
-                    e[-1] = etmp[-1]
-                    # only for an inward flow; otherwise there shd be an outflow condition
-                else:
-                    e[-1] = e[-2]
-            if(BSmode or coolNS):
-                e[0] = etmp[0]
-        ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6.
+        #        if v[-1] < 0.:
+        s[-1] = -mdot # momentum density fixed (simply -mdot)
+        #  else:
+        #    s[-1] = s[-2] # outflowing
+        if ufixed:
+            e[-1] = 0.  # -m[-1] / rmax / 2.
+        ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6. # total luminosity (estimate on the basis of the RK calculation)
         t += dt
-        csqest = 4./3.*u/rho
         rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
         # crash case:
         if any(isnan(u)) is True:
@@ -654,30 +662,21 @@ def alltire(conf):
             crash = True
             nout = -1
             
-        # time step adjustment:
-        dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
-        qloss = qloss_separate(rho, v, u, g)
-        dt_thermal = Cth * abs(u*g.across/qloss)[where(qloss>0.)].min()
-        if(raddiff):
-            ctmp = dlhalf**2 * 3.*rho[1:-1]
-            dt_diff = Cdiff * quantile(ctmp[where(ctmp>0.)], 0.1) # (dx^2/D)
-        else:
-            dt_diff = dt_CFL * 5. # effectively infinity ;)
-        dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
-        #        print("u = "+str(u))
-        #   print("time steps: dtCFL = "+str(dt_CFL)+", dt_thermal = "+str(dt_thermal)+", dt_diff = "+str(dt_diff))
-        #        ii = input("UU")
         timer.stop_comp("advance")
         timer.lap("step")
         if (t>=tstore) | crash:
             tstore += dtout
             timer.start("io")
             #            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
-            print("t = "+str(t*tscale)+"s")
-            print("dt = "+str(dt*tscale)+"s")
-            print("time steps: dtCFL = "+str(dt_CFL)+", dt_thermal = "+str(dt_thermal)+", dt_diff = "+str(dt_diff))
-            print("ltot = "+str(ltot1)+" = "+str(ltot2)+" = "+str(ltot3)+" = "+str(ltot4))
-            #            print("tratmax = "+str(tratmax))
+            if verbose:
+                print(conf+": t = "+str(t*tscale)+"s")
+                # print("dt = "+str(dt*tscale)+"s")
+                print(conf+": time steps: dtCFL = "+str(dt_CFL)+", dt_thermal = "+str(dt_thermal)+", dt_diff = "+str(dt_diff))
+                print(conf+": ltot = "+str(ltot1)+" = "+str(ltot2)+" = "+str(ltot3)+" = "+str(ltot4))
+                print(conf+": V (out) = "+str(v[-1]))
+                print(conf+": mechanical energy = "+str((v**2/2.-1./g.r)[-1]))
+                print(conf+": mechanical energy per unit mass = "+str((v**2/2.-1./g.r)[-1]/rho[-1]))
+                print(conf+": U/Umag (out) = "+str(u[-1]/umagtar[-1]))
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
             fflux.flush()
             if ifplot & (nout%plotalias == 0):
@@ -694,11 +693,11 @@ def alltire(conf):
                                 formatsequence = ['k-', 'r-'])
             mtot=trapz(m, x=g.l)
             etot=trapz(e, x=g.l)
-            print("mass = "+str(mtot))
-            print("ltot = "+str(ltot))
-            #            print("heat = "+str(heat))
-            print("energy = "+str(etot))
-            print("momentum = "+str(trapz(s, x=g.l)))
+            if verbose:
+                print(conf+": mass = "+str(mtot))
+                print(conf+": ltot = "+str(ltot))
+                print(conf+": energy = "+str(etot))
+                print(conf+": momentum = "+str(trapz(s, x=g.l)))
             
             ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
             ftot.flush()
@@ -706,8 +705,10 @@ def alltire(conf):
                 hdf.dump(hfile, nout, t, rho, v, u, qloss)
             if not(ifhdf) or (nout%ascalias == 0):
                 # ascii output:
-                print(nout)
+                # print(nout)
                 fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
+                if verbose:
+                    print(conf+" ASCII output to "+fname)
                 fstream=open(fname, 'w')
                 fstream.write('# t = '+str(t*tscale)+'s\n')
                 fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
