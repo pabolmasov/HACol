@@ -1,5 +1,7 @@
 # from tire_RK import configactual, m1, mdot, eta, afac, r_e, dr_e, omega, rstar
 import h5py
+import os.path
+from numpy import arange, size
 
 # TODO: make a merger!
 
@@ -83,6 +85,68 @@ def read(hname, nentry):
     print("t="+str(t)+" ("+str(nentry)+")")
     hfile.close()
     return entry, t, l, r/rstar, sth, rho, u, v, qloss, glosave
+
+def stitch(hname1, hname2):
+    '''
+    reads to HDF outputs and stitches them together
+    '''
+    hfile1 = h5py.File(hname1, "r")
+    hfile2 = h5py.File(hname2, "r")
+    # globals are taken from the first file:
+    glo1=hfile1["globals"] 
+    # geometry could be different
+    # TODO: added interpolation for the case when geom1 != geom2
+    geom1=hfile1["geometry"]
+
+    print(os.path.dirname(hname1)+'/tirecombine.hdf5')
+    hnew = h5py.File(os.path.dirname(hname1)+'/tirecombine.hdf5', "w")
+    
+    glo = hnew.create_group("globals")
+    geom = hnew.create_group("geometry")
+    
+    # hnew.copy(glo1, glo) ; hnew.copy(geom1, geom)
+    # group.copy does not work, for some reason
+    globalkeys = glo1.attrs.keys()
+    for k in globalkeys:
+        glo.attrs[k] = glo1.attrs[k]
+    geokeys = geom1.keys()
+    for k in geokeys:
+        geom.create_dataset(k, data=geom1[k])
+    print(glo.attrs["rstar"])
+    print(geom["l"])
+    ii=input("k")
+   
+    # all the entries, excluding globals and geometry
+    keys1 = list(hfile1.keys())[:-2] ; keys2 = list(hfile2.keys())[:-2] 
+
+    for k in arange(size(keys1)):
+        entry = keys1[k]
+        print("From "+hname1+", entry "+entry+"\n", flush=True)
+        grp = hnew.create_group(entry)
+        data = hfile1[entry]
+        grp.attrs["t"] = data.attrs["t"]
+        grp.create_dataset("rho", data=data["rho"][:])
+        grp.create_dataset("v", data=data["v"][:])
+        grp.create_dataset("u", data=data["u"][:])
+        grp.create_dataset("qloss", data=data["qloss"][:])
+        hnew.flush()
+
+    # removing duplicates:
+    keys22 = [i for i in keys2 if i not in keys1]
+        
+    for k in arange(size(keys22)):
+        entry = keys2[k]
+        grp = hnew.create_group(entry)
+        data = hfile2[entry]
+        grp.attrs["t"] = data.attrs["t"]
+        grp.create_dataset("rho", data=data["rho"][:])
+        grp.create_dataset("v", data=data["v"][:])
+        grp.create_dataset("u", data=data["u"][:])
+        grp.create_dataset("qloss", data=data["qloss"][:])
+        hnew.flush()
+        print("From "+hname2+", entry"+entry+"\n", flush=True)
+        
+    hnew.close()
 
 def toasc(hname='tireout.hdf5', nentry=0):
     '''
