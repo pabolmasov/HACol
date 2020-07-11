@@ -208,7 +208,7 @@ def fhist(infile = "out/flux"):
     plots.binplot(binedges, fn, dfn, fname=infile+"_hist", fit = exp(p[0]*log(binedges)+p[1]))
 
 #####################################################################
-def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 3):
+def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 3, uvcheck = False, uvcheckfile = 'uvcheck'):
     '''
     finds the position of the shock in a given entry of the infile
     kleap allows to measure the velocity difference using several cells
@@ -229,7 +229,26 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 3):
         print(dvdl[wcomp])
         plots.someplots(r[1:], [v[1:], v1[1:], dvdl], name = "shocknan", xtitle=r'$r$', ytitle=r'$v$', xlog=False, formatsequence = ['k.', 'r-', 'b'])
         ii=input('r')
-    return (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2]
+
+    ltot = simps(qloss, x=l)
+    if wcomp1 > 2:
+        lbelowshock = simps(qloss[0:wcomp1], x = l[0:wcomp1])
+    else:
+        lbelowshock = 0.
+
+    if uvcheck:
+        # let us check BS's equation (31):
+        s= -rho * v
+        uv = -u * v
+        w = where(uv > 0.)
+        w = (r > (r[wcomp1]/2.)) & (r< (r[wcomp2]*1.5))
+        rstar = glo['rstar']
+        plots.someplots(r[w], [uv[w], 0.75*(s/rstar/r)[w]], name = uvcheckfile,
+                        xtitle=r'$r$', ytitle=r'$uv$',
+                        xlog=False, ylog = True, formatsequence = ['k.', 'b-'],
+                        vertical = (r[wcomp1]+r[wcomp2])/2.)
+        
+    return (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock
     #    return (r[wcomp:wcomp1]).mean(), r[wcomp:wcomp1],v[wcomp], v[wcomp1]
 # v[wcomp], v[wcomp+1]
 
@@ -269,6 +288,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap
     dv=arange(size(n), dtype=double)
     v2=arange(size(n), dtype=double)
     v1=arange(size(n), dtype=double)
+    lc_tot = arange(size(n), dtype=double) ; lc_part = arange(size(n), dtype=double)
     compression=arange(size(n), dtype=double)
     print(size(n))
     outdir = os.path.dirname(prefix)
@@ -278,8 +298,8 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap
     across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
     BSgamma = (2.*across0/delta0**2)/mdot*rstar / (realxirad/1.5)
     # umag is magnetic pressure
-    BSeta = (8./21./sqrt(2.)*30.*umag*m1 * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
-    xs = bs.xis(BSgamma, BSeta, x0=30.0)
+    BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
+    xs = bs.xis(BSgamma, BSeta, x0=xest)
     #     print("xs = "+str(xs))
     #    ii=input("xs")
     # spherization radius
@@ -294,22 +314,24 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap
         if(dat):
             stmp, dstmp, v1tmp, v2tmp = shock_dat(n[k], prefix=prefix, kleap = kleap)
         else:
-            stmp, dstmp, v1tmp, v2tmp = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap)
+            stmp, dstmp, v1tmp, v2tmp, ltot, lpart = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap,
+                                                               uvcheck = (k == (size(n)-1)), uvcheckfile = outdir+"/uvcheck")
         s[k] = stmp ; ds[k] = dstmp
         v1[k] = v1tmp   ; v2[k] =  v2tmp
         dv[k] = v1tmp - v2tmp
         compression[k] = v2tmp/v1tmp
+        lc_tot[k] = ltot ; lc_part[k] = lpart
 
     print("predicted shock position: xs = "+str(xs)+" (rstar)")
     print("cooling limit: rcool/rstar = "+str(rcool/rstar))
-    f /= 4.*pi  ; eqlum /= 4.*pi
+    f /= 4.*pi  ; eqlum /= 4.*pi ; lc_tot /= 4.*pi ; lc_part /= 4.*pi
         
     if(ifplot):
         ws=where(s>1.)
         n=n[ws]
         plots.someplots(t[n], [s[ws], s*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
-        plots.someplots(f[n], [s[ws], s*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=True, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
-        plots.someplots(t[n], [f[n], f[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
+        plots.someplots(lc_part[ws], [s[ws], s*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog= (f[n].max()/f[n].min()) > 3., ylog= (s[ws].max()/s[ws].min()> 3.), formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+        plots.someplots(t[n], [f[n], lc_part[ws], f[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False, formatsequence = ['k:', 'k-', 'r-'])
         plots.someplots(t[n], [-v1[ws], -v2[ws], sqrt(2./s[ws]/rstar), sqrt(2./s[ws]/rstar)/7.], name = outdir+"/vleap",xtitle=r'$t$, s', ytitle=r'$ v /c$', xlog=False, formatsequence = ['k-', 'b:', 'r-', 'r-'])
 
     print("effective compression factor "+str(compression[isfinite(compression)].mean()))
@@ -334,6 +356,8 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap
     print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
     fmean = f[wlate].mean() ; frms = f[wlate].std()
     print("flux = "+str(fmean)+"+/-"+str(frms)+"\n")
+    print("OR flux = "+str(lc_tot[wlaten].mean())+".."+str(lc_part[wlaten].mean())+"\n")
+    
         
 ###############################
 def tailfitfun(x, p, n, x0, y0):

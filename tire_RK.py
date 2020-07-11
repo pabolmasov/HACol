@@ -378,9 +378,9 @@ def alltire(conf):
     omega = configactual.getfloat('omegafactor')*r_e**(-1.5)
     if verbose:
         print(conf+": "+str(omega))
-        print(conf+": spin period "+str(2.*pi/omega*tscale)+"s")
 
     vout = configactual.getfloat('voutfactor')  /sqrt(r_e) # velocity at the outer boundary
+    minitfactor = configactual.getfloat('minitfactor') # initial total mass in the units of equilibrium mass
     umag = b12**2*2.29e6*m1
     umagout = 0.5**2*umag*(rstar/r_e)**6
     csqout = vout**2
@@ -391,12 +391,14 @@ def alltire(conf):
     config.set(conf,'umag', str(umag))
     config.set(conf,'omega', str(omega))
     config.set(conf,'vout', str(vout))
-
+    
     # physical scales:
     tscale = configactual.getfloat('tscale') * m1
     rscale = configactual.getfloat('rscale') * m1
     rhoscale = configactual.getfloat('rhoscale') / m1
     
+    if verbose & (omega>0.):
+        print(conf+": spin period "+str(2.*pi/omega*tscale)+"s")
     # output options
     tr = afac * dr_e/r_e /xifac / rstar * r_e**2.5 # replenishment time scale of the column
     if verbose:
@@ -409,7 +411,7 @@ def alltire(conf):
     ascalias = configactual.getint('ascalias')
     outdir = configactual.get('outdir')
     ifrestart = configactual.getboolean('ifrestart')
-
+    
     if verbose:
         print(conf+": Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
         print(conf+": magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
@@ -461,7 +463,7 @@ def alltire(conf):
     #    print("delta = "+str((g.sth*g.r/sqrt(1.+3.*g.cth**2))[0] * dr_e/r_e))
     #    print("delta = "+str(g.delta[0]))
     BSgamma = (g.across/g.delta**2)[0]/mdot*rstar
-    BSeta = (8./21./sqrt(2.)*umag)**0.25*sqrt(g.delta[0])/(rstar)**0.125
+    BSeta = (8./21./sqrt(2.)*umag*3.)**0.25*sqrt(g.delta[0])/(rstar)**0.125
     if verbose:
         print(conf+" BS parameters:")
         print(conf+"   gamma = "+str(BSgamma))
@@ -482,6 +484,12 @@ def alltire(conf):
     # Initial Conditions:
     # setting the initial distributions of the primitive variables:
     rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across*0.5
+    # total mass
+    mass = trapz(rho*g.across, x=g.l)
+    meq = (g.across*umag*rstar**2)[0]
+    print('meq = '+str(meq)+"\n")
+    ii = input('M')
+    rho *= meq/mass * minitfactor # normalizing to the initial mass
     vinit *= ((g.r-rstar)/(rmax-rstar))**0.5 # to fit the v=0 condition at the surface of the star
     v = copy(vinit)
     press = umagtar[-1] * (g.r/r_e) * (rho/rho[-1]+1.)/2.
@@ -518,16 +526,16 @@ def alltire(conf):
     # works so far correctly ONLY if the mesh is identical!
     if(ifrestart):
         ifhdf_restart = configactual.getboolean('ifhdf_restart')
+        restartn = configactual.getint('restartn')
         if(ifhdf_restart):
             # restarting from a HDF5 file
             restartfile = configactual.get('restartfile')
-            entryname, t, l1, r1, sth1, rho1, u1, v1, qloss1 = hdf.read(restartfile, restartn)
+            entryname, t, l1, r1, sth1, rho1, u1, v1, qloss1, glosave = hdf.read(restartfile, restartn)
             tstore = t
             print("restarted from file "+restartfile+", entry "+entryname)
         else:
             # restarting from an ascii output
             restartprefix = configactual.get('restartprefix')
-            restartn = configactual.get('restartn')
             restartdir = os.path.dirname(restartprefix)
             ascrestartname = restartprefix + hdf.entryname(restartn, ndig=5) + ".dat"
             lines = loadtxt(ascrestartname, comments="#")

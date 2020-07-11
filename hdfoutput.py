@@ -1,6 +1,8 @@
 # from tire_RK import configactual, m1, mdot, eta, afac, r_e, dr_e, omega, rstar
 import h5py
 
+# TODO: make a merger!
+
 def entryname(n, ndig = 6):
     entry = str(n).rjust(ndig, '0') # allows for 6 positions (hundreds of thousand of entries)
     return entry
