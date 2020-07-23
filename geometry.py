@@ -44,9 +44,59 @@ def geometry_initialize(r, r_e, dr_e, writeout=None, afac = 1.):
     
     return g
 
+def geometry_split(ginit, np, half = False):
+    '''
+    replaces the single solid mesh with np chunks of equal length
+    '''
+    if np <= 1:
+        return ginit
+    else:
+        if not(half):
+            nchunk = size(ginit.r) // np
+        else:
+            nchunk = (size(ginit.r)+1) // np
+        if ((nchunk * np) != size(ginit.r)) and not(half):
+            print("geometry_split: dimensions unequal")
+            exit(1)
+        glist = []
+        for k in arange(np):
+            start = nchunk*k
+            if not(half):
+                finish = start+nchunk
+            else:
+                finish = start+nchunk-1
+            g = geometry()
+            g.r = ginit.r[start:finish]
+            g.l = ginit.l[start:finish]
+            g.sth = ginit.sth[start:finish]
+            g.cth = ginit.cth[start:finish]
+            g.sina = ginit.sina[start:finish]
+            g.cosa = ginit.cosa[start:finish]
+            g.across = ginit.across[start:finish]
+            g.delta = ginit.delta[start:finish]
+            glist.append(g)
+        return glist
+
+def dlbounds_define(glist):
+    np = size(glist)
+    dlleft = zeros(np) ; dlright = zeros(np)
+
+    for k in range(np):
+        if k > 0:
+            dlleft[k] = glist[k].l[0]-glist[k-1].l[-1]
+        else:
+            dlleft[k] = glist[k].l[1]-glist[k].l[0]
+        if k<(np-1):
+            dlright[k] = glist[k+1].l[0]-glist[k].l[-1]
+        else:
+            dlright[k] = glist[k].l[-1]-glist[k].l[-2]
+            
+    return dlleft, dlright
+
 def gread(geofile):
     ## reads a geometry file written by geometry-initialize
     lines = loadtxt(geofile, comments="#")
     r = lines[:,0] ; theta = lines[:,1] ; alpha = lines[:,2] 
     across = lines[:,3] ; l = lines[:,4] ; delta = lines[:,5]
     return r, theta, alpha, across, l, delta
+

@@ -328,7 +328,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap
         
     if(ifplot):
         ws=where(s>1.)
-        n=n[ws]
+        n=ws
         plots.someplots(t[n], [s[ws], s*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
         plots.someplots(lc_part[ws], [s[ws], s*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog= (f[n].max()/f[n].min()) > 3., ylog= (s[ws].max()/s[ws].min()> 3.), formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
         plots.someplots(t[n], [f[n], lc_part[ws], f[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False, formatsequence = ['k:', 'k-', 'r-'])
@@ -339,7 +339,7 @@ def multishock(n1,n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap
     fout = open(outdir+'/sfront.dat', 'w')
     fout.write("# time -- shock position -- downstream velocity -- upstream velocity \n")
     for k in arange(size(n)):
-        fout.write(str(t[n[k]])+" "+str(s[k])+" "+str(v1[k])+" "+str(v2[k])+"\n")
+        fout.write(str(t[k])+" "+str(s[k])+" "+str(v1[k])+" "+str(v2[k])+"\n")
     fout.close()
     fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
     fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')

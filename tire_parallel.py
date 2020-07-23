@@ -12,6 +12,9 @@ import os.path
 import imp
 import sys
 
+import multiprocessing
+from multiprocessing import Pool
+
 # configuration file:
 import configparser as cp
 conffile = 'globals.conf'
@@ -35,6 +38,25 @@ from geometry import *
 from timer import Timer
 timer = Timer(["total", "step", "io"],
               ["advance"])
+
+def time_step(prim):
+    # time step adjustment:
+    nd = prim['N'] # number of the domain
+    rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
+    dlmin = (l_g[nd].l[1:]-l_g[nd].l[:-1]).min()
+    dlhalf = (l_ghalf[nd].l[1:]-l_ghalf[nd].l[:-1])
+    csqest = 4./3.*u/rho
+    dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
+    qloss = qloss_separate(rho, v, u, l_g[nd])
+    dt_thermal = Cth * abs(u*l_g[nd].across/qloss)[where((u*qloss)>0.)].min()
+    
+    if(raddiff):
+        ctmp = dlhalf**2 * 3.*rho[1:-1]
+        dt_diff = Cdiff * quantile(ctmp[where(ctmp>0.)], 0.1) # (dx^2/D)
+    else:
+        dt_diff = dt_CFL * 5. # effectively infinity ;)
+    dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
+    return dt
 
 #
 def regularize(u, rho, press):
@@ -93,14 +115,55 @@ betafun_p = betafun_press_define() # defines the interpolated function for beta 
 
 ##############################################################################
 
-def cons(rho, v, u, g):
-    '''
-    computes conserved quantities from primitives
-    '''
+# conversion between conserved and primitive variables for separate arrays and for a single domain
+
+def toprim_separate(m, s, e, g):
+    rho=m/g.across
+    v=s/m
+    u=(e-m*(v**2/2.-1./g.r-0.5*(g.r*g.sth*omega)**2))/g.across
+    #    umin = u.min()
+    beta = betafun(Fbeta(rho, u, betacoeff))
+    press = u/3./(1.-beta/2.)
+    u, rho, press = regularize(u, rho, press)
+    return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
+
+def tocon_separate(rho, v, u, g):
+    
     m=rho*g.across # mass per unit length
     s=m*v # momentum per unit length
     e=(u+rho*(v**2/2.- 1./g.r - 0.5*(omega*g.r*g.sth)**2))*g.across  # total energy (thermal + mechanic) per unit length
     return m, s, e
+
+# conversion between conserved and primitive variables using dictionaries and multiple domains
+
+def tocon(prim):
+    '''
+    computes conserved quantities from primitives
+    '''
+    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
+    gnd = l_g[nd]
+    
+    m=rho*gnd.across # mass per unit length
+    s=m*v # momentum per unit length
+    e=(u+rho*(v**2/2.- 1./gnd.r - 0.5*(omega*gnd.r*gnd.sth)**2))*gnd.across  # total energy (thermal + mechanic) per unit length
+    return {'m': m, 's': s, 'e': e, 'N': nd}
+
+def toprim(con):
+    '''
+    convert conserved quantities to primitives
+    '''
+    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
+    gnd = l_g[nd]
+    rho = m/gnd.across
+    v = s/m
+    u = (e-m*(v**2/2.-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2))/gnd.across
+    #    umin = u.min()
+    beta = betafun(Fbeta(rho, u, betacoeff))
+    press = u/3./(1.-beta/2.)
+    u, rho, press = regularize(u, rho, press)
+    urad = u*(1.-beta)/(1.-beta/2.)
+    prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press, 'N': nd}
+    return prim
 
 def diffuse(rho, urad, v, dl, across, gamma):
     '''
@@ -133,7 +196,67 @@ def diffuse(rho, urad, v, dl, across, gamma):
     #    dule_half[-1] = 0. ; duls_half[-1] = 0.
     return -duls_half, -dule_half 
 
-def fluxes(rho, v, u, g):
+def bound_fluxes(l_prim, l_con, edot = 0.):
+    '''
+    computes the fluxes at the domain boundaries
+    '''
+    dno = size(l_prim)
+    #    sleft = zeros(dno) ; pleft = zeros(dno) ; feleft = zeros(dno)
+    #    sright = zeros(dno) ; pright = zeros(dno) ; feright = zeros(dno)
+    BClist = []
+    
+    #    sleft[0] = -mdotsink ; sright[-1] = -mdot
+    #    feleft[0] = 0. ; feright[-1] = -edot
+    
+    for nd in range(dno):
+        if nd == 0:
+            sleft = 0. ; pleft = 0. ; feleft = 0.
+        if nd == (dno-1):
+            sright = -mdot ; pright = 0.; feright = -edot
+        if nd > 0:
+            across_left = l_g[nd-1].across[-1] ;  r_left = l_g[nd-1].r[-1] ;  sth_left = l_g[nd-1].sth[-1]
+            rho_left = l_prim[nd-1]['rho'][-1] ; v_left = l_prim[nd-1]['v'][-1] ; u_left = l_prim[nd-1]['u'][-1]
+            sleft = rho_left * v_left * across_left
+            beta_left = betafun(Fbeta(rho_left, u_left, betacoeff))
+            press_left = u_left/3./(1.-beta_left/2.)
+            pleft = across_left * (sleft * v_left + press_left)
+            feleft = across_left*v_left*(u_left+press_left+(v_left**2/2.-1./r_left-0.5*(omega*r_left*sth_left)**2)*rho_left)
+            # need to include energy diffusion!
+        if nd<(dno-1):
+            across_right = l_g[nd+1].across[0] ;  r_right = l_g[nd+1].r[0] ;  sth_right = l_g[nd+1].sth[0]
+            rho_right = l_prim[nd+1]['rho'][0] ; v_right = l_prim[nd+1]['v'][0] ; u_right = l_prim[nd+1]['u'][0]
+            sright = rho_right * v_right * across_right
+            beta_right = betafun(Fbeta(rho_right, u_right, betacoeff))
+            press_right = u_right/3./(1.-beta_right/2.)
+            pright = across_right * (sright * v_right + press_right)
+            feright = across_right*v_right*(u_right+press_right+(v_right**2/2.-1./r_right-0.5*(omega*r_right*sth_right)**2)*rho_right)
+        BClist.append({'sleft': sleft, 'sright': sright, 'pleft': pleft, 'pright': pright, 'feleft': feleft, 'feright': feright})
+    BClist1 = copy(BClist)
+    for nd in range(dno-1):
+        fm = asarray([BClist[nd+1]['sleft'], BClist[nd]['sright']])
+        fs = asarray([BClist[nd+1]['pleft'], BClist[nd]['pright']])
+        fe = asarray([BClist[nd+1]['feleft'], BClist[nd]['feright']])
+        m = asarray([l_con[nd]['m'][-1], l_con[nd+1]['m'][0]])
+        s = asarray([l_con[nd]['s'][-1], l_con[nd+1]['s'][0]])
+        e = asarray([l_con[nd]['e'][-1], l_con[nd+1]['e'][0]])
+        v = asarray([l_prim[nd]['v'][-1], l_prim[nd+1]['v'][0]])
+        # ADD g1!!!
+        csq = asarray([l_prim[nd]['press'][-1]/l_prim[nd]['rho'][-1], l_prim[nd+1]['press'][0]/l_prim[nd+1]['rho'][0]])
+        print("press = "+str(l_prim[nd]['press'][-1]))
+        print("v = "+str(v))
+        print("csq = "+str(csq))
+        vl, vm, vr = sigvel_mean(v, sqrt(csq))
+        fm_half, fs_half, fe_half = solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
+        BClist1[nd+1].update([('sleft', fm_half), ('pleft', fs_half),('feleft', fe_half)])
+        BClist1[nd].update([('sright', fm_half), ('pright', fs_half),('feright', fe_half)])
+    print("before:\n")
+    print(BClist)
+    print("after: \n")
+    print(BClist1)
+    ii = input('BC')
+    return BClist1 
+            
+def fluxes(prim):
     '''
     computes the fluxes of conserved quantities, given primitives; 
     radiation diffusion flux is not included, as it is calculated at halfpoints
@@ -142,14 +265,17 @@ def fluxes(rho, v, u, g):
     g is geometry (structure)
     Note: fluxes do not include diffusion (added separately)
     '''
-    s = rho*v*g.across # mass flux (identical to momentum per unit length -- can we use it?)
+    nd = prim['N'] ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
+    gnd = l_g[nd]
+    across = gnd.across
+    s = rho*v*across # mass flux (identical to momentum per unit length -- can we use it?)
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
-    p = g.across*(rho*v**2+press) # momentum flux
-    fe = g.across*v*(u+press+(v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion
+    p = across*(rho*v**2+press) # momentum flux
+    fe = across*v*(u+press+(v**2/2.-1./gnd.r-0.5*(omega*gnd.r*gnd.sth)**2)*rho) # energy flux without diffusion
     return s, p, fe
 
-def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
+def sources(prim, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
     '''
     computes the RHSs of conservation equations
     no changes in mass
@@ -159,33 +285,35 @@ def sources(rho, v, u, g, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = 
     additional output:  equilibrium energy density
     if the "forcecheck" flag is on, outputs the grav.potential difference between the outer and inner boundaries and compares to the work of the force along the field line
     '''
+    nd = prim['N'] ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
+    gnd = l_g[nd]
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
-    tau = rho * g.delta # tau in transverse direction
-    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
+    tau = rho * gnd.delta # tau in transverse direction
+    tauphi = rho * gnd.across / gnd.delta / 2. # optical depth in azimuthal direction
     taueff = copy(1./(1./tau + 1./tauphi))
     taufac = taufun(taueff)    # 1.-exp(-tau)
     #    taufac = 1. # !!! temporary
     gamefac = tratfac(tau)
     gamedd = eta * ltot * gamefac
-    sinsum = copy(g.sina*g.cth+g.cosa*g.sth) # sin(theta+alpha)
-    force = copy((-sinsum/g.r**2*(1.-gamedd)+omega**2*g.r*g.sth*g.cosa)*rho*g.across) # *taufac
+    sinsum = copy(gnd.sina*gnd.cth+gnd.cosa*gnd.sth) # sin(theta+alpha)
+    force = copy((-sinsum/gnd.r**2*(1.-gamedd)+omega**2*gnd.r*gnd.sth*gnd.cosa)*rho*gnd.across) # *taufac
     if(forcecheck):
-        network = simps(force/(rho*g.across), x=g.l)
-        return network, (1./g.r[0]-1./g.r[-1])
-    beta = betafun(Fbeta(rho, u, betacoeff))
-    urad = copy(u * (1.-beta)/(1.-beta/2.))
+        network = simps(force/(rho*gnd.across), x=gnd.l)
+        return network, (1./gnd.r[0]-1./gnd.r[-1])
+    beta = prim['beta'] # betafun(Fbeta(rho, u, betacoeff))
+    urad = prim['urad']
+    #     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.
-    qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
-    irradheating = heatingeff * eta * mdot *afac / g.r * g.sth * sinsum * taufun(tau)
+    qloss = copy(2.*urad/(xirad*taueff+1.)*(gnd.across/gnd.delta+2.*gnd.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
+    irradheating = heatingeff * eta * mdot *afac / gnd.r * gnd.sth * sinsum * taufun(tau)
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = copy(rho*0.-dmsqueeze)
     dudt = copy(v*force-qloss+irradheating)
     ds = copy(force - dmsqueeze * v) # lost mass carries away momentum
     de = copy(dudt - desqueeze) # lost matter carries away energy (or enthalpy??)
-    
     #    return dm, force, dudt, qloss, ueq
-    return dm, ds, de, qloss #, ueq
+    return {'m': dm, 's': ds, 'e': de, 'flux': qloss} #, ueq
 
 def qloss_separate(rho, v, u, g):
     '''
@@ -201,63 +329,55 @@ def qloss_separate(rho, v, u, g):
     qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
-def toprim(m, s, e, g):
-    '''
-    convert conserved quantities to primitives
-    '''
-    rho=m/g.across
-    v=s/m
-    u=(e-m*(v**2/2.-1./g.r-0.5*(g.r*g.sth*omega)**2))/g.across
-    #    umin = u.min()
-    beta = betafun(Fbeta(rho, u, betacoeff))
-    press = u/3./(1.-beta/2.)
-    u, rho, press = regularize(u, rho, press)
-    return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
-
-def derivo(m, s, e, l_half, s_half, p_half, fe_half, dm, ds, de, g, dlleft, dlright, edot = None, sdot = None):
+def derivo(con, s_half, p_half, fe_half, src):
     '''
     main advance step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
     output: three temporal derivatives later used for the time step
     includes boundary conditions for mass and energy!
     '''
+
+    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
+    #    print("r = "+str(dlright))
+    l_half = l_ghalf[nd].l
+    dlleft_nd = con['dlleft'] ; dlright_nd = con['dlright']
+    # why is dlleft not resolved as a global?
     #    print("main_step: mmin = "+str(m.min()))
+    dm = src['m'] ; ds = src['s'] ; de = src['e'] 
     nl=size(m)
     dmt=zeros(nl) ; dst=zeros(nl); det=zeros(nl)
     dmt[1:-1] = -(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm[1:-1]
     dst[1:-1] = -(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds[1:-1]
     det[1:-1] = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]
 
+    print("conpleft = "+str(con['pleft']))
     #left boundary conditions:
-    dmt[0] = -(s_half[0]-(-mdotsink))/dlleft +dm[0]
+    dmt[0] = -(s_half[0]-con['sleft'])/dlleft_nd +dm[0]
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
-    dst[0] = 0. # mdotsink_eff does not enter here, as matter should escape sideways, but through the bottom
-    edotsink_eff = mdotsink * (e[0]/m[0])
-    det[0] = -(fe_half[0]-(-edotsink_eff))/dlleft + de[0] # no energy sink anyway
+    dst[0] = -(p_half[0]-con['pleft'])/dlleft_nd +ds[0] # mdotsink_eff does not enter here, as matter should escape sideways, but through the bottom
+    #     edotsink_eff = mdotsink * (e[0]/m[0])
+    det[0] = -(fe_half[0]-con['feleft'])/dlleft_nd + de[0] # no energy sink anyway
     # right boundary conditions:
-    dmt[-1] = -((-mdot)-s_half[-1])/dlright+dm[-1]
+    dmt[-1] = -(con['sright']-s_half[-1])/dlright_nd +dm[-1]
     #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
-    if(sdot is None):
-        dst[-1] = 0. # -(0. - p_half[-1])/dlright + ds[-1]
-    else:
-        dst[-1] = -(sdot - p_half[-1])/dlright + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
+    
+    dst[-1] = -(con['pright'] - p_half[-1])/dlright_nd + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
     #    edot =  abs(mdot) * 0.5/g.r[-1] + s[-1]/m[-1] * u[-1] # virial equilibrium
-    if(edot is None):
-        det[-1] = 0.
-    else:
-        det[-1] = -((-edot)-s_half[-1])/dlright # + de[-1]
-    return dmt, dst, det
+    det[-1] = -(con['feright'] - fe_half[-1])/dlright_nd + de[-1]
 
-def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, momentum_inflow = None, energy_inflow =  None):
+    return {'m': dmt, 's': dst, 'e': det}
+
+def RKstep(con):
+    # m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, momentum_inflow = None, energy_inflow =  None):
     '''
     calculating elementary increments of conserved quantities
     '''
-    rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
-    # u, rho, press = regularize(u, rho, press) !!! 
-    #    if(momentum_inflow is None):
-    #        momentum_inflow = ((press+rho * v**2)*g.across)[-1]
-    fm, fs, fe = fluxes(rho, v, u, g)
-    g1 = Gamma1(5./3., beta)
+    dt = con['dt']
+    prim = toprim(con) # primitive from conserved
+    fm, fs, fe = fluxes(prim)
+    g1 = Gamma1(5./3., prim['beta'])
+    rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad']
+    nd = prim['N']
     csq=g1*press/rho
     if(csq.min()<csqmin):
         wneg = (csq<=csqmin)
@@ -277,7 +397,7 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, mome
         print("R = "+str(ghalf.r[wwrong]))
         print("signal velocities crashed")
         #        ii=input("cs")
-        
+    m = con['m'] ; s = con['s'] ; e = con['e']
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
         duls_half, dule_half = diffuse(rho, urad, v, dl, ghalf.across, g1)
@@ -286,27 +406,26 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, mome
         dule_half *= 1.-exp(-ghalf.delta * (rho[1:]+rho[:-1])/2.)
         fs_half += duls_half ; fe_half += dule_half
     if(squeezemode):
-        if umagtar is None:
-            umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
-        dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/g.delta
+        umagtar = con['umagtar']
+        #        if umagtar is None:
+        #            umagtar = umag * (1.+3.*g[nd].cth**2)/4. * (rstar/g[nd].r)**6
+        dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/l_g[nd].delta
         if squeezeothersides:
-            dmsqueeze += 4. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/ (g.across / g.delta)
-        desqueeze = dmsqueeze * (e+press* g.across) / m # (e-u*g.across)/m
+            dmsqueeze += 4. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/ (l_g[nd].across / l_g[nd].delta)
+        desqueeze = dmsqueeze * (e+press* l_g[nd].across) / m # (e-u*g.across)/m
     else:
         dmsqueeze = 0.
         desqueeze = 0.
         
-    dm, ds, de, flux = sources(rho, v, u, g, ltot=ltot,
-                               dmsqueeze = dmsqueeze, desqueeze = desqueeze)
+    # dm, ds, de, flux
+    src = sources(prim, ltot=0., dmsqueeze = dmsqueeze, desqueeze = desqueeze)
     
-    ltot=trapz(flux, x=g.l) # no difference
-    dmt, dst, det = derivo(m, s, e, ghalf.l, fm_half, fs_half, fe_half,
-                           dm, ds, de, g, dlleft, dlright,
-                           edot = energy_inflow, sdot = momentum_inflow)
-                           #fe_half[-1])
-    return dmt, dst, det, ltot
-
-
+    ltot=trapz(src['flux'], x=l_g[nd].l) 
+    # dmt, dst, det
+    print(con['dlright'])
+    ds = derivo(con, fm_half, fs_half, fe_half, src)
+    con1 = {'N': nd, 'm': m+ds['m']*dt, 's': s+ds['s']*dt, 'e': e+ds['e']*dt, 'ltot': ltot}
+    return con1
 
 ################################################################################
 print("if you want to start the simulation, now type `alltire(`conf')` \n")
@@ -321,6 +440,9 @@ def alltire(conf):
     global taumin, taumax
     global m1, mdot, mdotsink, afac, r_e, dr_e, omega, rstar, umag, xirad
     global eta, heatingeff, nubulk, weinberg
+    global CFL, Cth, Cdiff
+
+    global l_g, l_ghalf, dlleft, dlright  # geometry and boundary positions
     
     # initializing variables:
     if conf is None:
@@ -457,17 +579,15 @@ def alltire(conf):
     ghalf.l += g.l[1]/2. # mid-step mesh starts halfstep later
     dl=g.l[1:]-g.l[:-1] # cell sizes
     dlhalf=ghalf.l[1:]-ghalf.l[:-1] # cell sizes
-    dlleft = dl[0] ; dlright = dl[-1] # 
-    
+
     # if we are doing parallel calculation:
     if parallelfactor > 1:
-        g = geometry_split(g, parallelfactor)
-        ghalf = geometry_split(ghalf, parallelfactor, half = True)
+        l_g = geometry_split(g, parallelfactor)
+        l_ghalf = geometry_split(ghalf, parallelfactor, half = True)
         # now, g is a list of geometries
-    # testing bassun.py
-    #    print("delta = "+str((g.across/(4.*pi*afac*g.r*g.sth))[0]))
-    #    print("delta = "+str((g.sth*g.r/sqrt(1.+3.*g.cth**2))[0] * dr_e/r_e))
-    #    print("delta = "+str(g.delta[0]))
+    else:
+        print("to perform parallel computation, you need parallelfactor > 1!")
+        exit(1)
     BSgamma = (g.across/g.delta**2)[0]/mdot*rstar
     BSeta = (8./21./sqrt(2.)*umag*3.)**0.25*sqrt(g.delta[0])/(rstar)**0.125
     if verbose:
@@ -494,7 +614,7 @@ def alltire(conf):
     mass = trapz(rho*g.across, x=g.l)
     meq = (g.across*umag*rstar**2)[0]
     print('meq = '+str(meq)+"\n")
-    ii = input('M')
+    #    ii = input('M')
     rho *= meq/mass * minitfactor # normalizing to the initial mass
     vinit *= ((g.r-rstar)/(rmax-rstar))**0.5 # to fit the v=0 condition at the surface of the star
     v = copy(vinit)
@@ -506,7 +626,7 @@ def alltire(conf):
     u, rho, press = regularize(u, rho, press)
     if verbose:
         print(conf+": U = "+str((u/umagtar).min())+" to "+str((u/umagtar).max()))
-    m, s, e = cons(rho, vinit, u, g)
+    m, s, e = tocon_separate(rho, vinit, u, g)
     ulast = u[-1] #
     rholast = rho[-1]
     if verbose:
@@ -514,10 +634,10 @@ def alltire(conf):
         print(conf+": V(Rout) = "+str(v[-1]))
     #    ii=input('m')
     
-    rho1, v1, u1, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
-    workout, dphi = sources(rho1, v1, u1, g, forcecheck = True) # checking whether the force corresponds to the potential
+    rho1, v1, u1, urad, beta, press = toprim_separate(m, s, e, g) # primitive from conserved
+    #    workout, dphi = sources(rho1, v1, u1, g, forcecheck = True) # checking whether the force corresponds to the potential
     if verbose:
-        print(conf+": potential at the surface = "+str(-workout)+" = "+str(dphi))
+        #    print(conf+": potential at the surface = "+str(-workout)+" = "+str(dphi))
         # print(str((rho-rho1).std())) 
         # print(str((vinit-v1).std()))
         # print(str((u-u1).std())) # accuracy 1e-14
@@ -533,6 +653,7 @@ def alltire(conf):
     if(ifrestart):
         ifhdf_restart = configactual.getboolean('ifhdf_restart')
         restartn = configactual.getint('restartn')
+        
         if(ifhdf_restart):
             # restarting from a HDF5 file
             restartfile = configactual.get('restartfile')
@@ -605,21 +726,7 @@ def alltire(conf):
         print("negative internal energy in the IC\n")
         print(ulast)
         ii = input("C")
-    presslast = (press + v**2 * rho)[-1]
-    fm, fs, fe = fluxes(rho, v, u, g)
-    if not(ufixed):
-        energy_inflow = - mdot / rmax * 0.
-        #        print(conf+": "+str(energy_inflow)+" is not none")
-        #        ii = input('inflow')
-    else:
-        energy_inflow = None
-    momentum_inflow = None # fs[-1]
         
-    dlmin=dl.min()
-    dt = dlmin*CFL*0.01
-
-    #    ti=input("dt")
-    
     ltot=0. # estimated total luminosity
     if(ifrestart):
         fflux=open(outdir+'/'+'flux.dat', 'a')
@@ -634,62 +741,67 @@ def alltire(conf):
         print("output to "+hname)
         
     crash = False # we have not crashed (yet)
+
+    l_m = array_split(m, parallelfactor) ; l_e = array_split(e, parallelfactor) ; l_s = array_split(s, parallelfactor)
+    l_con = [{'N': i, 'm': l_m[i], 's': l_s[i], 'e': l_e[i]} for i in range(parallelfactor)] # list of conserved quantities, each item organized as a dictionary
+    l_u = array_split(u, parallelfactor) ; l_rho = array_split(rho, parallelfactor) ; l_v = array_split(v, parallelfactor)
+    l_umagtar = array_split(umagtar, parallelfactor)
+    l_press = array_split(press, parallelfactor) ;    l_urad = array_split(urad, parallelfactor)
+    l_prim = [{'N': i, 'rho': l_rho[i], 'v': l_v[i], 'u': l_u[i], 'press': l_press[i], 'urad': l_urad[i]} for i in range(parallelfactor)]
+    pool = multiprocessing.Pool(parallelfactor)
+    print(shape(l_prim))
+    print(shape(l_g))
+    dlleft_tmp, dlright_tmp = dlbounds_define(l_g)
+    dlleft = copy(dlleft_tmp) ; dlright = copy(dlright_tmp)
+    print(dlright)
+    #        ii = input('dll')
         
     timer.start("total")
     while(t<tmax):
         timer.start_comp("advance")
-        
-        # time step adjustment:
-        csqest = 4./3.*u/rho
-        dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
-        qloss = qloss_separate(rho, v, u, g)
-        dt_thermal = Cth * abs(u*g.across/qloss)[where((u*qloss)>0.)].min()
-        if(raddiff):
-            ctmp = dlhalf**2 * 3.*rho[1:-1]
-            dt_diff = Cdiff * quantile(ctmp[where(ctmp>0.)], 0.1) # (dx^2/D)
-        else:
-            dt_diff = dt_CFL * 5. # effectively infinity ;)
-        dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
-        
-        # Runge-Kutta, fourth order, one step:
-        k1m, k1s, k1e, ltot1 = RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow, umagtar = umagtar)
-        k2m, k2s, k2e, ltot2 = RKstep(m+k1m*dt/2., s+k1s*dt/2., e+k1e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow, umagtar = umagtar)
-        k3m, k3s, k3e, ltot3 = RKstep(m+k2m*dt/2., s+k2s*dt/2., e+k2e*dt/2., g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow, umagtar = umagtar)
-        k4m, k4s, k4e, ltot4 = RKstep(m+k3m*dt, s+k3s*dt, e+k3e*dt, g, ghalf, dl, dlleft, dlright, ltot=ltot, momentum_inflow = momentum_inflow, energy_inflow = energy_inflow, umagtar = umagtar)
-        m += (k1m+2.*k2m+2.*k3m+k4m) * dt/6.
-        s += (k1s+2.*k2s+2.*k3s+k4s) * dt/6.
-        e += (k1e+2.*k2e+2.*k3e+k4e) * dt/6.
-        s[0] = -mdotsink
-        #        if v[-1] < 0.:
-        s[-1] = -mdot # momentum density fixed (simply -mdot)
-        #  else:
-        #    s[-1] = s[-2] # outflowing
-        if ufixed:
-            e[-1] = 0.  # -m[-1] / rmax / 2.
-        ltot = (ltot1 + 2.*ltot2 + 2.*ltot3 + ltot4) / 6. # total luminosity (estimate on the basis of the RK calculation)
+
+        dtlist = pool.map(time_step, l_prim) 
+        dt = asarray(dtlist).min() # later, we can try different time steps at different distances
+
+        # BC
+        BCList = bound_fluxes(l_prim, l_con) # calculates fluxes for BC as a list of dictionaries. Must include Riemann solver!
+        # each dic is {'sleft': , 'sright': , 'pleft': , 'pright': , 'feleft': , 'feright':}
+        # Adding BC to the con dict:
+        [ l_con[i].update([('sleft', BCList[i]['sleft']), ('sright',BCList[i]['sright']),
+                           ('pleft', BCList[i]['pleft']), ('pright',BCList[i]['pright']),
+                           ('feleft', BCList[i]['feleft']), ('feright', BCList[i]['feright']),
+                           ('dt', dt), ('umagtar', l_umagtar[i]),
+                           ('dlleft', dlleft[i]), ('dlright', dlright[i])]) for i in range(parallelfactor) ]
+        #
+        l_con = pool.map(RKstep, l_con)
         t += dt
-        rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved
-        # crash case:
-        if any(isnan(u)) is True:
-            print(r[where(isnan(u))])
-            print("the code has produced a number of NaN values and will terminate ")
-            crash = True
-            nout = -1
-            
+        l_prim = pool.map(toprim, l_con) # primitive from conserved
+
+        print("ltot = "+str([l_con[i]['ltot'] for i in range(parallelfactor)]))
+        ii = input('dT')
+        
+        
         timer.stop_comp("advance")
         timer.lap("step")
         if (t>=tstore) | crash:
+            # need to stitch the parts together:
+            rho = (asarray( [ l_prim[i]['rho'] for i in range(parallelfactor) ] )).flatten()
+            u = (asarray( [ l_prim[i]['u'] for i in range(parallelfactor) ] )).flatten()
+            v = (asarray( [ l_prim[i]['v'] for i in range(parallelfactor) ] )).flatten()
+            urad =  (asarray( [ l_prim[i]['urad'] for i in range(parallelfactor) ] )).flatten()
+            qloss = qloss_separate(rho, v, u, g)
+            ltot = trapz(qloss, x=g.l)
+            m = (asarray( [ l_con[i]['m'] for i in range(parallelfactor) ] )).flatten()
+            s = (asarray( [ l_con[i]['s'] for i in range(parallelfactor) ] )).flatten()
+            e = (asarray( [ l_con[i]['e'] for i in range(parallelfactor) ] )).flatten()
             tstore += dtout
             timer.start("io")
             #            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
             if verbose:
                 print(conf+": t = "+str(t*tscale)+"s")
                 # print("dt = "+str(dt*tscale)+"s")
-                print(conf+": time steps: dtCFL = "+str(dt_CFL)+", dt_thermal = "+str(dt_thermal)+", dt_diff = "+str(dt_diff))
-                print(conf+": ltot = "+str(ltot1)+" = "+str(ltot2)+" = "+str(ltot3)+" = "+str(ltot4))
+                print(conf+": ltot = "+str(ltot))
                 print(conf+": V (out) = "+str(v[-1]))
-                print(conf+": mechanical energy = "+str((v**2/2.-1./g.r)[-1]))
-                print(conf+": mechanical energy per unit mass = "+str((v**2/2.-1./g.r)[-1]/rho[-1]))
                 print(conf+": U/Umag (out) = "+str(u[-1]/umagtar[-1]))
             fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
             fflux.flush()

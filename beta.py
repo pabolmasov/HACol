@@ -12,10 +12,17 @@ def Fbeta(rho, u, betacoeff):
     beta = pg/p from rho and u (dimensionless units)
     F(beta) itself is F = beta / (1-beta)**0.25 / (1-beta/2)**0.75
     '''
-    beta = rho*0.+1.
-    wpos=where(u>ufloor)
-    if(size(wpos)>0):
-        beta[wpos]=betacoeff * rho[wpos] / u[wpos]**0.75
+    nx = size(rho)
+    if nx <= 1:
+        if (u*rho) > 0.:
+            beta = betacoeff * rho / u**0.75
+        else:
+            beta = 1.
+    else:
+        beta = rho*0.+1.
+        wpos=where(u>ufloor)
+        if(size(wpos)>0):
+            beta[wpos]=betacoeff * rho[wpos] / u[wpos]**0.75
     return beta 
 
 def Fbeta_press(rho, press, betacoeff):

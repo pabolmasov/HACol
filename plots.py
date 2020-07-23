@@ -60,7 +60,7 @@ def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None, configa
     B=u*4./3.+rho*(-1./r-0.5*(r*omega*sth)**2+v**2/2.)
     plot(r, B/umagtar, 'g', label='$B$', linestyle='dotted')
     plot(r, -B/umagtar, 'g', label='$-B$')
-    ylim(((u/umagtar)[u>0.]).min(), maximum((u/umagtar).max(), 1.))
+    ylim(((u/umagtar)[u>0.]).min(), maximum((u/umagtar).max(), 3.))
     xlabel('$r$, $GM/c^2$ units')
     ylabel(r'$U/U_{\rm mag}$')
     yscale('log')

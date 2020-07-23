@@ -16,7 +16,12 @@ def multitire(glolist = ['WIDE', 'WIDENOD', 'WUF'], nproc = None):
                                                               
     pool.close()
 
-#multitire(glolist = ['FIDU', 'NOD', 'WIDE', 'WIDENOD', 'M1', 'M3', 'M30', 'M100', 'ROT', 'IRR', 'RI', 'NU', 'V5', 'V30', 'N4', 'X'])
+#multitire(glolist = ['R_FIDU', 'R_NOD', 'R_WIDE', 'R_WIDENOD',
+                   #  'R_M1', 'R_M3', 'R_M30', 'R_M100',
+                   #  'R_ROT', 'R_NARROW', 'R_M1N', 'DRSMALL'
+                   #  'IRR', 'RI', 'M100W', 'M100WI',
+                   #  'M300W', 'HALFSIDES', 'LIGHT', 'R_HUGE',
+                   #  'R_N4', 'R_V5', 'R_X', 'R_NU'])
 
 
 
