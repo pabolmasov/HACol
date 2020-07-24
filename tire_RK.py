@@ -330,7 +330,6 @@ def alltire(conf):
     # geometry:
     nx = configactual.getint('nx')
     nx0 = configactual.getint('nx0factor') * nx
-    parallelfactor = configactual.getint('parallelfactor')
     logmesh = configactual.getboolean('logmesh')
     rbasefactor = configactual.getfloat('rbasefactor')
 
@@ -459,11 +458,6 @@ def alltire(conf):
     dlhalf=ghalf.l[1:]-ghalf.l[:-1] # cell sizes
     dlleft = dl[0] ; dlright = dl[-1] # 
     
-    # if we are doing parallel calculation:
-    if parallelfactor > 1:
-        g = geometry_split(g, parallelfactor)
-        ghalf = geometry_split(ghalf, parallelfactor, half = True)
-        # now, g is a list of geometries
     # testing bassun.py
     #    print("delta = "+str((g.across/(4.*pi*afac*g.r*g.sth))[0]))
     #    print("delta = "+str((g.sth*g.r/sqrt(1.+3.*g.cth**2))[0] * dr_e/r_e))
@@ -494,7 +488,7 @@ def alltire(conf):
     mass = trapz(rho*g.across, x=g.l)
     meq = (g.across*umag*rstar**2)[0]
     print('meq = '+str(meq)+"\n")
-    ii = input('M')
+    # ii = input('M')
     rho *= meq/mass * minitfactor # normalizing to the initial mass
     vinit *= ((g.r-rstar)/(rmax-rstar))**0.5 # to fit the v=0 condition at the surface of the star
     v = copy(vinit)

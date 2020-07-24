@@ -37,7 +37,7 @@ from geometry import *
 
 from timer import Timer
 timer = Timer(["total", "step", "io"],
-              ["advance"])
+              ["RKstep1", "update1", "RKstep2", "update2", "bounds1", "bounds2"])
 
 def time_step(prim):
     # time step adjustment:
@@ -196,7 +196,7 @@ def diffuse(rho, urad, v, dl, across, gamma):
     #    dule_half[-1] = 0. ; duls_half[-1] = 0.
     return -duls_half, -dule_half 
 
-def bound_fluxes(l_prim, l_con, edot = 0.):
+def bound_fluxes(l_prim, l_con, edot = 0., HL=True):
     '''
     computes the fluxes at the domain boundaries
     '''
@@ -209,28 +209,35 @@ def bound_fluxes(l_prim, l_con, edot = 0.):
     #    feleft[0] = 0. ; feright[-1] = -edot
     
     for nd in range(dno):
-        if nd == 0:
-            sleft = 0. ; pleft = 0. ; feleft = 0.
-        if nd == (dno-1):
-            sright = -mdot ; pright = 0.; feright = -edot
         if nd > 0:
             across_left = l_g[nd-1].across[-1] ;  r_left = l_g[nd-1].r[-1] ;  sth_left = l_g[nd-1].sth[-1]
             rho_left = l_prim[nd-1]['rho'][-1] ; v_left = l_prim[nd-1]['v'][-1] ; u_left = l_prim[nd-1]['u'][-1]
+            #            beta_left = l_prim[nd-1]['beta'][-1]
+            press_left = l_prim[nd-1]['press'][-1]
             sleft = rho_left * v_left * across_left
-            beta_left = betafun(Fbeta(rho_left, u_left, betacoeff))
-            press_left = u_left/3./(1.-beta_left/2.)
-            pleft = across_left * (sleft * v_left + press_left)
+            #   beta_left = betafun(Fbeta(rho_left, u_left, betacoeff))
+            # press_left = u_left/3./(1.-beta_left/2.)
+            pleft = across_left * (rho_left * v_left**2 + press_left)
             feleft = across_left*v_left*(u_left+press_left+(v_left**2/2.-1./r_left-0.5*(omega*r_left*sth_left)**2)*rho_left)
+        else:
+            sleft = 0. ; pleft = 0. ; feleft = 0.
             # need to include energy diffusion!
         if nd<(dno-1):
             across_right = l_g[nd+1].across[0] ;  r_right = l_g[nd+1].r[0] ;  sth_right = l_g[nd+1].sth[0]
             rho_right = l_prim[nd+1]['rho'][0] ; v_right = l_prim[nd+1]['v'][0] ; u_right = l_prim[nd+1]['u'][0]
+            press_right = l_prim[nd+1]['press'][0]
             sright = rho_right * v_right * across_right
-            beta_right = betafun(Fbeta(rho_right, u_right, betacoeff))
-            press_right = u_right/3./(1.-beta_right/2.)
-            pright = across_right * (sright * v_right + press_right)
+            #            beta_right = betafun(Fbeta(rho_right, u_right, betacoeff))
+            #            press_right = u_right/3./(1.-beta_right/2.)
+            pright = across_right * (rho_right * v_right**2 + press_right)
             feright = across_right*v_right*(u_right+press_right+(v_right**2/2.-1./r_right-0.5*(omega*r_right*sth_right)**2)*rho_right)
+        else:
+             sright = -mdot ; pright = 0.; feright = -edot
         BClist.append({'sleft': sleft, 'sright': sright, 'pleft': pleft, 'pright': pright, 'feleft': feleft, 'feright': feright})
+    if not(HL):
+        return BClist
+    #    print("before:\n")
+    # print(BClist)
     BClist1 = copy(BClist)
     for nd in range(dno-1):
         fm = asarray([BClist[nd+1]['sleft'], BClist[nd]['sright']])
@@ -240,20 +247,19 @@ def bound_fluxes(l_prim, l_con, edot = 0.):
         s = asarray([l_con[nd]['s'][-1], l_con[nd+1]['s'][0]])
         e = asarray([l_con[nd]['e'][-1], l_con[nd+1]['e'][0]])
         v = asarray([l_prim[nd]['v'][-1], l_prim[nd+1]['v'][0]])
-        # ADD g1!!!
-        csq = asarray([l_prim[nd]['press'][-1]/l_prim[nd]['rho'][-1], l_prim[nd+1]['press'][0]/l_prim[nd+1]['rho'][0]])
-        print("press = "+str(l_prim[nd]['press'][-1]))
-        print("v = "+str(v))
-        print("csq = "+str(csq))
+
+        csq = asarray([Gamma1(5./3., l_prim[nd]['beta'][-1])*l_prim[nd]['press'][-1]/l_prim[nd]['rho'][-1],
+                       Gamma1(5./3., l_prim[nd+1]['beta'][0])*l_prim[nd+1]['press'][0]/l_prim[nd+1]['rho'][0]])
+        #        print("press = "+str(l_prim[nd]['press'][-1]))
+        #        print("v = "+str(v))
+        #        print("csq = "+str(csq))
         vl, vm, vr = sigvel_mean(v, sqrt(csq))
         fm_half, fs_half, fe_half = solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
-        BClist1[nd+1].update([('sleft', fm_half), ('pleft', fs_half),('feleft', fe_half)])
-        BClist1[nd].update([('sright', fm_half), ('pright', fs_half),('feright', fe_half)])
-    print("before:\n")
-    print(BClist)
-    print("after: \n")
-    print(BClist1)
-    ii = input('BC')
+        BClist1[nd+1].update([('sleft', fm_half[0]), ('pleft', fs_half[0]),('feleft', fe_half[0])])
+        BClist1[nd].update([('sright', fm_half[0]), ('pright', fs_half[0]),('feright', fe_half[0])])
+    # print("after: \n")
+    # print(BClist1)
+    #    ii = input('BC')
     return BClist1 
             
 def fluxes(prim):
@@ -341,6 +347,7 @@ def derivo(con, s_half, p_half, fe_half, src):
     #    print("r = "+str(dlright))
     l_half = l_ghalf[nd].l
     dlleft_nd = con['dlleft'] ; dlright_nd = con['dlright']
+    #    dlleft_nd = l_half[1]-l_half[0] ; dlright_nd = l_half[-1]-l_half[-2]
     # why is dlleft not resolved as a global?
     #    print("main_step: mmin = "+str(m.min()))
     dm = src['m'] ; ds = src['s'] ; de = src['e'] 
@@ -350,15 +357,16 @@ def derivo(con, s_half, p_half, fe_half, src):
     dst[1:-1] = -(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds[1:-1]
     det[1:-1] = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]
 
-    print("conpleft = "+str(con['pleft']))
+    #    print("conpleft = "+str(con['pleft']))
+    #    print("compare to "+str(p_half[0]))
     #left boundary conditions:
-    dmt[0] = -(s_half[0]-con['sleft'])/dlleft_nd +dm[0]
+    dmt[0] = -(s_half[0]-con['sleft'])/dlleft_nd + dm[0]
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
-    dst[0] = -(p_half[0]-con['pleft'])/dlleft_nd +ds[0] # mdotsink_eff does not enter here, as matter should escape sideways, but through the bottom
+    dst[0] = -(p_half[0]-con['pleft'])/dlleft_nd + ds[0] # mdotsink_eff does not enter here, as matter should escape sideways, but through the bottom
     #     edotsink_eff = mdotsink * (e[0]/m[0])
     det[0] = -(fe_half[0]-con['feleft'])/dlleft_nd + de[0] # no energy sink anyway
     # right boundary conditions:
-    dmt[-1] = -(con['sright']-s_half[-1])/dlright_nd +dm[-1]
+    dmt[-1] = -(con['sright']-s_half[-1])/dlright_nd + dm[-1]
     #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
     
     dst[-1] = -(con['pright'] - p_half[-1])/dlright_nd + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
@@ -372,7 +380,6 @@ def RKstep(con):
     '''
     calculating elementary increments of conserved quantities
     '''
-    dt = con['dt']
     prim = toprim(con) # primitive from conserved
     fm, fs, fe = fluxes(prim)
     g1 = Gamma1(5./3., prim['beta'])
@@ -398,6 +405,9 @@ def RKstep(con):
         print("signal velocities crashed")
         #        ii=input("cs")
     m = con['m'] ; s = con['s'] ; e = con['e']
+    #    print("size(m) = "+str(size(m)))
+    # print("size(s) = "+str(size(s)))
+    # print("size(e) = "+str(size(e)))
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
         duls_half, dule_half = diffuse(rho, urad, v, dl, ghalf.across, g1)
@@ -422,9 +432,9 @@ def RKstep(con):
     
     ltot=trapz(src['flux'], x=l_g[nd].l) 
     # dmt, dst, det
-    print(con['dlright'])
+    #    print(con['dlright'])
     ds = derivo(con, fm_half, fs_half, fe_half, src)
-    con1 = {'N': nd, 'm': m+ds['m']*dt, 's': s+ds['s']*dt, 'e': e+ds['e']*dt, 'ltot': ltot}
+    con1 = {'N': nd, 'm': ds['m'], 's': ds['s'], 'e': ds['e'], 'ltot': ltot}
     return con1
 
 ################################################################################
@@ -747,41 +757,83 @@ def alltire(conf):
     l_u = array_split(u, parallelfactor) ; l_rho = array_split(rho, parallelfactor) ; l_v = array_split(v, parallelfactor)
     l_umagtar = array_split(umagtar, parallelfactor)
     l_press = array_split(press, parallelfactor) ;    l_urad = array_split(urad, parallelfactor)
-    l_prim = [{'N': i, 'rho': l_rho[i], 'v': l_v[i], 'u': l_u[i], 'press': l_press[i], 'urad': l_urad[i]} for i in range(parallelfactor)]
+    beta = betafun(Fbeta(rho, u, betacoeff))
+    l_beta = array_split(beta, parallelfactor) 
+
+    l_prim = [{'N': i, 'rho': l_rho[i], 'v': l_v[i], 'u': l_u[i], 'press': l_press[i], 'urad': l_urad[i], 'beta': l_beta[i]} for i in range(parallelfactor)]
     pool = multiprocessing.Pool(parallelfactor)
     print(shape(l_prim))
     print(shape(l_g))
     dlleft_tmp, dlright_tmp = dlbounds_define(l_g)
     dlleft = copy(dlleft_tmp) ; dlright = copy(dlright_tmp)
     print(dlright)
+    [ l_con[i].update([ ('umagtar', l_umagtar[i]),
+                        ('dlleft', dlleft[i]), ('dlright', dlright[i])]) for i in range(parallelfactor) ]
     #        ii = input('dll')
+
+    l_con1 = copy(l_con)
         
     timer.start("total")
     while(t<tmax):
-        timer.start_comp("advance")
-
         dtlist = pool.map(time_step, l_prim) 
         dt = asarray(dtlist).min() # later, we can try different time steps at different distances
 
         # BC
+        timer.start_comp("bounds1")
         BCList = bound_fluxes(l_prim, l_con) # calculates fluxes for BC as a list of dictionaries. Must include Riemann solver!
         # each dic is {'sleft': , 'sright': , 'pleft': , 'pright': , 'feleft': , 'feright':}
         # Adding BC to the con dict:
         [ l_con[i].update([('sleft', BCList[i]['sleft']), ('sright',BCList[i]['sright']),
                            ('pleft', BCList[i]['pleft']), ('pright',BCList[i]['pright']),
                            ('feleft', BCList[i]['feleft']), ('feright', BCList[i]['feright']),
-                           ('dt', dt), ('umagtar', l_umagtar[i]),
+                           ('umagtar', l_umagtar[i]),
                            ('dlleft', dlleft[i]), ('dlright', dlright[i])]) for i in range(parallelfactor) ]
+        timer.stop_comp("bounds1")
         #
-        l_con = pool.map(RKstep, l_con)
+        
+        timer.start_comp("RKstep1")
+        dl_con = pool.map(RKstep, l_con)
+        timer.stop_comp("RKstep1")
+
+        timer.start_comp("update1")
+        [l_con1[i].update([('m', l_con[i]['m']+dl_con[i]['m']*dt/2.),
+                           ('s', l_con[i]['s']+dl_con[i]['s']*dt/2.),
+                           ('e', l_con[i]['e']+dl_con[i]['e']*dt/2.)]) for i in range(parallelfactor) ]
+        l_prim1 = pool.map(toprim, l_con1)
+        timer.stop_comp("update1")
+        timer.start_comp("bounds2")
+        BCList1 = bound_fluxes(l_prim1, l_con1)
+        [ l_con1[i].update([('sleft', BCList1[i]['sleft']), ('sright',BCList1[i]['sright']),
+                           ('pleft', BCList1[i]['pleft']), ('pright',BCList1[i]['pright']),
+                           ('feleft', BCList1[i]['feleft']), ('feright', BCList1[i]['feright'])]) for i in range(parallelfactor) ]
+        # additional BC:
+        l_con1[0]['s'][0] = 0. # no motion through the surface of the NS
+        l_con1[-1]['s'][-1] = -mdot # mass accretion rate fixed
+        if ufixed:
+            l_con1[-1]['e'][-1] = 0.
+        timer.stop_comp("bounds2")
+        
+        timer.start_comp("RKstep2")
+        dl_con = pool.map(RKstep, l_con1)
+        timer.stop_comp("RKstep2")
+        timer.start_comp("update2")
+        [l_con[i].update([('m', l_con[i]['m']+dl_con[i]['m']*dt),
+                           ('s', l_con[i]['s']+dl_con[i]['s']*dt),
+                           ('e', l_con[i]['e']+dl_con[i]['e']*dt)]) for i in range(parallelfactor) ]       
+        timer.stop_comp("update2")
+        
+        # additional BC:
+        l_con[0]['s'][0] = 0. # no motion through the surface of the NS
+        l_con[-1]['s'][-1] = -mdot # mass accretion rate fixed
+        if ufixed:
+            l_con[-1]['e'][-1] = 0.
+
         t += dt
         l_prim = pool.map(toprim, l_con) # primitive from conserved
 
-        print("ltot = "+str([l_con[i]['ltot'] for i in range(parallelfactor)]))
-        ii = input('dT')
-        
-        
-        timer.stop_comp("advance")
+        # print("ltot = "+str([l_con[i]['ltot'] for i in range(parallelfactor)]))
+        #        ii = input('dT')
+    
         timer.lap("step")
         if (t>=tstore) | crash:
             # need to stitch the parts together:

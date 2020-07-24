@@ -81,6 +81,9 @@ def dlbounds_define(glist):
     np = size(glist)
     dlleft = zeros(np) ; dlright = zeros(np)
 
+    #    dlleft[0] = glist[0].l[1]-glist[0].l[0]
+    #    dlright[-1] = glist[-1].l[-1]-glist[-1].l[-2]
+    
     for k in range(np):
         if k > 0:
             dlleft[k] = glist[k].l[0]-glist[k-1].l[-1]
