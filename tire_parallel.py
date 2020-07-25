@@ -247,19 +247,28 @@ def bound_fluxes(l_prim, l_con, edot = 0., HL=True):
         s = asarray([l_con[nd]['s'][-1], l_con[nd+1]['s'][0]])
         e = asarray([l_con[nd]['e'][-1], l_con[nd+1]['e'][0]])
         v = asarray([l_prim[nd]['v'][-1], l_prim[nd+1]['v'][0]])
+        rho = asarray([l_prim[nd]['rho'][-1], l_prim[nd+1]['rho'][0]])
+        urad = asarray([l_prim[nd]['urad'][-1], l_prim[nd+1]['urad'][0]])
 
-        csq = asarray([Gamma1(5./3., l_prim[nd]['beta'][-1])*l_prim[nd]['press'][-1]/l_prim[nd]['rho'][-1],
-                       Gamma1(5./3., l_prim[nd+1]['beta'][0])*l_prim[nd+1]['press'][0]/l_prim[nd+1]['rho'][0]])
+        g1 = asarray([Gamma1(5./3., l_prim[nd]['beta'][-1]), Gamma1(5./3., l_prim[nd+1]['beta'][0])])
+        csq = asarray([g1[0]*l_prim[nd]['press'][-1]/l_prim[nd]['rho'][-1],
+                       g1[1]*l_prim[nd+1]['press'][0]/l_prim[nd+1]['rho'][0]])
         #        print("press = "+str(l_prim[nd]['press'][-1]))
         #        print("v = "+str(v))
         #        print("csq = "+str(csq))
         vl, vm, vr = sigvel_mean(v, sqrt(csq))
         fm_half, fs_half, fe_half = solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
+        if raddiff:
+            dl = l_g[nd+1].l[-1]-l_g[nd].l[0]
+            delta = (l_g[nd+1].delta[-1]+l_g[nd].delta[0])/2.
+            across = (l_g[nd+1].across[-1]+l_g[nd].across[0])/2.
+            duls_half, dule_half = diffuse(rho, urad, v, dl, across, g1)
+            duls_half *= 1.-exp(-delta * (rho[0]+rho[1])/2.)
+            dule_half *= 1.-exp(-delta * (rho[0]+rho[1])/2.)
+            fs_half += duls_half ; fe_half += dule_half
         BClist1[nd+1].update([('sleft', fm_half[0]), ('pleft', fs_half[0]),('feleft', fe_half[0])])
-        BClist1[nd].update([('sright', fm_half[0]), ('pright', fs_half[0]),('feright', fe_half[0])])
-    # print("after: \n")
-    # print(BClist1)
-    #    ii = input('BC')
+        BClist1[nd].update([('sright', fm_half[0]), ('pright', fs_half[0]),('feright', fe_half[0])])        
+                
     return BClist1 
             
 def fluxes(prim):
@@ -385,6 +394,7 @@ def RKstep(con):
     g1 = Gamma1(5./3., prim['beta'])
     rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad']
     nd = prim['N']
+    gnd = l_g[nd]
     csq=g1*press/rho
     if(csq.min()<csqmin):
         wneg = (csq<=csqmin)
@@ -410,19 +420,21 @@ def RKstep(con):
     # print("size(e) = "+str(size(e)))
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
-        duls_half, dule_half = diffuse(rho, urad, v, dl, ghalf.across, g1)
+        dl = gnd.l[1:]-gnd.l[:-1]
+        duls_half, dule_half = diffuse(rho, urad, v, dl, l_ghalf[nd].across, g1)
         # radial diffusion suppressed, if transverse optical depth is small:
-        duls_half *= 1.-exp(-ghalf.delta * (rho[1:]+rho[:-1])/2.)
-        dule_half *= 1.-exp(-ghalf.delta * (rho[1:]+rho[:-1])/2.)
+        delta = l_ghalf[nd].delta
+        duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
+        dule_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         fs_half += duls_half ; fe_half += dule_half
     if(squeezemode):
         umagtar = con['umagtar']
         #        if umagtar is None:
         #            umagtar = umag * (1.+3.*g[nd].cth**2)/4. * (rstar/g[nd].r)**6
-        dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/l_g[nd].delta
+        dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/gnd.delta
         if squeezeothersides:
-            dmsqueeze += 4. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/ (l_g[nd].across / l_g[nd].delta)
-        desqueeze = dmsqueeze * (e+press* l_g[nd].across) / m # (e-u*g.across)/m
+            dmsqueeze += 4. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/ (gnd.across / gnd.delta)
+        desqueeze = dmsqueeze * (e+press* gnd.across) / m # (e-u*g.across)/m
     else:
         dmsqueeze = 0.
         desqueeze = 0.
@@ -436,6 +448,26 @@ def RKstep(con):
     ds = derivo(con, fm_half, fs_half, fe_half, src)
     con1 = {'N': nd, 'm': ds['m'], 's': ds['s'], 'e': ds['e'], 'ltot': ltot}
     return con1
+
+def updateCon(l, dl, dt):
+    '''
+    updates the conserved variables vector l1, adding dl*dt to l
+    '''
+    l1 = l
+    l1.update([('m', l['m']+dl['m']*dt),
+               ('s', l['s']+dl['s']*dt),
+               ('e', l['e']+dl['e']*dt)]) 
+    return l1
+
+def updateBC(l, BC):
+    '''
+    updates boundary conditions at the domain boundaries 
+    '''
+    l1 = l 
+    l1.update([('sleft', BC['sleft']), ('sright', BC['sright']),
+              ('pleft', BC['pleft']), ('pright', BC['pright']),
+              ('feleft', BC['feleft']), ('feright', BC['feright'])])
+    return l1
 
 ################################################################################
 print("if you want to start the simulation, now type `alltire(`conf')` \n")
@@ -783,29 +815,20 @@ def alltire(conf):
         BCList = bound_fluxes(l_prim, l_con) # calculates fluxes for BC as a list of dictionaries. Must include Riemann solver!
         # each dic is {'sleft': , 'sright': , 'pleft': , 'pright': , 'feleft': , 'feright':}
         # Adding BC to the con dict:
-        [ l_con[i].update([('sleft', BCList[i]['sleft']), ('sright',BCList[i]['sright']),
-                           ('pleft', BCList[i]['pleft']), ('pright',BCList[i]['pright']),
-                           ('feleft', BCList[i]['feleft']), ('feright', BCList[i]['feright']),
-                           ('umagtar', l_umagtar[i]),
-                           ('dlleft', dlleft[i]), ('dlright', dlright[i])]) for i in range(parallelfactor) ]
+        l_con = [ pool.apply(updateBC, args = (l_con[i], BCList[i])) for i in range(parallelfactor) ]
         timer.stop_comp("bounds1")
-        #
-        
+        #        
         timer.start_comp("RKstep1")
         dl_con = pool.map(RKstep, l_con)
         timer.stop_comp("RKstep1")
 
-        timer.start_comp("update1")
-        [l_con1[i].update([('m', l_con[i]['m']+dl_con[i]['m']*dt/2.),
-                           ('s', l_con[i]['s']+dl_con[i]['s']*dt/2.),
-                           ('e', l_con[i]['e']+dl_con[i]['e']*dt/2.)]) for i in range(parallelfactor) ]
+        timer.start_comp("update1")        
+        l_con1 = [ pool.apply(updateCon, args = (l_con[i], dl_con[i], dt/2.)) for i in range(parallelfactor) ]
         l_prim1 = pool.map(toprim, l_con1)
         timer.stop_comp("update1")
         timer.start_comp("bounds2")
         BCList1 = bound_fluxes(l_prim1, l_con1)
-        [ l_con1[i].update([('sleft', BCList1[i]['sleft']), ('sright',BCList1[i]['sright']),
-                           ('pleft', BCList1[i]['pleft']), ('pright',BCList1[i]['pright']),
-                           ('feleft', BCList1[i]['feleft']), ('feright', BCList1[i]['feright'])]) for i in range(parallelfactor) ]
+        l_con1 = [ pool.apply(updateBC, args = (l_con[i], BCList1[i])) for i in range(parallelfactor) ]
         # additional BC:
         l_con1[0]['s'][0] = 0. # no motion through the surface of the NS
         l_con1[-1]['s'][-1] = -mdot # mass accretion rate fixed
@@ -817,11 +840,7 @@ def alltire(conf):
         dl_con = pool.map(RKstep, l_con1)
         timer.stop_comp("RKstep2")
         timer.start_comp("update2")
-        [l_con[i].update([('m', l_con[i]['m']+dl_con[i]['m']*dt),
-                           ('s', l_con[i]['s']+dl_con[i]['s']*dt),
-                           ('e', l_con[i]['e']+dl_con[i]['e']*dt)]) for i in range(parallelfactor) ]       
-        timer.stop_comp("update2")
-        
+        l_con = [ pool.apply(updateCon, args = (l_con[i], dl_con[i], dt)) for i in range(parallelfactor) ]    
         # additional BC:
         l_con[0]['s'][0] = 0. # no motion through the surface of the NS
         l_con[-1]['s'][-1] = -mdot # mass accretion rate fixed
@@ -830,6 +849,7 @@ def alltire(conf):
 
         t += dt
         l_prim = pool.map(toprim, l_con) # primitive from conserved
+        timer.stop_comp("update2")
 
         # print("ltot = "+str([l_con[i]['ltot'] for i in range(parallelfactor)]))
         #        ii = input('dT')
@@ -851,7 +871,7 @@ def alltire(conf):
             #            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
             if verbose:
                 print(conf+": t = "+str(t*tscale)+"s")
-                # print("dt = "+str(dt*tscale)+"s")
+                print("dt = "+str(dt*tscale)+"s")
                 print(conf+": ltot = "+str(ltot))
                 print(conf+": V (out) = "+str(v[-1]))
                 print(conf+": U/Umag (out) = "+str(u[-1]/umagtar[-1]))
