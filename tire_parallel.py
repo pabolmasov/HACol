@@ -13,7 +13,7 @@ import imp
 import sys
 
 import multiprocessing
-from multiprocessing import Pool
+from multiprocessing import Pool, Pipe, Process
 
 # configuration file:
 import configparser as cp
@@ -37,7 +37,7 @@ from geometry import *
 
 from timer import Timer
 timer = Timer(["total", "step", "io"],
-              ["RKstep1", "update1", "RKstep2", "update2", "bounds1", "bounds2"])
+              ["advance"])
 
 def time_step(prim):
     # time step adjustment:
@@ -56,6 +56,10 @@ def time_step(prim):
     else:
         dt_diff = dt_CFL * 5. # effectively infinity ;)
     dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
+    #     conn.send(dt)
+    #   dt1 = conn.recv()
+    # print("dt1 = "+str(dt1)+"; dt = "+str(dt))
+    #    conn.close()
     return dt
 
 #
@@ -140,7 +144,8 @@ def tocon(prim):
     '''
     computes conserved quantities from primitives
     '''
-    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
+    #    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
+    rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; nd = con['N']
     gnd = l_g[nd]
     
     m=rho*gnd.across # mass per unit length
@@ -204,7 +209,6 @@ def bound_fluxes(l_prim, l_con, edot = 0., HL=True):
     #    sleft = zeros(dno) ; pleft = zeros(dno) ; feleft = zeros(dno)
     #    sright = zeros(dno) ; pright = zeros(dno) ; feright = zeros(dno)
     BClist = []
-    
     #    sleft[0] = -mdotsink ; sright[-1] = -mdot
     #    feleft[0] = 0. ; feright[-1] = -edot
     
@@ -269,9 +273,9 @@ def bound_fluxes(l_prim, l_con, edot = 0., HL=True):
         BClist1[nd+1].update([('sleft', fm_half[0]), ('pleft', fs_half[0]),('feleft', fe_half[0])])
         BClist1[nd].update([('sright', fm_half[0]), ('pright', fs_half[0]),('feright', fe_half[0])])        
                 
-    return BClist1 
+    return BClist1
             
-def fluxes(prim):
+def fluxes(g, rho, v, u, press):
     '''
     computes the fluxes of conserved quantities, given primitives; 
     radiation diffusion flux is not included, as it is calculated at halfpoints
@@ -280,17 +284,16 @@ def fluxes(prim):
     g is geometry (structure)
     Note: fluxes do not include diffusion (added separately)
     '''
-    nd = prim['N'] ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
-    gnd = l_g[nd]
-    across = gnd.across
-    s = rho*v*across # mass flux (identical to momentum per unit length -- can we use it?)
-    beta = betafun(Fbeta(rho, u, betacoeff))
-    press = u/3./(1.-beta/2.)
-    p = across*(rho*v**2+press) # momentum flux
-    fe = across*v*(u+press+(v**2/2.-1./gnd.r-0.5*(omega*gnd.r*gnd.sth)**2)*rho) # energy flux without diffusion
+    #    nd = prim['N']  # ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; press = prim['press'] ; beta = prim['beta']
+    #    gnd = l_g[nd]
+    across = g.across ; r = g.r  ; sth = g.sth 
+    s = rho * v * across # mass flux (identical to momentum per unit length -- can we use it?)
+    p = across * (rho*v**2 + press) # momentum flux
+    fe = across * v * (u + press + (v**2/2.-1./r-0.5*(omega*r*sth)**2)*rho) # energy flux without diffusion
     return s, p, fe
 
-def sources(prim, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
+def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., desqueeze = 0.):
+        # prim, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
     '''
     computes the RHSs of conservation equations
     no changes in mass
@@ -300,35 +303,36 @@ def sources(prim, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
     additional output:  equilibrium energy density
     if the "forcecheck" flag is on, outputs the grav.potential difference between the outer and inner boundaries and compares to the work of the force along the field line
     '''
-    nd = prim['N'] ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
-    gnd = l_g[nd]
+    #    nd = prim['N'] ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
+    # gnd = l_g[nd]
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
-    tau = rho * gnd.delta # tau in transverse direction
-    tauphi = rho * gnd.across / gnd.delta / 2. # optical depth in azimuthal direction
+    delta = g.delta ;  across = g.across ; r = g.r ; cth = g.cth ; sth = g.sth ; cosa = g.cosa ; sina = g.sina
+    tau = rho * delta # tau in transverse direction
+    tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
     taueff = copy(1./(1./tau + 1./tauphi))
     taufac = taufun(taueff)    # 1.-exp(-tau)
     #    taufac = 1. # !!! temporary
     gamefac = tratfac(tau)
     gamedd = eta * ltot * gamefac
-    sinsum = copy(gnd.sina*gnd.cth+gnd.cosa*gnd.sth) # sin(theta+alpha)
-    force = copy((-sinsum/gnd.r**2*(1.-gamedd)+omega**2*gnd.r*gnd.sth*gnd.cosa)*rho*gnd.across) # *taufac
+    sinsum = copy(sina*cth+cosa*sth) # sin(theta+alpha)
+    force = copy((-sinsum/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across) # *taufac
     if(forcecheck):
-        network = simps(force/(rho*gnd.across), x=gnd.l)
-        return network, (1./gnd.r[0]-1./gnd.r[-1])
-    beta = prim['beta'] # betafun(Fbeta(rho, u, betacoeff))
-    urad = prim['urad']
+        network = simps(force/(rho*across), x=g.l)
+        return network, (1./r[0]-1./r[-1])
+    #    beta = prim['beta'] # betafun(Fbeta(rho, u, betacoeff))
+    #    urad = prim['urad']
     #     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.
-    qloss = copy(2.*urad/(xirad*taueff+1.)*(gnd.across/gnd.delta+2.*gnd.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
-    irradheating = heatingeff * eta * mdot *afac / gnd.r * gnd.sth * sinsum * taufun(tau)
+    qloss = copy(2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)*taufac)  # diffusion approximation; energy lost from 4 sides
+    irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(tau)
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = copy(rho*0.-dmsqueeze)
     dudt = copy(v*force-qloss+irradheating)
     ds = copy(force - dmsqueeze * v) # lost mass carries away momentum
     de = copy(dudt - desqueeze) # lost matter carries away energy (or enthalpy??)
     #    return dm, force, dudt, qloss, ueq
-    return {'m': dm, 's': ds, 'e': de, 'flux': qloss} #, ueq
+    return dm, ds, de, qloss
 
 def qloss_separate(rho, v, u, g):
     '''
@@ -344,7 +348,8 @@ def qloss_separate(rho, v, u, g):
     qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
-def derivo(con, s_half, p_half, fe_half, src):
+def derivo(ghalf, m, s, e, s_half, p_half, fe_half, dm, ds, de, dlleft, dlright,
+           sleft, sright, pleft, pright, feleft, feright):
     '''
     main advance step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
@@ -352,14 +357,14 @@ def derivo(con, s_half, p_half, fe_half, src):
     includes boundary conditions for mass and energy!
     '''
 
-    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
+    #    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
     #    print("r = "+str(dlright))
-    l_half = l_ghalf[nd].l
-    dlleft_nd = con['dlleft'] ; dlright_nd = con['dlright']
+    l_half = ghalf.l
+    #    dlleft_nd = con['dlleft'] ; dlright_nd = con['dlright']
     #    dlleft_nd = l_half[1]-l_half[0] ; dlright_nd = l_half[-1]-l_half[-2]
     # why is dlleft not resolved as a global?
     #    print("main_step: mmin = "+str(m.min()))
-    dm = src['m'] ; ds = src['s'] ; de = src['e'] 
+    #    dm = src['m'] ; ds = src['s'] ; de = src['e'] 
     nl=size(m)
     dmt=zeros(nl) ; dst=zeros(nl); det=zeros(nl)
     dmt[1:-1] = -(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm[1:-1]
@@ -369,32 +374,32 @@ def derivo(con, s_half, p_half, fe_half, src):
     #    print("conpleft = "+str(con['pleft']))
     #    print("compare to "+str(p_half[0]))
     #left boundary conditions:
-    dmt[0] = -(s_half[0]-con['sleft'])/dlleft_nd + dm[0]
+    dmt[0] = -(s_half[0]-sleft)/dlleft + dm[0]
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
-    dst[0] = -(p_half[0]-con['pleft'])/dlleft_nd + ds[0] # mdotsink_eff does not enter here, as matter should escape sideways, but through the bottom
+    dst[0] = -(p_half[0]-pleft)/dlleft + ds[0] # mdotsink_eff does not enter here, as matter should escape sideways, but through the bottom
     #     edotsink_eff = mdotsink * (e[0]/m[0])
-    det[0] = -(fe_half[0]-con['feleft'])/dlleft_nd + de[0] # no energy sink anyway
+    det[0] = -(fe_half[0]-feleft)/dlleft + de[0] # no energy sink anyway
     # right boundary conditions:
-    dmt[-1] = -(con['sright']-s_half[-1])/dlright_nd + dm[-1]
+    dmt[-1] = -(sright-s_half[-1])/dlright + dm[-1]
     #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
     
-    dst[-1] = -(con['pright'] - p_half[-1])/dlright_nd + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
+    dst[-1] = -(pright - p_half[-1])/dlright + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
     #    edot =  abs(mdot) * 0.5/g.r[-1] + s[-1]/m[-1] * u[-1] # virial equilibrium
-    det[-1] = -(con['feright'] - fe_half[-1])/dlright_nd + de[-1]
+    det[-1] = -(feright - fe_half[-1])/dlright + de[-1]
 
-    return {'m': dmt, 's': dst, 'e': det}
+    return dmt, dst, det
 
-def RKstep(con):
+def RKstep(con, prim, BCleft, BCright):
     # m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, momentum_inflow = None, energy_inflow =  None):
     '''
     calculating elementary increments of conserved quantities
     '''
-    prim = toprim(con) # primitive from conserved
-    fm, fs, fe = fluxes(prim)
+    #    prim = toprim(con) # primitive from conserved
     g1 = Gamma1(5./3., prim['beta'])
-    rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad']
+    rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad'] ; u = prim['u']
     nd = prim['N']
     gnd = l_g[nd]
+    fm, fs, fe = fluxes(gnd, rho, v, u, press)
     csq=g1*press/rho
     if(csq.min()<csqmin):
         wneg = (csq<=csqmin)
@@ -411,7 +416,7 @@ def RKstep(con):
         print(vm[wwrong])
         print(vr[wwrong])
         print(vm[wwrong])
-        print("R = "+str(ghalf.r[wwrong]))
+        print("R = "+str((gnd.r[1:])[wwrong]))
         print("signal velocities crashed")
         #        ii=input("cs")
     m = con['m'] ; s = con['s'] ; e = con['e']
@@ -439,39 +444,197 @@ def RKstep(con):
         dmsqueeze = 0.
         desqueeze = 0.
         
-    # dm, ds, de, flux
-    src = sources(prim, ltot=0., dmsqueeze = dmsqueeze, desqueeze = desqueeze)
+    dm, ds, de, flux = sources(l_g[nd], rho, v, u, urad, ltot=0., dmsqueeze = dmsqueeze, desqueeze = desqueeze)
     
-    ltot=trapz(src['flux'], x=l_g[nd].l) 
+    ltot=trapz(flux, x=l_g[nd].l) 
     # dmt, dst, det
     #    print(con['dlright'])
-    ds = derivo(con, fm_half, fs_half, fe_half, src)
-    con1 = {'N': nd, 'm': ds['m'], 's': ds['s'], 'e': ds['e'], 'ltot': ltot}
+    dmt, dst, det = derivo(l_ghalf[nd], m, s, e, fm_half, fs_half, fe_half, dm, ds, de,
+                           con['dlleft'], con['dlright'], BCleft[0], BCright[0],
+                           BCleft[1], BCright[1], BCleft[2], BCright[2])
+    con1 = {'N': nd, 'm': dmt, 's': dst, 'e': det, 'ltot': ltot}
     return con1
 
 def updateCon(l, dl, dt):
     '''
     updates the conserved variables vector l1, adding dl*dt to l
     '''
-    l1 = l
-    l1.update([('m', l['m']+dl['m']*dt),
-               ('s', l['s']+dl['s']*dt),
-               ('e', l['e']+dl['e']*dt)]) 
-    return l1
+    #    l1 = l
+    #    l1.update([('m', l['m']+dl['m']*dt),
+    #               ('s', l['s']+dl['s']*dt),
+    #               ('e', l['e']+dl['e']*dt)])
+    l['m'] = l['m']+dl['m']*dt
+    l['s'] = l['s']+dl['s']*dt
+    l['e'] = l['e']+dl['e']*dt
+    return l
 
-def updateBC(l, BC):
+def updateBC(con, BC):
     '''
     updates boundary conditions at the domain boundaries 
     '''
-    l1 = l 
-    l1.update([('sleft', BC['sleft']), ('sright', BC['sright']),
-              ('pleft', BC['pleft']), ('pright', BC['pright']),
-              ('feleft', BC['feleft']), ('feright', BC['feright'])])
-    return l1
+    #    l1 = l 
+    #    l1.update([('sleft', BC['sleft']), ('sright', BC['sright']),
+    #              ('pleft', BC['pleft']), ('pright', BC['pright']),
+    #              ('feleft', BC['feleft']), ('feright', BC['feright'])])
+    con['sleft'] = BC['sleft'] ;   con['sright'] = BC['sright']
+    con['pleft'] = BC['pleft'] ;   con['pright'] = BC['pright']
+    con['feleft'] = BC['feleft'] ;   con['feright'] = BC['feright']
+    return con
 
 ################################################################################
 print("if you want to start the simulation, now type `alltire(`conf')` \n")
 
+
+def onedomain(g, lcon, BCleft, BCright, dtpipe, outpipe, hfile):
+
+    con = lcon
+    nd = con['N']
+    
+    prim = toprim(con) # primitive from conserved
+
+    t = 0.
+    print("nd = "+str(nd))
+    print("tmax = "+str(tmax))
+
+    gleftbound = geometry_local(g, 0)
+    grightbound = geometry_local(g, -1)
+
+    tstore = 0. ; nout = 0
+    if nd == 0:
+        fflux=open(outdir+'/'+'flux.dat', 'w')
+        ftot=open(outdir+'/'+'totals.dat', 'w')
+        timer.start("total")
+
+    while(t<tmax):
+        if nd == 0:
+            timer.start_comp("advance")
+
+        rho = prim['rho'] ; v = prim['v'] ; u =  prim['u']  ; press =  prim['press'] 
+        # boundary conditions: send
+        if BCleft is not None:
+            BCleft.send(list(fluxes(gleftbound, rho[0], v[0], u[0], press[0])))
+            #            print("nd = "+str(nd)+", sending to the left")
+        if BCright is not None:
+            BCright.send(list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
+            #            print("nd = "+str(nd)+", sending to the right")
+            
+        # boundary conditions: receive
+        
+        if BCleft is not None:
+            #            print("nd = "+str(nd)+", receiving from the left")
+            BCfluxleft = BCleft.recv()
+        else:
+            BCfluxleft = [0., 0., 0.]
+            con['s'][0] = 0.
+        if BCright is not None:
+            #            print("nd = "+str(nd)+", receiving from the right")
+            #         print(list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
+            BCfluxright = BCright.recv()
+        else:
+            BCfluxright = [-mdot, 0., 0.]
+            con['s'][-1] = -mdot
+            con['e'][-1] = 0.
+        # time step: first domain broadcasts its dt
+        if nd == 0:
+            dtlocal = time_step(prim)
+            for k in range(parallelfactor -1):
+                dtpipe[k].send(dtlocal)
+            dt = dtlocal
+        else:
+            #            print("nd = "+str(nd))
+            dt = dtpipe.recv()             
+            #            print("time step "+str(dt))
+        dcon = RKstep(con, prim, BCfluxleft, BCfluxright)
+        
+        con1 = updateCon(con, dcon, dt/2.)
+        prim1 = toprim(con1)
+        rho1 = prim1['rho'] ; v1 = prim1['v'] ; u1 =  prim1['u'] ; press1 = prim1['press']
+
+        # second exchange of BC
+        if BCleft is not None:
+            BCleft.send(list(fluxes(gleftbound, rho1[0], v1[0], u1[0], press1[0])))
+        if BCright is not None:
+            BCright.send(list(fluxes(grightbound, rho1[-1], v1[-1], u1[-1], press1[-1])))
+            
+        if BCleft is not None:
+            BCfluxleft1 = BCleft.recv()
+        else:
+            BCfluxleft1 = [0., 0., 0.]
+            con1['s'][0] = 0.
+        if BCright is not None:
+            BCfluxright1 = BCright.recv()
+        else:
+            BCfluxright1 = [-mdot, 0., 0.]
+            con1['s'][-1] = -mdot
+            con1['e'][-1] = 0.
+        
+        dcon1 = RKstep(con1, prim1, BCfluxleft1, BCfluxright1)
+        
+        con = updateCon(con, dcon1, dt)
+
+        t += dt
+        #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
+        prim = toprim(con) # primitive from conserved
+        if nd == 0:
+            timer.stop_comp("advance")
+            timer.lap("step")
+
+        if (t>=tstore):            
+            ltot = dcon['ltot']
+            tstore += dtout
+            # sending data:
+            if nd > 0:
+                outpipe.send([t, g, con, prim, ltot])
+            else:
+                timer.start("io")
+                m = con['m'] ; e = con['e'] ; umagtar = con['umagtar']
+                mtot = trapz(m, x=g.l)     ;        etot = trapz(e, x=g.l)
+                r = g.r ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
+                for k in range(parallelfactor-1):
+                    t1, g1, con1, prim1, ltot1 = outpipe[k].recv()
+                    # print("size(r) = "+str(shape(r))+", "+str(shape(g1.r)))
+                    ltot += ltot1
+                    mtot += trapz(con1['m'], x=g1.l)
+                    etot += trapz(con1['e'], x=g1.l)
+                    r = concatenate([r, g1.r])
+                    rho = concatenate([rho, prim1['rho']])
+                    v = concatenate([v, prim1['v']])
+                    u = concatenate([u, prim1['u']])
+                    umagtar = concatenate([umagtar, con1['umagtar']])
+                qloss = qloss_separate(rho, v, u, gglobal)
+                fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
+                ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
+                print(str(t*tscale)+' '+str(ltot)+'\n')
+                fflux.flush() ; ftot.flush()
+                if ifplot:
+                    plots.vplot(r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
+                    plots.uplot(r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
+                if hfile is not None:
+                    hdf.dump(hfile, nout, t, rho, v, u, qloss)
+                if not(ifhdf) or (nout%ascalias == 0):
+                    # ascii output:
+                    # print(nout)
+                    fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
+                    if verbose:
+                        print(" ASCII output to "+fname)
+                    fstream=open(fname, 'w')
+                    fstream.write('# t = '+str(t*tscale)+'s\n')
+                    fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
+                    nx = size(r)
+                    for k in arange(nx):
+                        fstream.write(str(r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
+                    fstream.close()
+                timer.stop("io")
+                if (nout%ascalias == 0):
+                    timer.stats("step")
+                    timer.stats("io")
+                    timer.comp_stats()
+                    timer.start("step") #refresh lap counter (avoids IO profiling)
+                    timer.purge_comps()
+            nout += 1      
+    fflux.close()
+    dtpipe.close()
+        
 def alltire(conf):
     '''
     the main routine bringing all together
@@ -484,7 +647,11 @@ def alltire(conf):
     global eta, heatingeff, nubulk, weinberg
     global CFL, Cth, Cdiff
 
-    global l_g, l_ghalf, dlleft, dlright  # geometry and boundary positions
+    global tscale
+    
+    global tmax, parallelfactor, dtout, outdir, ascalias, ifhdf
+
+    global gglobal, l_g, l_ghalf, dlleft, dlright  # geometry and boundary positions
     
     # initializing variables:
     if conf is None:
@@ -623,13 +790,14 @@ def alltire(conf):
     dlhalf=ghalf.l[1:]-ghalf.l[:-1] # cell sizes
 
     # if we are doing parallel calculation:
-    if parallelfactor > 1:
-        l_g = geometry_split(g, parallelfactor)
-        l_ghalf = geometry_split(ghalf, parallelfactor, half = True)
-        # now, g is a list of geometries
-    else:
-        print("to perform parallel computation, you need parallelfactor > 1!")
-        exit(1)
+    #    if parallelfactor > 1:
+    gglobal = g
+    l_g = geometry_split(g, parallelfactor)
+    l_ghalf = geometry_split(ghalf, parallelfactor, half = True)
+    # now, g is a list of geometries
+    # else:
+    #    print("to perform parallel computation, you need parallelfactor > 1!")
+    #    exit(1)
     BSgamma = (g.across/g.delta**2)[0]/mdot*rstar
     BSeta = (8./21./sqrt(2.)*umag*3.)**0.25*sqrt(g.delta[0])/(rstar)**0.125
     if verbose:
@@ -793,7 +961,7 @@ def alltire(conf):
     l_beta = array_split(beta, parallelfactor) 
 
     l_prim = [{'N': i, 'rho': l_rho[i], 'v': l_v[i], 'u': l_u[i], 'press': l_press[i], 'urad': l_urad[i], 'beta': l_beta[i]} for i in range(parallelfactor)]
-    pool = multiprocessing.Pool(parallelfactor)
+    
     print(shape(l_prim))
     print(shape(l_g))
     dlleft_tmp, dlright_tmp = dlbounds_define(l_g)
@@ -803,13 +971,53 @@ def alltire(conf):
                         ('dlleft', dlleft[i]), ('dlright', dlright[i])]) for i in range(parallelfactor) ]
     #        ii = input('dll')
 
-    l_con1 = copy(l_con)
+    bcpipe1 = []
+    bcpipe2 = []
+    dtpipes1 = []
+    opipes1 = []
+    dtpipes2 = []
+    opipes2 = []
+
+    #    dtpipe1, dtpipe2 = Pipe(duplex = True)
+    #    outpipe1, outpipe2 = Pipe(duplex = True)
+    
+    for k in range(parallelfactor-1):
+        # connects kth with (k+1)th
+        bc1, bc2 = Pipe(duplex = True)
+        bcpipe1.append(bc1) ;  bcpipe2.append(bc2)
+        dt1, dt2 = Pipe(duplex = True)
+        dtpipes1.append(dt1) ;dtpipes2.append(dt2)
+        o1, o2 = Pipe(duplex = True)
+        opipes1.append(o1) ; opipes2.append(o2)
+    plist = []
         
+    for k in range(parallelfactor):
+        if k>0:
+            bcleft = bcpipe1[k-1]
+            dtpipe = dtpipes2[k-1]
+            outpipe = opipes1[k-1]
+        else:
+            bcleft = None
+            dtpipe = dtpipes1
+            outpipe = opipes2
+        if k<(parallelfactor-1):
+            bcright = bcpipe2[k]
+        else:
+            bcright = None
+        p = Process(target = onedomain, args = (l_g[k], l_con[k], bcleft, bcright, dtpipe, outpipe, hfile))
+        p.start()
+        plist.append(p)
+        hfile.close()
+        
+        # p.join()
+
+'''    
     timer.start("total")
     while(t<tmax):
-        dtlist = pool.map(time_step, l_prim) 
-        dt = asarray(dtlist).min() # later, we can try different time steps at different distances
-
+        timer.start_comp("time_step")
+        dtlist = pool.map(time_step,l_prim)
+        dt = asarray(dtlist).min()
+        timer.stop_comp("time_step")
         # BC
         timer.start_comp("bounds1")
         BCList = bound_fluxes(l_prim, l_con) # calculates fluxes for BC as a list of dictionaries. Must include Riemann solver!
@@ -819,7 +1027,7 @@ def alltire(conf):
         timer.stop_comp("bounds1")
         #        
         timer.start_comp("RKstep1")
-        dl_con = pool.map(RKstep, l_con)
+        dl_con = [ pool.apply(RKstep, args = (l_con[i], l_prim[i])) for i in range(parallelfactor) ]
         timer.stop_comp("RKstep1")
 
         timer.start_comp("update1")        
@@ -828,7 +1036,7 @@ def alltire(conf):
         timer.stop_comp("update1")
         timer.start_comp("bounds2")
         BCList1 = bound_fluxes(l_prim1, l_con1)
-        l_con1 = [ pool.apply(updateBC, args = (l_con[i], BCList1[i])) for i in range(parallelfactor) ]
+        l_con1 = [ pool.apply(updateBC, args = (l_con1[i], BCList[i])) for i in range(parallelfactor) ]
         # additional BC:
         l_con1[0]['s'][0] = 0. # no motion through the surface of the NS
         l_con1[-1]['s'][-1] = -mdot # mass accretion rate fixed
@@ -837,7 +1045,8 @@ def alltire(conf):
         timer.stop_comp("bounds2")
         
         timer.start_comp("RKstep2")
-        dl_con = pool.map(RKstep, l_con1)
+        dl_con = [ pool.apply(RKstep, args = (l_con1[i], l_prim1[i])) for i in range(parallelfactor) ]
+                   # pool.map(RKstep, l_con1)
         timer.stop_comp("RKstep2")
         timer.start_comp("update2")
         l_con = [ pool.apply(updateCon, args = (l_con[i], dl_con[i], dt)) for i in range(parallelfactor) ]    
@@ -932,3 +1141,4 @@ def alltire(conf):
 # if you want the main procedure to start running immediately after the compilation, uncomment the following:
 # alltire('globals')
 
+'''

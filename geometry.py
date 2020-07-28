@@ -49,7 +49,7 @@ def geometry_split(ginit, np, half = False):
     replaces the single solid mesh with np chunks of equal length
     '''
     if np <= 1:
-        return ginit
+        return [ginit]
     else:
         if not(half):
             nchunk = size(ginit.r) // np
@@ -96,6 +96,14 @@ def dlbounds_define(glist):
             
     return dlleft, dlright
 
+def geometry_local(g, n):
+    # defines a local, single-point, piece of geometry
+    g1 = geometry()
+    g1.r = g.r[n] ; g1.sth = g.sth[n] ; g1.cth = g.cth[n]
+    g1.across = g.across[n] ; g1.delta = g.delta[n]
+    g1.cosa = g.cosa[n] ; g1.sina = g.sina[n]
+    return g1
+    
 def gread(geofile):
     ## reads a geometry file written by geometry-initialize
     lines = loadtxt(geofile, comments="#")
