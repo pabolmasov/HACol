@@ -485,7 +485,7 @@ def updateBC(con, BC):
 print("if you want to start the simulation, now type `alltire(`conf')` \n")
 
 
-def onedomain(g, lcon, BCleft, BCright, dtpipe, outpipe, hfile):
+def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
 
     con = lcon
     nd = con['N']
@@ -509,31 +509,40 @@ def onedomain(g, lcon, BCleft, BCright, dtpipe, outpipe, hfile):
         if nd == 0:
             timer.start_comp("advance")
 
-        rho = prim['rho'] ; v = prim['v'] ; u =  prim['u']  ; press =  prim['press'] 
+        rho = prim['rho'] ; v = prim['v'] ; u =  prim['u']  ; press =  prim['press'] ; urad = prim['urad']
         # boundary conditions: send
-        if BCleft is not None:
-            BCleft.send(list(fluxes(gleftbound, rho[0], v[0], u[0], press[0])))
+        if ghostleft is not None:
+            ghostleft.send([gleftbound, rho[0], v[0], u[0], press[0], urad[0]])
+                # list(fluxes(gleftbound, rho[0], v[0], u[0], press[0])))
             #            print("nd = "+str(nd)+", sending to the left")
-        if BCright is not None:
-            BCright.send(list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
+        if ghostright is not None:
+            ghostright.send([grightbound, rho[-1], v[-1], u[-1], press[-1], urad[-1]])
+                # list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
             #            print("nd = "+str(nd)+", sending to the right")
             
         # boundary conditions: receive
         
-        if BCleft is not None:
+        if ghostleft is not None:
             #            print("nd = "+str(nd)+", receiving from the left")
-            BCfluxleft = BCleft.recv()
+            g_left, rho_left, v_left, u_left, press_left, urad_left = ghostleft.recv()
+            BCfluxleft = fluxes(g_left, rho_left, v_left, u_left, press_left)
+            if raddiff:
+                duls_left, dule_left = diffuse([rho_left, rho[0]], [urad_left, urad[0]],
+                                               [v_left, v[0]], dlleft, g_left.across)
+                BCfluxleft[1] += duls_left ; BCfluxleft[2] += dule_left
         else:
             BCfluxleft = [0., 0., 0.]
-            con['s'][0] = 0.
-        if BCright is not None:
+        if ghostright is not None:
             #            print("nd = "+str(nd)+", receiving from the right")
             #         print(list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
-            BCfluxright = BCright.recv()
+            g_right, rho_right, v_right, u_right, press_right, urad_right = ghostright.recv()
+            BCfluxright = fluxes(g_right, rho_right, v_right, u_right, press_right)
+            if raddiff:
+                duls_right, dule_right = diffuse([rho[-1], rho_right], [urad[0], urad_right],
+                                               [v[0], v_right], dlright, g_right.across)
+                Bfluxright[1] += duls_right ; Bfluxright[2] += dule_right
         else:
             BCfluxright = [-mdot, 0., 0.]
-            con['s'][-1] = -mdot
-            con['e'][-1] = 0.
         # time step: first domain broadcasts its dt
         if nd == 0:
             dtlocal = time_step(prim)
@@ -547,30 +556,59 @@ def onedomain(g, lcon, BCleft, BCright, dtpipe, outpipe, hfile):
         dcon = RKstep(con, prim, BCfluxleft, BCfluxright)
         
         con1 = updateCon(con, dcon, dt/2.)
-        prim1 = toprim(con1)
-        rho1 = prim1['rho'] ; v1 = prim1['v'] ; u1 =  prim1['u'] ; press1 = prim1['press']
-
-        # second exchange of BC
-        if BCleft is not None:
-            BCleft.send(list(fluxes(gleftbound, rho1[0], v1[0], u1[0], press1[0])))
-        if BCright is not None:
-            BCright.send(list(fluxes(grightbound, rho1[-1], v1[-1], u1[-1], press1[-1])))
-            
-        if BCleft is not None:
-            BCfluxleft1 = BCleft.recv()
-        else:
-            BCfluxleft1 = [0., 0., 0.]
-            con1['s'][0] = 0.
-        if BCright is not None:
-            BCfluxright1 = BCright.recv()
-        else:
-            BCfluxright1 = [-mdot, 0., 0.]
+        if ghostright is None:
             con1['s'][-1] = -mdot
             con1['e'][-1] = 0.
+        if ghostleft is None:
+            con1['s'][0] = 0.
+                        
+        prim1 = toprim(con1)
+        rho1 = prim1['rho'] ; v1 = prim1['v'] ; u1 =  prim1['u'] ; press1 = prim1['press']
+        urad1 = prim1['urad']
+
+        # second iteration:
+        # boundary conditions: send
+        if ghostleft is not None:
+            ghostleft.send([gleftbound, rho1[0], v1[0], u1[0], press1[0], urad1[0]])
+                # list(fluxes(gleftbound, rho[0], v[0], u[0], press[0])))
+            #            print("nd = "+str(nd)+", sending to the left")
+        if ghostright is not None:
+            ghostright.send([grightbound, rho1[-1], v1[-1], u1[-1], press1[-1], urad1[-1]])
+                # list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
+            #            print("nd = "+str(nd)+", sending to the right")
+            
+        # boundary conditions: receive
         
-        dcon1 = RKstep(con1, prim1, BCfluxleft1, BCfluxright1)
+        if ghostleft is not None:
+            #            print("nd = "+str(nd)+", receiving from the left")
+            g_left, rho_left, v_left, u_left, press_left, urad_left = ghostleft.recv()
+            BCfluxleft = fluxes(g_left, rho_left, v_left, u_left, press_left)
+            if raddiff:
+                duls_left, dule_left = diffuse([rho_left, rho1[0]], [urad_left, urad1[0]],
+                                               [v_left, v1[0]], dlleft, g_left.across)
+                BCfluxleft[1] += duls_left ; Bfluxleft[2] += dule_left
+        else:
+            BCfluxleft = [0., 0., 0.]
+        if ghostright is not None:
+            #            print("nd = "+str(nd)+", receiving from the right")
+            #         print(list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
+            g_right, rho_right, v_right, u_right, press_right, urad_right = ghostright.recv()
+            BCfluxright = fluxes(g_right, rho_right, v_right, u_right, press_right)
+            if raddiff:
+                duls_right, dule_right = diffuse([rho1[-1], rho_right], [urad1[0], urad_right],
+                                               [v1[0], v_right], dlright, g_right.across)
+                Bfluxright[1] += duls_right ; Bfluxright[2] += dule_right
+        else:
+            BCfluxright = [-mdot, 0., 0.]
+       
+        dcon1 = RKstep(con1, prim1, BCfluxleft, BCfluxright)
         
         con = updateCon(con, dcon1, dt)
+        if ghostright is None:
+            con['s'][-1] = -mdot
+            con['e'][-1] = 0.
+        if ghostleft is None:
+            con['s'][0] = 0.
 
         t += dt
         #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
@@ -971,8 +1009,8 @@ def alltire(conf):
                         ('dlleft', dlleft[i]), ('dlright', dlright[i])]) for i in range(parallelfactor) ]
     #        ii = input('dll')
 
-    bcpipe1 = []
-    bcpipe2 = []
+    ghostpipe1 = []
+    ghostpipe2 = []
     dtpipes1 = []
     opipes1 = []
     dtpipes2 = []
@@ -983,8 +1021,8 @@ def alltire(conf):
     
     for k in range(parallelfactor-1):
         # connects kth with (k+1)th
-        bc1, bc2 = Pipe(duplex = True)
-        bcpipe1.append(bc1) ;  bcpipe2.append(bc2)
+        gh1, gh2 = Pipe(duplex = True)
+        ghostpipe1.append(gh1) ;  ghostpipe2.append(gh2)
         dt1, dt2 = Pipe(duplex = True)
         dtpipes1.append(dt1) ;dtpipes2.append(dt2)
         o1, o2 = Pipe(duplex = True)
@@ -993,18 +1031,18 @@ def alltire(conf):
         
     for k in range(parallelfactor):
         if k>0:
-            bcleft = bcpipe1[k-1]
+            ghostleft = ghostpipe1[k-1]
             dtpipe = dtpipes2[k-1]
             outpipe = opipes1[k-1]
         else:
-            bcleft = None
+            ghostleft = None
             dtpipe = dtpipes1
             outpipe = opipes2
         if k<(parallelfactor-1):
-            bcright = bcpipe2[k]
+            ghostright = ghostpipe2[k]
         else:
-            bcright = None
-        p = Process(target = onedomain, args = (l_g[k], l_con[k], bcleft, bcright, dtpipe, outpipe, hfile))
+            ghostright = None
+        p = Process(target = onedomain, args = (l_g[k], l_con[k], ghostleft, ghostright, dtpipe, outpipe, hfile))
         p.start()
         plist.append(p)
         hfile.close()
