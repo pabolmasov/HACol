@@ -97,20 +97,31 @@ def tratfac(x):
     an accurate smooth version of (1-e^{-x})/x
     '''
     xmin = taumin ; xmax = taumax # limits the same as for optical depth
-    tt=copy(x)*0.
-    w1 = where(x<= xmin) ;  w2 = where(x>= xmax) ; wmed = where((x < xmax) & (x > xmin))
-    if(size(w1)>0):
-        tt[w1] = 1.
-    if(size(w2)>0):
-        tt[w2] = 1./x[w2]
-    if(size(wmed)>0):
-        tt[wmed] = (1.-exp(-x[wmed]))/x[wmed]
-    wnan=where(isnan(x))
-    if(size(wnan)>0):
-        tt[wnan] = 0.
-        print("trat = "+str(x.min())+".."+str(x.max()))
-        #        ip = input('trat')
-    return tt
+    nx = size(x)
+    if nx>1:
+        tt=copy(x)*0.
+        w1 = where(x<= xmin) ;  w2 = where(x>= xmax) ; wmed = where((x < xmax) & (x > xmin))
+        if(size(w1)>0):
+            tt[w1] = 1.
+        if(size(w2)>0):
+            tt[w2] = 1./x[w2]
+        if(size(wmed)>0):
+            tt[wmed] = (1.-exp(-x[wmed]))/x[wmed]
+        wnan=where(isnan(x))
+        if(size(wnan)>0):
+            tt[wnan] = 0.
+            print("trat = "+str(x.min())+".."+str(x.max()))
+            #        ip = input('trat')
+        return tt
+    else:
+        if x <= xmin:
+            return 1.
+        else:
+            if x>=xmax:
+                return 1./x
+            else:
+                return (1.-exp(x))/x
+            
 
 # define once and globally
 from beta import *
@@ -170,7 +181,23 @@ def toprim(con):
     prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press, 'N': nd}
     return prim
 
-def diffuse(rho, urad, v, dl, across, gamma):
+def diffuse_onepoint(rho, urad, v, dl, across):
+    '''
+    radial energy diffusion in one point (designed for BC)
+    rho, urad, and v are two-element lists, dl and across are scalars
+    '''
+    rtau_right = rho[1] * dl / 2.
+    rtau_left = rho[0] * dl / 2.
+    rtau = rtau_left + rtau_right
+    rtau_exp = tratfac(rtau)
+    duls_half =  nubulk  * (urad[1] * v[1] -  urad[0] * v[0])\
+                 *across / 3. * rtau_exp
+    dule_half = (urad[1] - urad[0]) * across / 3. * rtau_exp # / (rtau_left + rtau_right)
+    dule_half +=  duls_half * (v[0]+v[1])/2. # adding the viscous energy flux
+    return -duls_half, -dule_half 
+    
+
+def diffuse(rho, urad, v, dl, across):
     '''
     radial energy diffusion;
     calculates energy flux contribution already at the cell boundary
@@ -184,18 +211,11 @@ def diffuse(rho, urad, v, dl, across, gamma):
     
     duls_half =  nubulk  * (( urad * v)[1:] - ( urad * v)[:-1])\
                  *across / 3. * rtau_exp #  / (rtau_left + rtau_right)
-    if (weinberg):
-        gamma_half = (gamma[1:]+gamma[:-1])/2.
-        duls_half *= (gamma_half-4./3.)**2 # Weinberg 1972: 2.11.28
-        # bulk viscosity in monatomic gas + radiation disappears is gamma=4/3
-        # note that bulk viscosity is mediated, in this approximation, by photons only
     # -- photon bulk viscosity
     dule_half = ((urad)[1:] - (urad)[:-1])\
                 *across / 3. * rtau_exp # / (rtau_left + rtau_right)
     dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux
-
     # -- radial diffusion
-    # introducing exponential factors helps reduce the numerical noise from rho variations
 
     # no diffusion for the last cell:
     #    dule_half[-1] = 0. ; duls_half[-1] = 0.
@@ -266,7 +286,7 @@ def bound_fluxes(l_prim, l_con, edot = 0., HL=True):
             dl = l_g[nd+1].l[-1]-l_g[nd].l[0]
             delta = (l_g[nd+1].delta[-1]+l_g[nd].delta[0])/2.
             across = (l_g[nd+1].across[-1]+l_g[nd].across[0])/2.
-            duls_half, dule_half = diffuse(rho, urad, v, dl, across, g1)
+            duls_half, dule_half = diffuse(rho, urad, v, dl, across)
             duls_half *= 1.-exp(-delta * (rho[0]+rho[1])/2.)
             dule_half *= 1.-exp(-delta * (rho[0]+rho[1])/2.)
             fs_half += duls_half ; fe_half += dule_half
@@ -358,7 +378,7 @@ def derivo(ghalf, m, s, e, s_half, p_half, fe_half, dm, ds, de, dlleft, dlright,
     '''
 
     #    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
-    #    print("r = "+str(dlright))
+    #    print("pright = "+str(pright))
     l_half = ghalf.l
     #    dlleft_nd = con['dlleft'] ; dlright_nd = con['dlright']
     #    dlleft_nd = l_half[1]-l_half[0] ; dlright_nd = l_half[-1]-l_half[-2]
@@ -418,7 +438,7 @@ def RKstep(con, prim, BCleft, BCright):
         print(vm[wwrong])
         print("R = "+str((gnd.r[1:])[wwrong]))
         print("signal velocities crashed")
-        #        ii=input("cs")
+        ii=input("cs")
     m = con['m'] ; s = con['s'] ; e = con['e']
     #    print("size(m) = "+str(size(m)))
     # print("size(s) = "+str(size(s)))
@@ -426,7 +446,7 @@ def RKstep(con, prim, BCleft, BCright):
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
         dl = gnd.l[1:]-gnd.l[:-1]
-        duls_half, dule_half = diffuse(rho, urad, v, dl, l_ghalf[nd].across, g1)
+        duls_half, dule_half = diffuse(rho, urad, v, dl, l_ghalf[nd].across)
         # radial diffusion suppressed, if transverse optical depth is small:
         delta = l_ghalf[nd].delta
         duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
@@ -498,6 +518,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
 
     gleftbound = geometry_local(g, 0)
     grightbound = geometry_local(g, -1)
+    dlleft_nd = dlleft[nd] ; dlright_nd = dlright[nd]
 
     tstore = 0. ; nout = 0
     if nd == 0:
@@ -520,27 +541,34 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                 # list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
             #            print("nd = "+str(nd)+", sending to the right")
             
-        # boundary conditions: receive
-        
+        # boundary conditions: receive        
         if ghostleft is not None:
             #            print("nd = "+str(nd)+", receiving from the left")
             g_left, rho_left, v_left, u_left, press_left, urad_left = ghostleft.recv()
-            BCfluxleft = fluxes(g_left, rho_left, v_left, u_left, press_left)
+            BCfluxleft = list(fluxes(g_left, rho_left, v_left, u_left, press_left))
             if raddiff:
-                duls_left, dule_left = diffuse([rho_left, rho[0]], [urad_left, urad[0]],
-                                               [v_left, v[0]], dlleft, g_left.across)
-                BCfluxleft[1] += duls_left ; BCfluxleft[2] += dule_left
+                #                duls_left, dule_left = diffuse_onepoint([rho_left, rho[0]], [urad_left, urad[0]],
+                #                                                        [v_left, v[0]], dlleft_nd, g_left.across)
+                dule_left = (urad[0] - urad_left) * dlleft_nd / 3. * 2./ (rho_left + rho[0])
+                #                print("nd = "+str(nd)+" duls_left = "+str(duls_left))
+                #                print("nd = "+str(nd)+" dule_left = "+str(dule_left))
+                #                print("nd = "+str(nd)+" dule_left1 = "+str(dule_left))
+                # BCfluxleft[1] += duls_left ;
+                BCfluxleft[2] += dule_left
         else:
             BCfluxleft = [0., 0., 0.]
         if ghostright is not None:
             #            print("nd = "+str(nd)+", receiving from the right")
             #         print(list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
             g_right, rho_right, v_right, u_right, press_right, urad_right = ghostright.recv()
-            BCfluxright = fluxes(g_right, rho_right, v_right, u_right, press_right)
+            BCfluxright = list(fluxes(g_right, rho_right, v_right, u_right, press_right))
             if raddiff:
-                duls_right, dule_right = diffuse([rho[-1], rho_right], [urad[0], urad_right],
-                                               [v[0], v_right], dlright, g_right.across)
-                Bfluxright[1] += duls_right ; Bfluxright[2] += dule_right
+                # duls_right, dule_right = diffuse_onepoint([rho[-1], rho_right], [urad[-1], urad_right],
+                #                                         [v[-1], v_right], dlright_nd, g_right.across)
+                #                print("shape(dule_right) = "+str(shape(dule_right)))
+                dule_right = (urad_right - urad[-1]) * dlleft_nd / 3. * 2./ (rho_right + rho[-1])
+                # BCfluxright[1] += duls_right ;
+                BCfluxright[2] += dule_right
         else:
             BCfluxright = [-mdot, 0., 0.]
         # time step: first domain broadcasts its dt
@@ -553,6 +581,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
             #            print("nd = "+str(nd))
             dt = dtpipe.recv()             
             #            print("time step "+str(dt))
+            #        print("nd = "+str(nd)+" BC left shape "+str(shape(BCfluxleft)))
+            #        print("nd = "+str(nd)+" BC right shape "+str(shape(BCfluxright)))
         dcon = RKstep(con, prim, BCfluxleft, BCfluxright)
         
         con1 = updateCon(con, dcon, dt/2.)
@@ -582,22 +612,26 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         if ghostleft is not None:
             #            print("nd = "+str(nd)+", receiving from the left")
             g_left, rho_left, v_left, u_left, press_left, urad_left = ghostleft.recv()
-            BCfluxleft = fluxes(g_left, rho_left, v_left, u_left, press_left)
+            BCfluxleft = list(fluxes(g_left, rho_left, v_left, u_left, press_left))
             if raddiff:
-                duls_left, dule_left = diffuse([rho_left, rho1[0]], [urad_left, urad1[0]],
-                                               [v_left, v1[0]], dlleft, g_left.across)
-                BCfluxleft[1] += duls_left ; Bfluxleft[2] += dule_left
+                #                duls_left, dule_left = diffuse_onepoint([rho_left, rho1[0]], [urad_left, urad1[0]],
+                #                                                        [v_left, v1[0]], dlleft_nd, g_left.across)
+                dule_left = (urad[0] - urad_left) * dlleft_nd / 3. * 2./ (rho_left + rho[0])
+                # BCfluxleft[1] += duls_left
+                BCfluxleft[2] += dule_left
         else:
             BCfluxleft = [0., 0., 0.]
         if ghostright is not None:
             #            print("nd = "+str(nd)+", receiving from the right")
             #         print(list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
             g_right, rho_right, v_right, u_right, press_right, urad_right = ghostright.recv()
-            BCfluxright = fluxes(g_right, rho_right, v_right, u_right, press_right)
+            BCfluxright = list(fluxes(g_right, rho_right, v_right, u_right, press_right))
             if raddiff:
-                duls_right, dule_right = diffuse([rho1[-1], rho_right], [urad1[0], urad_right],
-                                               [v1[0], v_right], dlright, g_right.across)
-                Bfluxright[1] += duls_right ; Bfluxright[2] += dule_right
+                #  duls_right, dule_right = diffuse_onepoint([rho1[-1], rho_right], [urad1[0], urad_right],
+                #                                            [v1[0], v_right], dlright_nd, g_right.across)
+                dule_right = (urad_right - urad[-1]) * dlleft_nd / 3. * 2./ (rho_right + rho[-1])
+                #                BCfluxright[1] += duls_right
+                BCfluxright[2] += dule_right
         else:
             BCfluxright = [-mdot, 0., 0.]
        
@@ -644,12 +678,12 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                 ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
                 print(str(t*tscale)+' '+str(ltot)+'\n')
                 fflux.flush() ; ftot.flush()
-                if ifplot:
-                    plots.vplot(r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
-                    plots.uplot(r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
                 if hfile is not None:
                     hdf.dump(hfile, nout, t, rho, v, u, qloss)
                 if not(ifhdf) or (nout%ascalias == 0):
+                    if ifplot:
+                        plots.vplot(r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
+                        plots.uplot(r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
                     # ascii output:
                     # print(nout)
                     fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
@@ -669,8 +703,10 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                     timer.comp_stats()
                     timer.start("step") #refresh lap counter (avoids IO profiling)
                     timer.purge_comps()
-            nout += 1      
-    fflux.close()
+            nout += 1
+    if nd == 0:
+        fflux.close()
+        ftot.close()
     dtpipe.close()
         
 def alltire(conf):
