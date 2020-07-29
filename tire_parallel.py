@@ -37,7 +37,7 @@ from geometry import *
 
 from timer import Timer
 timer = Timer(["total", "step", "io"],
-              ["advance"])
+              ["BC", "RKstep"])
 
 def time_step(prim):
     # time step adjustment:
@@ -58,7 +58,7 @@ def time_step(prim):
     dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
     #     conn.send(dt)
     #   dt1 = conn.recv()
-    # print("dt1 = "+str(dt1)+"; dt = "+str(dt))
+    #    print("nd = "+str(nd)+": time_step dt = "+str(dt))
     #    conn.close()
     return dt
 
@@ -332,7 +332,7 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
     taueff = copy(1./(1./tau + 1./tauphi))
     taufac = taufun(taueff)    # 1.-exp(-tau)
-    #    taufac = 1. # !!! temporary
+    #    taufac = 1. 
     gamefac = tratfac(tau)
     gamedd = eta * ltot * gamefac
     sinsum = copy(sina*cth+cosa*sth) # sin(theta+alpha)
@@ -479,14 +479,14 @@ def updateCon(l, dl, dt):
     '''
     updates the conserved variables vector l1, adding dl*dt to l
     '''
-    #    l1 = l
+    l1 = l.copy()
     #    l1.update([('m', l['m']+dl['m']*dt),
     #               ('s', l['s']+dl['s']*dt),
     #               ('e', l['e']+dl['e']*dt)])
-    l['m'] = l['m']+dl['m']*dt
-    l['s'] = l['s']+dl['s']*dt
-    l['e'] = l['e']+dl['e']*dt
-    return l
+    l1['m'] = l['m']+dl['m']*dt
+    l1['s'] = l['s']+dl['s']*dt
+    l1['e'] = l['e']+dl['e']*dt
+    return l1
 
 def updateBC(con, BC):
     '''
@@ -507,7 +507,8 @@ print("if you want to start the simulation, now type `alltire(`conf')` \n")
 
 def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
 
-    con = lcon
+    con = lcon.copy()
+    con1 = lcon.copy()
     nd = con['N']
     
     prim = toprim(con) # primitive from conserved
@@ -527,9 +528,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         timer.start("total")
 
     while(t<tmax):
-        if nd == 0:
-            timer.start_comp("advance")
-
+        
+        timer.start_comp("BC")
         rho = prim['rho'] ; v = prim['v'] ; u =  prim['u']  ; press =  prim['press'] ; urad = prim['urad']
         # boundary conditions: send
         if ghostleft is not None:
@@ -571,19 +571,33 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                 BCfluxright[2] += dule_right
         else:
             BCfluxright = [-mdot, 0., 0.]
-        # time step: first domain broadcasts its dt
-        if nd == 0:
+        # time step: all the domains send dt to first, and then the first sends the minimum value back
+        if nd > 0:
             dtlocal = time_step(prim)
-            for k in range(parallelfactor -1):
-                dtpipe[k].send(dtlocal)
+            dtpipe.send(dtlocal)
+        else:
+            dtlocal = time_step(prim)
             dt = dtlocal
+            for k in range(parallelfactor -1):
+                dtk = dtpipe[k].recv()
+                dt = minimum(dt, dtk)            
+        if nd == 0:
+            for k in range(parallelfactor -1):
+                dtpipe[k].send(dt)
         else:
             #            print("nd = "+str(nd))
             dt = dtpipe.recv()             
             #            print("time step "+str(dt))
             #        print("nd = "+str(nd)+" BC left shape "+str(shape(BCfluxleft)))
             #        print("nd = "+str(nd)+" BC right shape "+str(shape(BCfluxright)))
+        timer.stop_comp("BC")
+        timer.start_comp("RKstep")
         dcon = RKstep(con, prim, BCfluxleft, BCfluxright)
+        if ghostright is None:
+            dcon['e'][-1] = 0.
+            dcon['s'][-1] = 0.
+        if ghostleft is None:
+            dcon['s'][0] = 0.            
         
         con1 = updateCon(con, dcon, dt/2.)
         if ghostright is None:
@@ -595,8 +609,10 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         prim1 = toprim(con1)
         rho1 = prim1['rho'] ; v1 = prim1['v'] ; u1 =  prim1['u'] ; press1 = prim1['press']
         urad1 = prim1['urad']
+        timer.stop_comp("RKstep")
 
         # second iteration:
+        timer.start_comp("BC")
         # boundary conditions: send
         if ghostleft is not None:
             ghostleft.send([gleftbound, rho1[0], v1[0], u1[0], press1[0], urad1[0]])
@@ -634,10 +650,17 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                 BCfluxright[2] += dule_right
         else:
             BCfluxright = [-mdot, 0., 0.]
+        timer.stop_comp("BC")
        
+        timer.start_comp("RKstep")
         dcon1 = RKstep(con1, prim1, BCfluxleft, BCfluxright)
+        if ghostright is None:
+            dcon1['e'][-1] = 0.
+            dcon1['s'][-1] = 0.
+        if ghostleft is None:
+            dcon1['s'][0] = 0.            
         
-        con = updateCon(con, dcon1, dt)
+        con = updateCon(con, dcon1, dt) 
         if ghostright is None:
             con['s'][-1] = -mdot
             con['e'][-1] = 0.
@@ -647,8 +670,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         t += dt
         #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
         prim = toprim(con) # primitive from conserved
+        timer.stop_comp("RKstep")
         if nd == 0:
-            timer.stop_comp("advance")
             timer.lap("step")
 
         if (t>=tstore):            
@@ -661,7 +684,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                 timer.start("io")
                 m = con['m'] ; e = con['e'] ; umagtar = con['umagtar']
                 mtot = trapz(m, x=g.l)     ;        etot = trapz(e, x=g.l)
-                r = g.r ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
+                r = g.r ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; beta = prim['beta']
                 for k in range(parallelfactor-1):
                     t1, g1, con1, prim1, ltot1 = outpipe[k].recv()
                     # print("size(r) = "+str(shape(r))+", "+str(shape(g1.r)))
@@ -672,11 +695,14 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                     rho = concatenate([rho, prim1['rho']])
                     v = concatenate([v, prim1['v']])
                     u = concatenate([u, prim1['u']])
+                    beta = concatenate([beta, prim1['beta']])
                     umagtar = concatenate([umagtar, con1['umagtar']])
                 qloss = qloss_separate(rho, v, u, gglobal)
                 fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
                 ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
                 print(str(t*tscale)+' '+str(ltot)+'\n')
+                print("dt = "+str(dt)+'\n')
+                # ii = input("dt")
                 fflux.flush() ; ftot.flush()
                 if hfile is not None:
                     hdf.dump(hfile, nout, t, rho, v, u, qloss)
@@ -684,6 +710,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                     if ifplot:
                         plots.vplot(r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
                         plots.uplot(r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
+                        plots.someplots(r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
+                                        name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
                     # ascii output:
                     # print(nout)
                     fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
@@ -889,18 +917,18 @@ def alltire(conf):
     umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-    vinit=vout *sqrt(rmax/g.r) # initial velocity
+    vinit=vout *sqrt(rmax/rnew) # initial velocity
 
     # Initial Conditions:
     # setting the initial distributions of the primitive variables:
-    rho = abs(mdot) / (abs(vout)+abs(vinit)) / g.across*0.5
+    rho = copy(abs(mdot) / (abs(vout)+abs(vinit)) / g.across*0.5)
     # total mass
     mass = trapz(rho*g.across, x=g.l)
     meq = (g.across*umag*rstar**2)[0]
     print('meq = '+str(meq)+"\n")
-    #    ii = input('M')
+    # ii = input('M')
     rho *= meq/mass * minitfactor # normalizing to the initial mass
-    vinit *= ((g.r-rstar)/(rmax-rstar))**0.5 # to fit the v=0 condition at the surface of the star
+    vinit = vout * sqrt(rmax/rnew * (rnew-rstar)/(rmax-rstar)) # to fit the v=0 condition at the surface of the star
     v = copy(vinit)
     press = umagtar[-1] * (g.r/r_e) * (rho/rho[-1]+1.)/2.
     rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
@@ -922,15 +950,14 @@ def alltire(conf):
     #    workout, dphi = sources(rho1, v1, u1, g, forcecheck = True) # checking whether the force corresponds to the potential
     if verbose:
         #    print(conf+": potential at the surface = "+str(-workout)+" = "+str(dphi))
-        # print(str((rho-rho1).std())) 
-        # print(str((vinit-v1).std()))
-        # print(str((u-u1).std())) # accuracy 1e-14
-        # print("primitive-conserved")
+        print(str((rho-rho1).std())) 
+        print(str((vinit-v1).std()))
+        print(str((u-u1).std())) # accuracy 1e-14
+        print("primitive-conserved")
         print(conf+": rhomin = "+str(rho.min())+" = "+str(rho1.min())+" (primitive-conserved and back)")
         print(conf+": umin = "+str(u.min())+" = "+str(u1.min()))
+        ii = input('prim')
     m0=m
-    
-    t=0.;  tstore=0.  ; nout=0
 
     # if we want to restart from a stored configuration
     # works so far correctly ONLY if the mesh is identical!
@@ -1004,7 +1031,17 @@ def alltire(conf):
 
         m, s, e = cons(rho, v, u, g)
         nout = restartn
-
+        #    plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie_restart', umagtar = umagtar)
+    fname=outdir+'/tireout_start.dat'
+    if verbose:
+        print("ASCII initial state")
+        fstream=open(fname, 'w')
+        #        fstream.write('# t = '+str(t*tscale)+'s\n')
+        fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
+        for k in arange(nx):
+            fstream.write(str(g.r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
+        fstream.close()
+    #################
     ulast = u[-1]
     if ulast < 0.:
         print("negative internal energy in the IC\n")
@@ -1083,136 +1120,6 @@ def alltire(conf):
         plist.append(p)
         hfile.close()
         
-        # p.join()
+    p.join()
 
-'''    
-    timer.start("total")
-    while(t<tmax):
-        timer.start_comp("time_step")
-        dtlist = pool.map(time_step,l_prim)
-        dt = asarray(dtlist).min()
-        timer.stop_comp("time_step")
-        # BC
-        timer.start_comp("bounds1")
-        BCList = bound_fluxes(l_prim, l_con) # calculates fluxes for BC as a list of dictionaries. Must include Riemann solver!
-        # each dic is {'sleft': , 'sright': , 'pleft': , 'pright': , 'feleft': , 'feright':}
-        # Adding BC to the con dict:
-        l_con = [ pool.apply(updateBC, args = (l_con[i], BCList[i])) for i in range(parallelfactor) ]
-        timer.stop_comp("bounds1")
-        #        
-        timer.start_comp("RKstep1")
-        dl_con = [ pool.apply(RKstep, args = (l_con[i], l_prim[i])) for i in range(parallelfactor) ]
-        timer.stop_comp("RKstep1")
-
-        timer.start_comp("update1")        
-        l_con1 = [ pool.apply(updateCon, args = (l_con[i], dl_con[i], dt/2.)) for i in range(parallelfactor) ]
-        l_prim1 = pool.map(toprim, l_con1)
-        timer.stop_comp("update1")
-        timer.start_comp("bounds2")
-        BCList1 = bound_fluxes(l_prim1, l_con1)
-        l_con1 = [ pool.apply(updateBC, args = (l_con1[i], BCList[i])) for i in range(parallelfactor) ]
-        # additional BC:
-        l_con1[0]['s'][0] = 0. # no motion through the surface of the NS
-        l_con1[-1]['s'][-1] = -mdot # mass accretion rate fixed
-        if ufixed:
-            l_con1[-1]['e'][-1] = 0.
-        timer.stop_comp("bounds2")
-        
-        timer.start_comp("RKstep2")
-        dl_con = [ pool.apply(RKstep, args = (l_con1[i], l_prim1[i])) for i in range(parallelfactor) ]
-                   # pool.map(RKstep, l_con1)
-        timer.stop_comp("RKstep2")
-        timer.start_comp("update2")
-        l_con = [ pool.apply(updateCon, args = (l_con[i], dl_con[i], dt)) for i in range(parallelfactor) ]    
-        # additional BC:
-        l_con[0]['s'][0] = 0. # no motion through the surface of the NS
-        l_con[-1]['s'][-1] = -mdot # mass accretion rate fixed
-        if ufixed:
-            l_con[-1]['e'][-1] = 0.
-
-        t += dt
-        l_prim = pool.map(toprim, l_con) # primitive from conserved
-        timer.stop_comp("update2")
-
-        # print("ltot = "+str([l_con[i]['ltot'] for i in range(parallelfactor)]))
-        #        ii = input('dT')
-    
-        timer.lap("step")
-        if (t>=tstore) | crash:
-            # need to stitch the parts together:
-            rho = (asarray( [ l_prim[i]['rho'] for i in range(parallelfactor) ] )).flatten()
-            u = (asarray( [ l_prim[i]['u'] for i in range(parallelfactor) ] )).flatten()
-            v = (asarray( [ l_prim[i]['v'] for i in range(parallelfactor) ] )).flatten()
-            urad =  (asarray( [ l_prim[i]['urad'] for i in range(parallelfactor) ] )).flatten()
-            qloss = qloss_separate(rho, v, u, g)
-            ltot = trapz(qloss, x=g.l)
-            m = (asarray( [ l_con[i]['m'] for i in range(parallelfactor) ] )).flatten()
-            s = (asarray( [ l_con[i]['s'] for i in range(parallelfactor) ] )).flatten()
-            e = (asarray( [ l_con[i]['e'] for i in range(parallelfactor) ] )).flatten()
-            tstore += dtout
-            timer.start("io")
-            #            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
-            if verbose:
-                print(conf+": t = "+str(t*tscale)+"s")
-                print("dt = "+str(dt*tscale)+"s")
-                print(conf+": ltot = "+str(ltot))
-                print(conf+": V (out) = "+str(v[-1]))
-                print(conf+": U/Umag (out) = "+str(u[-1]/umagtar[-1]))
-            fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
-            fflux.flush()
-            if ifplot & (nout%plotalias == 0):
-                print("plotting")
-                plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
-                plots.vplot(g.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
-                plots.someplots(g.r, [u/rho**(4./3.)], name=outdir+'/entropy{:05d}'.format(nout), ytitle=r'$S$', ylog=True)
-                plots.someplots(g.r, [(u-urad)/(u-urad/2.), 1.-(u-urad)/(u-urad/2.)],
-                                name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$',
-                                ylog=True, formatsequence=['r-', 'b-'])
-                plots.someplots(g.r, [qloss*g.l, -cumtrapz(qloss[::-1], x=g.l[::-1], initial = 0.)[::-1]],
-                                name=outdir+'/qloss{:05d}'.format(nout),
-                                ytitle=r'$\frac{d^2 E}{d\ln l dt}$', ylog=False,
-                                formatsequence = ['k-', 'r-'])
-            mtot=trapz(m, x=g.l)
-            etot=trapz(e, x=g.l)
-            if verbose:
-                print(conf+": mass = "+str(mtot))
-                print(conf+": ltot = "+str(ltot))
-                print(conf+": energy = "+str(etot))
-                print(conf+": momentum = "+str(trapz(s, x=g.l)))
-            
-            ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
-            ftot.flush()
-            if(ifhdf):
-                hdf.dump(hfile, nout, t, rho, v, u, qloss)
-            if not(ifhdf) or (nout%ascalias == 0):
-                # ascii output:
-                # print(nout)
-                fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
-                if verbose:
-                    print(conf+" ASCII output to "+fname)
-                fstream=open(fname, 'w')
-                fstream.write('# t = '+str(t*tscale)+'s\n')
-                fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
-                for k in arange(nx):
-                    fstream.write(str(g.r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
-                fstream.close()
-            timer.stop("io")
-            if(nout%ascalias == 0):
-                timer.stats("step")
-                timer.stats("io")
-                timer.comp_stats()
-                timer.start("step") #refresh lap counter (avoids IO profiling)
-                timer.purge_comps()
-            nout+=1
-            if(crash):
-                break
-    fflux.close()
-    ftot.close()
-    if(ifhdf):
-        hdf.close(hfile)
-# if you want to make a movie of how the velocity changes with time:
-# ffmpeg -f image2 -r 15 -pattern_type glob -i 'out/vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
-# if you want the main procedure to start running immediately after the compilation, uncomment the following:
-# alltire('globals')
-
-'''
+alltire('DEFAULT')

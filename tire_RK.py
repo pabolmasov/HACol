@@ -479,7 +479,7 @@ def alltire(conf):
     umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
     # initial conditions:
     m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-    vinit=vout *sqrt(rmax/g.r) # initial velocity
+    vinit=vout *sqrt(rmax/rnew) # initial velocity
 
     # Initial Conditions:
     # setting the initial distributions of the primitive variables:
@@ -490,7 +490,8 @@ def alltire(conf):
     print('meq = '+str(meq)+"\n")
     # ii = input('M')
     rho *= meq/mass * minitfactor # normalizing to the initial mass
-    vinit *= ((g.r-rstar)/(rmax-rstar))**0.5 # to fit the v=0 condition at the surface of the star
+    #`    vinit *= ((g.r-rstar)/(rmax-rstar))**0.5 # to fit the v=0 condition at the surface of the star
+    vinit = vout * sqrt(rmax/rnew * (g.r-rstar)/(rmax-rstar)) # to fit the v=0 condition at the surface of the star
     v = copy(vinit)
     press = umagtar[-1] * (g.r/r_e) * (rho/rho[-1]+1.)/2.
     rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
@@ -678,8 +679,9 @@ def alltire(conf):
             #            rho, v, u, urad, beta, press = toprim(m, s, e, g) # primitive from conserved            tstore+=dtout
             if verbose:
                 print(conf+": t = "+str(t*tscale)+"s")
-                # print("dt = "+str(dt*tscale)+"s")
+                print("dt = "+str(dt))
                 print(conf+": time steps: dtCFL = "+str(dt_CFL)+", dt_thermal = "+str(dt_thermal)+", dt_diff = "+str(dt_diff))
+                # ii = input("dt")
                 print(conf+": ltot = "+str(ltot1)+" = "+str(ltot2)+" = "+str(ltot3)+" = "+str(ltot4))
                 print(conf+": V (out) = "+str(v[-1]))
                 print(conf+": mechanical energy = "+str((v**2/2.-1./g.r)[-1]))
