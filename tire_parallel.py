@@ -37,7 +37,7 @@ from geometry import *
 
 from timer import Timer
 timer = Timer(["total", "step", "io"],
-              ["BC", "RKstep"])
+              ["BC", "dt", "RKstep", "updateCon"])
 
 def time_step(prim):
     # time step adjustment:
@@ -60,6 +60,28 @@ def time_step(prim):
     #   dt1 = conn.recv()
     #    print("nd = "+str(nd)+": time_step dt = "+str(dt))
     #    conn.close()
+    return dt
+
+def timestepmin(prim, dtpipe):
+    nd = prim['N']
+    if nd > 0:
+        dtlocal = time_step(prim)
+        dtpipe.send(dtlocal)
+    else:
+        dtlocal = time_step(prim)
+        dt = dtlocal
+        for k in range(parallelfactor -1):
+            dtk = dtpipe[k].recv()
+            dt = minimum(dt, dtk)            
+    if nd == 0:
+        for k in range(parallelfactor -1):
+            dtpipe[k].send(dt)
+    else:
+        #            print("nd = "+str(nd))
+        dt = dtpipe.recv()             
+        #            print("time step "+str(dt))
+        #        print("nd = "+str(nd)+" BC left shape "+str(shape(BCfluxleft)))
+        #        print("nd = "+str(nd)+" BC right shape "+str(shape(BCfluxright)))
     return dt
 
 #
@@ -396,16 +418,25 @@ def derivo(ghalf, m, s, e, s_half, p_half, fe_half, dm, ds, de, dlleft, dlright,
     #left boundary conditions:
     dmt[0] = -(s_half[0]-sleft)/dlleft + dm[0]
     #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
-    dst[0] = -(p_half[0]-pleft)/dlleft + ds[0] # mdotsink_eff does not enter here, as matter should escape sideways, but through the bottom
+    if pleft is not None:
+        dst[0] = -(p_half[0]-pleft)/dlleft + ds[0] # mdotsink_eff does not enter here, as matter should escape sideways, but through the bottom
+    else:
+        dst[0] = 0.
     #     edotsink_eff = mdotsink * (e[0]/m[0])
     det[0] = -(fe_half[0]-feleft)/dlleft + de[0] # no energy sink anyway
     # right boundary conditions:
     dmt[-1] = -(sright-s_half[-1])/dlright + dm[-1]
     #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
-    
-    dst[-1] = -(pright - p_half[-1])/dlright + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
+
+    if pright is not None:
+        dst[-1] = -(pright - p_half[-1])/dlright + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
+    else:
+        dst[-1] = 0.
     #    edot =  abs(mdot) * 0.5/g.r[-1] + s[-1]/m[-1] * u[-1] # virial equilibrium
-    det[-1] = -(feright - fe_half[-1])/dlright + de[-1]
+    if feright is not None:
+        det[-1] = -(feright - fe_half[-1])/dlright + de[-1]
+    else:
+        det[-1] = 0.
 
     return dmt, dst, det
 
@@ -468,7 +499,6 @@ def RKstep(con, prim, BCleft, BCright):
     
     ltot=trapz(flux, x=l_g[nd].l) 
     # dmt, dst, det
-    #    print(con['dlright'])
     dmt, dst, det = derivo(l_ghalf[nd], m, s, e, fm_half, fs_half, fe_half, dm, ds, de,
                            con['dlleft'], con['dlright'], BCleft[0], BCright[0],
                            BCleft[1], BCright[1], BCleft[2], BCright[2])
@@ -479,30 +509,62 @@ def updateCon(l, dl, dt):
     '''
     updates the conserved variables vector l1, adding dl*dt to l
     '''
+    ndl = size(dl)
     l1 = l.copy()
-    #    l1.update([('m', l['m']+dl['m']*dt),
-    #               ('s', l['s']+dl['s']*dt),
-    #               ('e', l['e']+dl['e']*dt)])
-    l1['m'] = l['m']+dl['m']*dt
-    l1['s'] = l['s']+dl['s']*dt
-    l1['e'] = l['e']+dl['e']*dt
+    if ndl <= 1:
+        l1['m'] = l['m']+dl['m']*dt
+        l1['s'] = l['s']+dl['s']*dt
+        l1['e'] = l['e']+dl['e']*dt
+    else:
+        if size(dt) < ndl:
+            dt = [dt] * ndl
+        for k in range(ndl):
+            l1['m'] += dl[k]['m']*dt[k]
+            l1['s'] += dl[k]['s']*dt[k]
+            l1['e'] += dl[k]['e']*dt[k]            
     return l1
-
-def updateBC(con, BC):
-    '''
-    updates boundary conditions at the domain boundaries 
-    '''
-    #    l1 = l 
-    #    l1.update([('sleft', BC['sleft']), ('sright', BC['sright']),
-    #              ('pleft', BC['pleft']), ('pright', BC['pright']),
-    #              ('feleft', BC['feleft']), ('feright', BC['feright'])])
-    con['sleft'] = BC['sleft'] ;   con['sright'] = BC['sright']
-    con['pleft'] = BC['pleft'] ;   con['pright'] = BC['pright']
-    con['feleft'] = BC['feleft'] ;   con['feright'] = BC['feright']
-    return con
 
 ################################################################################
 print("if you want to start the simulation, now type `alltire(`conf')` \n")
+
+def BConce(leftpipe, rightpipe, leftpack, rightpack, nearleftpack, nearrightpack, dls):
+    # boundary conditions: send
+    if leftpipe is not None:
+        leftpipe.send(leftpack)
+    if rightpipe is not None:
+        rightpipe.send(rightpack)            
+        # boundary conditions: receive        
+    if leftpipe is not None:
+        #            print("nd = "+str(nd)+", receiving from the left")
+        g_left, rho_left, v_left, u_left, press_left, urad_left = leftpipe.recv()
+        BCfluxleft = list(fluxes(g_left, rho_left, v_left, u_left, press_left))
+        if raddiff:
+            g_nearleft, rho, v, u, press, urad = nearleftpack
+            dlleft_nd = dls[0]
+            # duls_left, dule_left = diffuse_onepoint([rho_left, rho], [urad_left, urad],
+            #                                        [v_left, v], dlleft_nd, (g_left.across+g_nearleft.across)/2.)
+            duls_left = 0.
+            dule_left = (urad - urad_left) / dlleft_nd / 3. * 2./ (rho_left + rho)
+            BCfluxleft[1] += duls_left ;        BCfluxleft[2] += dule_left
+    else:
+        BCfluxleft = [0., None, 0.]
+    if rightpipe is not None:
+        g_right, rho_right, v_right, u_right, press_right, urad_right = rightpipe.recv()
+        BCfluxright = list(fluxes(g_right, rho_right, v_right, u_right, press_right))
+        if raddiff:
+            g_nearright, rho, v, u, press, urad = nearrightpack
+            dlright_nd = dls[1]
+            # duls_right, dule_right = diffuse_onepoint([rho, rho_right], [urad, urad_right],
+            #                                          [v, v_right], dlright_nd, (g_right.across+g_nearright.across)/2.)
+            duls_right = 0.
+            dule_right = (urad_right - urad) / dlright_nd / 3. * 2./ (rho_right + rho)
+            BCfluxright[1] += duls_right ;         BCfluxright[2] += dule_right
+    else:
+        if ufixed:
+            BCfluxright = [-mdot, None, None]
+        else:
+            BCfluxright = [-mdot, None, 0.]
+    return BCfluxleft, BCfluxright
 
 
 def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
@@ -531,151 +593,120 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         
         timer.start_comp("BC")
         rho = prim['rho'] ; v = prim['v'] ; u =  prim['u']  ; press =  prim['press'] ; urad = prim['urad']
-        # boundary conditions: send
-        if ghostleft is not None:
-            ghostleft.send([gleftbound, rho[0], v[0], u[0], press[0], urad[0]])
-                # list(fluxes(gleftbound, rho[0], v[0], u[0], press[0])))
-            #            print("nd = "+str(nd)+", sending to the left")
-        if ghostright is not None:
-            ghostright.send([grightbound, rho[-1], v[-1], u[-1], press[-1], urad[-1]])
-                # list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
-            #            print("nd = "+str(nd)+", sending to the right")
-            
-        # boundary conditions: receive        
-        if ghostleft is not None:
-            #            print("nd = "+str(nd)+", receiving from the left")
-            g_left, rho_left, v_left, u_left, press_left, urad_left = ghostleft.recv()
-            BCfluxleft = list(fluxes(g_left, rho_left, v_left, u_left, press_left))
-            if raddiff:
-                #                duls_left, dule_left = diffuse_onepoint([rho_left, rho[0]], [urad_left, urad[0]],
-                #                                                        [v_left, v[0]], dlleft_nd, g_left.across)
-                dule_left = (urad[0] - urad_left) * dlleft_nd / 3. * 2./ (rho_left + rho[0])
-                #                print("nd = "+str(nd)+" duls_left = "+str(duls_left))
-                #                print("nd = "+str(nd)+" dule_left = "+str(dule_left))
-                #                print("nd = "+str(nd)+" dule_left1 = "+str(dule_left))
-                # BCfluxleft[1] += duls_left ;
-                BCfluxleft[2] += dule_left
-        else:
-            BCfluxleft = [0., 0., 0.]
-        if ghostright is not None:
-            #            print("nd = "+str(nd)+", receiving from the right")
-            #         print(list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
-            g_right, rho_right, v_right, u_right, press_right, urad_right = ghostright.recv()
-            BCfluxright = list(fluxes(g_right, rho_right, v_right, u_right, press_right))
-            if raddiff:
-                # duls_right, dule_right = diffuse_onepoint([rho[-1], rho_right], [urad[-1], urad_right],
-                #                                         [v[-1], v_right], dlright_nd, g_right.across)
-                #                print("shape(dule_right) = "+str(shape(dule_right)))
-                dule_right = (urad_right - urad[-1]) * dlleft_nd / 3. * 2./ (rho_right + rho[-1])
-                # BCfluxright[1] += duls_right ;
-                BCfluxright[2] += dule_right
-        else:
-            BCfluxright = [-mdot, 0., 0.]
-        # time step: all the domains send dt to first, and then the first sends the minimum value back
-        if nd > 0:
-            dtlocal = time_step(prim)
-            dtpipe.send(dtlocal)
-        else:
-            dtlocal = time_step(prim)
-            dt = dtlocal
-            for k in range(parallelfactor -1):
-                dtk = dtpipe[k].recv()
-                dt = minimum(dt, dtk)            
-        if nd == 0:
-            for k in range(parallelfactor -1):
-                dtpipe[k].send(dt)
-        else:
-            #            print("nd = "+str(nd))
-            dt = dtpipe.recv()             
-            #            print("time step "+str(dt))
-            #        print("nd = "+str(nd)+" BC left shape "+str(shape(BCfluxleft)))
-            #        print("nd = "+str(nd)+" BC right shape "+str(shape(BCfluxright)))
+        leftpack = [gleftbound, rho[0], v[0], u[0], press[0], urad[0]]
+        rightpack = [grightbound, rho[-1], v[-1], u[-1], press[-1], urad[-1]]
+        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
         timer.stop_comp("BC")
-        timer.start_comp("RKstep")
-        dcon = RKstep(con, prim, BCfluxleft, BCfluxright)
-        if ghostright is None:
-            dcon['e'][-1] = 0.
-            dcon['s'][-1] = 0.
-        if ghostleft is None:
-            dcon['s'][0] = 0.            
-        
-        con1 = updateCon(con, dcon, dt/2.)
-        if ghostright is None:
-            con1['s'][-1] = -mdot
-            con1['e'][-1] = 0.
-        if ghostleft is None:
-            con1['s'][0] = 0.
-                        
-        prim1 = toprim(con1)
-        rho1 = prim1['rho'] ; v1 = prim1['v'] ; u1 =  prim1['u'] ; press1 = prim1['press']
-        urad1 = prim1['urad']
-        timer.stop_comp("RKstep")
 
-        # second iteration:
-        timer.start_comp("BC")
-        # boundary conditions: send
-        if ghostleft is not None:
-            ghostleft.send([gleftbound, rho1[0], v1[0], u1[0], press1[0], urad1[0]])
-                # list(fluxes(gleftbound, rho[0], v[0], u[0], press[0])))
-            #            print("nd = "+str(nd)+", sending to the left")
-        if ghostright is not None:
-            ghostright.send([grightbound, rho1[-1], v1[-1], u1[-1], press1[-1], urad1[-1]])
-                # list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
-            #            print("nd = "+str(nd)+", sending to the right")
-            
-        # boundary conditions: receive
-        
-        if ghostleft is not None:
-            #            print("nd = "+str(nd)+", receiving from the left")
-            g_left, rho_left, v_left, u_left, press_left, urad_left = ghostleft.recv()
-            BCfluxleft = list(fluxes(g_left, rho_left, v_left, u_left, press_left))
-            if raddiff:
-                #                duls_left, dule_left = diffuse_onepoint([rho_left, rho1[0]], [urad_left, urad1[0]],
-                #                                                        [v_left, v1[0]], dlleft_nd, g_left.across)
-                dule_left = (urad[0] - urad_left) * dlleft_nd / 3. * 2./ (rho_left + rho[0])
-                # BCfluxleft[1] += duls_left
-                BCfluxleft[2] += dule_left
-        else:
-            BCfluxleft = [0., 0., 0.]
-        if ghostright is not None:
-            #            print("nd = "+str(nd)+", receiving from the right")
-            #         print(list(fluxes(grightbound, rho[-1], v[-1], u[-1], press[-1])))
-            g_right, rho_right, v_right, u_right, press_right, urad_right = ghostright.recv()
-            BCfluxright = list(fluxes(g_right, rho_right, v_right, u_right, press_right))
-            if raddiff:
-                #  duls_right, dule_right = diffuse_onepoint([rho1[-1], rho_right], [urad1[0], urad_right],
-                #                                            [v1[0], v_right], dlright_nd, g_right.across)
-                dule_right = (urad_right - urad[-1]) * dlleft_nd / 3. * 2./ (rho_right + rho[-1])
-                #                BCfluxright[1] += duls_right
-                BCfluxright[2] += dule_right
-        else:
-            BCfluxright = [-mdot, 0., 0.]
-        timer.stop_comp("BC")
-       
+        # time step: all the domains send dt to first, and then the first sends the minimum value back
+        timer.start_comp("dt")
+        dt = timestepmin(prim, dtpipe)
+        timer.stop_comp("dt")
         timer.start_comp("RKstep")
-        dcon1 = RKstep(con1, prim1, BCfluxleft, BCfluxright)
+        dcon1 = RKstep(con, prim, BCfluxleft, BCfluxright)
+        '''
         if ghostright is None:
             dcon1['e'][-1] = 0.
             dcon1['s'][-1] = 0.
         if ghostleft is None:
             dcon1['s'][0] = 0.            
+        '''
+        con1 = updateCon(con, dcon1, dt/2.)
+        '''
+        if ghostright is None:
+            con1['s'][-1] = -mdot
+            con1['e'][-1] = 0.
+        if ghostleft is None:
+            con1['s'][0] = 0.
+        '''
+        timer.stop_comp("RKstep")
+        timer.start_comp("BC")
+        prim1 = toprim(con1)
+        rho1 = prim1['rho'] ; v1 = prim1['v'] ; u1 =  prim1['u']  ; press1 =  prim1['press'] ; urad1 = prim1['urad']
+        leftpack = [gleftbound, rho1[0], v1[0], u1[0], press1[0], urad1[0]]
+        rightpack = [grightbound, rho1[-1], v1[-1], u1[-1], press1[-1], urad1[-1]]
+        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
+        timer.stop_comp("BC")
+        timer.start_comp("RKstep")
+        dcon2 = RKstep(con1, prim1, BCfluxleft, BCfluxright)
+        '''
+        if ghostright is None:
+            dcon2['e'][-1] = 0.
+            dcon2['s'][-1] = 0.
+        if ghostleft is None:
+            dcon2['s'][0] = 0.            
+        '''
+        con2 = updateCon(con, dcon2, dt/2.)
+        '''
+        if ghostright is None:
+            con2['s'][-1] = -mdot
+            con2['e'][-1] = 0.
+        if ghostleft is None:
+            con2['s'][0] = 0.
+        '''
+        timer.stop_comp("RKstep")
+        timer.start_comp("BC")
+        prim2 = toprim(con2)
+        rho2 = prim2['rho'] ; v2 = prim2['v'] ; u2 =  prim2['u']  ; press2 =  prim2['press'] ; urad2 = prim2['urad']
+        leftpack = [gleftbound, rho2[0], v2[0], u2[0], press2[0], urad2[0]]
+        rightpack = [grightbound, rho2[-1], v2[-1], u2[-1], press2[-1], urad2[-1]]
+        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
+        timer.stop_comp("BC")
+        timer.start_comp("RKstep")
+        dcon3 = RKstep(con2, prim2, BCfluxleft, BCfluxright)
+        '''
+        if ghostright is None:
+            dcon3['e'][-1] = 0.
+            dcon3['s'][-1] = 0.
+        if ghostleft is None:
+            dcon3['s'][0] = 0.
+        '''
+        con3 = updateCon(con, dcon3, dt)
+        '''
+        if ghostright is None:
+            con3['s'][-1] = -mdot
+            con3['e'][-1] = 0.
+        if ghostleft is None:
+            con3['s'][0] = 0.
+        '''
+        timer.stop_comp("RKstep")
+        timer.start_comp("BC")
+        prim3 = toprim(con3)
+        rho3 = prim3['rho'] ; v3 = prim3['v'] ; u3 =  prim3['u']  ; press3 =  prim3['press'] ; urad3 = prim3['urad']
+        leftpack = [gleftbound, rho3[0], v3[0], u3[0], press3[0], urad3[0]]
+        rightpack = [grightbound, rho3[-1], v3[-1], u3[-1], press3[-1], urad3[-1]]
+        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
+        timer.stop_comp("BC")
+        timer.start_comp("RKstep")
+        dcon4 = RKstep(con3, prim3, BCfluxleft, BCfluxright)
+        '''
+        if ghostright is None:
+            dcon4['s'][-1] = 0.
+            dcon4['e'][-1] = 0.
+        if ghostleft is None:
+            dcon4['s'][0] = 0.
+        '''
+        timer.stop_comp("RKstep")
+        timer.start_comp("updateCon")
+
+        con = updateCon(con, [dcon1, dcon2, dcon3, dcon4], [dt/6., dt/3., dt/3., dt/6.])
         
-        con = updateCon(con, dcon1, dt) 
         if ghostright is None:
             con['s'][-1] = -mdot
             con['e'][-1] = 0.
         if ghostleft is None:
             con['s'][0] = 0.
-
+        prim = toprim(con)
+        timer.stop_comp("updateCon")
+ 
         t += dt
         #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
         prim = toprim(con) # primitive from conserved
-        timer.stop_comp("RKstep")
         if nd == 0:
             timer.lap("step")
 
         if (t>=tstore):            
-            ltot = dcon['ltot']
+            ltot = (dcon1['ltot'] + 2.*dcon2['ltot'] + 2.*dcon3['ltot'] + dcon4['ltot'])/6.
             tstore += dtout
             # sending data:
             if nd > 0:
@@ -930,7 +961,7 @@ def alltire(conf):
     rho *= meq/mass * minitfactor # normalizing to the initial mass
     vinit = vout * sqrt(rmax/rnew * (rnew-rstar)/(rmax-rstar)) # to fit the v=0 condition at the surface of the star
     v = copy(vinit)
-    press = umagtar[-1] * (g.r/r_e) * (rho/rho[-1]+1.)/2.
+    press = umagout * (g.r/r_e) * (rho/rho[-1]+1.)/2.
     rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
     rho *= (rhonoise+1.)
     beta = betafun_p(Fbeta_press(rho, press, betacoeff))
@@ -956,7 +987,7 @@ def alltire(conf):
         print("primitive-conserved")
         print(conf+": rhomin = "+str(rho.min())+" = "+str(rho1.min())+" (primitive-conserved and back)")
         print(conf+": umin = "+str(u.min())+" = "+str(u1.min()))
-        ii = input('prim')
+        # ii = input('prim')
     m0=m
 
     # if we want to restart from a stored configuration
