@@ -311,14 +311,9 @@ def derivo(l_half, m, s, e, s_half, p_half, fe_half, dm, ds, de):
     dst = -(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds
     det = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de
 
-    '''
-    dst[0] = 0.
-    if ufixed:
-        det[-1] = 0.
-    '''
     return dmt, dst, det
 
-def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None):
+def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
     # BCleft, BCright, 
     # m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, momentum_inflow = None, energy_inflow =  None):
     '''
@@ -381,8 +376,8 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None):
     if(csq.min()<csqmin):
         wneg = (csq<=csqmin)
         csq[wneg] = csqmin
-    cs = sqrt(csq)
-    vl, vm, vr =sigvel_mean(v, cs)
+    #    cs = sqrt(csq)
+    vl, vm, vr =sigvel_mean(v, sqrt(csq))
     # sigvel_linearized(v, cs, g1, rho, press)
     # sigvel_isentropic(v, cs, g1, csqmin=csqmin)
     if any(vl>=vm) or any(vm>=vr):
@@ -431,12 +426,12 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None):
     else:
         dmsqueeze = 0.
         desqueeze = 0.
-    dm, ds, de, flux = sources(gnd, rho[1:-1], v[1:-1], u[1:-1], urad[1:-1], ltot=0., dmsqueeze = dmsqueeze, desqueeze = desqueeze)
-    ltot=trapz(flux, x=gnd.l[1:-1]) 
+    dm, ds, de, flux = sources(gnd, rho[1:-1], v[1:-1], u[1:-1], urad[1:-1], ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze)
+    #    ltot=trapz(flux, x=gnd.l[1:-1]) 
 
     dmt, dst, det = derivo(lhalf, m, s, e, fm_half, fs_half, fe_half, dm, ds, de)
 
-    con1 = {'N': nd, 'm': dmt, 's': dst, 'e': det, 'ltot': ltot}
+    con1 = {'N': nd, 'm': dmt, 's': dst, 'e': det} # , 'ltot': ltot}
 
     return con1
 
@@ -534,9 +529,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
 
     while(t<tmax):
         timer.start_comp("BC")
-        rho = prim['rho'] ; v = prim['v'] ; u =  prim['u']  ; press =  prim['press'] ; urad = prim['urad'] ; beta = prim['beta']
-        leftpack_send = [rho[0], v[0], u[0], press[0], urad[0], beta[0]]
-        rightpack_send = [rho[-1], v[-1], u[-1], press[-1], urad[-1], beta[-1]]
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['press'][0], prim['urad'][0], prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['press'][-1], prim['urad'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
 
@@ -546,91 +540,58 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         timer.stop_comp("dt")
         timer.start_comp("RKstep")
         dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'])
-
-        if ghostright is None:
-            dcon1['e'][-1] = 0.
-            dcon1['s'][-1] = 0.
-        if ghostleft is None:
-            dcon1['s'][0] = 0.            
-
         con1 = updateCon(con, dcon1, dt/2.)
-
+     
         if ghostright is None:
             con1['s'][-1] = -mdot
             con1['e'][-1] = 0.
         if ghostleft is None:
             con1['s'][0] = 0.
-
+     
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
-        prim1 = toprim(con1)
-        rho1 = prim1['rho'] ; v1 = prim1['v'] ; u1 =  prim1['u']  ; press1 =  prim1['press'] ; urad1 = prim1['urad'] ; beta1 = prim['beta']
-        leftpack_send = [rho1[0], v1[0], u1[0], press1[0], urad1[0], beta1[0]]
-        rightpack_send = [rho1[-1], v1[-1], u1[-1], press1[-1], urad1[-1], beta1[-1]]
+        prim = toprim(con1)
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['press'][0], prim['urad'][0], prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['press'][-1], prim['urad'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
-        #        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon2 = RKstep(gext, lhalf, prim1, leftpack, rightpack, umagtar = con['umagtar']) # , BCfluxleft, BCfluxright)
-
-        if ghostright is None:
-            dcon2['e'][-1] = 0.
-            dcon2['s'][-1] = 0.
-        if ghostleft is None:
-            dcon2['s'][0] = 0.            
-
+        dcon2 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar']) # , BCfluxleft, BCfluxright)
         con2 = updateCon(con, dcon2, dt/2.)
-
+     
         if ghostright is None:
             con2['s'][-1] = -mdot
             con2['e'][-1] = 0.
         if ghostleft is None:
             con2['s'][0] = 0.
-
+     
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
-        prim2 = toprim(con2)
-        rho2 = prim2['rho'] ; v2 = prim2['v'] ; u2 =  prim2['u']  ; press2 =  prim2['press'] ; urad2 = prim2['urad'] ; beta2 = prim2['beta']
-        leftpack_send = [rho2[0], v2[0], u2[0], press2[0], urad2[0], beta2[0]]
-        rightpack_send = [rho2[-1], v2[-1], u2[-1], press2[-1], urad2[-1], beta2[-1]]
+        prim = toprim(con2)
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['press'][0], prim['urad'][0], prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['press'][-1], prim['urad'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
-        #        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon3 = RKstep(gext, lhalf, prim2, leftpack, rightpack, umagtar = con['umagtar']) #, BCfluxleft, BCfluxright)
-
-        if ghostright is None:
-            dcon3['e'][-1] = 0.
-            dcon3['s'][-1] = 0.
-        if ghostleft is None:
-            dcon3['s'][0] = 0.
+        dcon3 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar']) #, BCfluxleft, BCfluxright)
 
         con3 = updateCon(con, dcon3, dt)
-
+        
         if ghostright is None:
             con3['s'][-1] = -mdot
             con3['e'][-1] = 0.
         if ghostleft is None:
             con3['s'][0] = 0.
-
+     
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
-        prim3 = toprim(con3)
-        rho3 = prim3['rho'] ; v3 = prim3['v'] ; u3 =  prim3['u']  ; press3 =  prim3['press'] ; urad3 = prim3['urad'] ; beta3 = prim3['beta']
-        leftpack_send = [rho3[0], v3[0], u3[0], press3[0], urad3[0], beta3[0]] 
-        rightpack_send = [rho3[-1], v3[-1], u3[-1], press3[-1], urad3[-1], beta3[-1]]
+        prim = toprim(con3)
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['press'][0], prim['urad'][0], prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['press'][-1], prim['urad'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
-        #        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon4 = RKstep(gext, lhalf, prim3, leftpack, rightpack, umagtar = con['umagtar']) # , BCfluxleft, BCfluxright)
-
-        if ghostright is None:
-            dcon4['s'][-1] = 0.
-            dcon4['e'][-1] = 0.
-        if ghostleft is None:
-            dcon4['s'][0] = 0.
-
+        dcon4 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar']) # , BCfluxleft, BCfluxright)
         timer.stop_comp("RKstep")
         timer.start_comp("updateCon")
 
@@ -651,32 +612,37 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
             timer.lap("step")
 
         if (t>=tstore):            
-            ltot = (dcon1['ltot'] + 2.*dcon2['ltot'] + 2.*dcon3['ltot'] + dcon4['ltot'])/6.
+            #            ltot = (dcon1['ltot'] + 2.*dcon2['ltot'] + 2.*dcon3['ltot'] + dcon4['ltot'])/6.
             tstore += dtout
             # sending data:
             if nd > 0:
-                outpipe.send([t, g, con, prim, ltot])
+                outpipe.send([t, g, con, prim])
             else:
                 timer.start("io")
                 m = con['m'] ; e = con['e'] ; umagtar = con['umagtar']
-                mtot = trapz(m, x=g.l)     ;        etot = trapz(e, x=g.l)
-                r = g.r ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; beta = prim['beta']
+                rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; beta = prim['beta']
                 for k in range(parallelfactor-1):
-                    t1, g1, con1, prim1, ltot1 = outpipe[k].recv()
+                    t1, g1, con1, prim1 = outpipe[k].recv()
                     # print("size(r) = "+str(shape(r))+", "+str(shape(g1.r)))
-                    ltot += ltot1
-                    mtot += trapz(con1['m'], x=g1.l)
-                    etot += trapz(con1['e'], x=g1.l)
-                    r = concatenate([r, g1.r])
+                    #      ltot += ltot1
+                    m = concatenate([m, con1['m']])
+                    e = concatenate([e, con1['e']])
+                    #                    mtot += trapz(con1['m'], x=g1.l)
+                    #                    etot += trapz(con1['e'], x=g1.l)
+                    #                    r = concatenate([r, g1.r])
                     rho = concatenate([rho, prim1['rho']])
                     v = concatenate([v, prim1['v']])
                     u = concatenate([u, prim1['u']])
                     beta = concatenate([beta, prim1['beta']])
                     umagtar = concatenate([umagtar, con1['umagtar']])
                 qloss = qloss_separate(rho, v, u, gglobal)
+                ltot = trapz(qloss, x = gglobal.l)
+                mtot = trapz(m, x = gglobal.l)
+                etot = trapz(e, x = gglobal.l)
                 fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
                 ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
                 print(str(t*tscale)+' '+str(ltot)+'\n')
+                print(str(t*tscale)+' '+str(mtot)+'\n')
                 print("dt = "+str(dt)+'\n')
                 # ii = input("dt")
                 fflux.flush() ; ftot.flush()
@@ -684,11 +650,11 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                     hdf.dump(hfile, nout, t, rho, v, u, qloss)
                 if not(ifhdf) or (nout%ascalias == 0):
                     if ifplot:
-                        plots.vplot(r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
-                        plots.uplot(r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
-                        plots.someplots(r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
+                        plots.vplot(gglobal.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
+                        plots.uplot(gglobal.r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
+                        plots.someplots(gglobal.r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
                                         name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
-                        plots.someplots(r, [qloss*r],
+                        plots.someplots(gglobal.r, [qloss*gglobal.r],
                                         name=outdir+'/qloss{:05d}'.format(nout),
                                         ytitle=r'$\frac{d^2 E}{d\ln l dt}$', ylog=False,
                                         formatsequence = ['k-', 'r-'])
@@ -700,9 +666,9 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                     fstream=open(fname, 'w')
                     fstream.write('# t = '+str(t*tscale)+'s\n')
                     fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
-                    nx = size(r)
+                    nx = size(gglobal.r)
                     for k in arange(nx):
-                        fstream.write(str(r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
+                        fstream.write(str(gglobal.r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
                     fstream.close()
                 timer.stop("io")
                 if (nout%ascalias == 0):
