@@ -211,12 +211,13 @@ def diffuse(rho, urad, v, dl, across):
     rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
     rtau = rtau_left + rtau_right
     rtau_exp = tratfac(copy(rtau))
+    across_half = (across[1:]+across[:-1])/2.
     
     duls_half =  nubulk  * (( urad * v)[1:] - ( urad * v)[:-1])\
-                 *across / 3. * rtau_exp #  / (rtau_left + rtau_right)
+                 *across_half / 3. * rtau_exp #  / (rtau_left + rtau_right)
     # -- photon bulk viscosity
     dule_half = ((urad)[1:] - (urad)[:-1])\
-                *across / 3. * rtau_exp # / (rtau_left + rtau_right)
+                *across_half / 3. * rtau_exp # / (rtau_left + rtau_right)
     dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux
     # -- radial diffusion
 
@@ -326,18 +327,6 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None):
     #    prim = toprim(con) # primitive from conserved
     rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad'] ; u = prim['u'] ; beta = prim['beta']
     nd = prim['N']
-    #  sinks and sources:
-    if(squeezemode):
-        if umagtar is None:
-            umagtar = umag * (1.+3.*g[nd].cth**2)/4. * (rstar/g[nd].r)**6
-        dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/gnd.delta
-        if squeezeothersides:
-            dmsqueeze += 4. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/ (gnd.across / gnd.delta)
-        desqueeze = dmsqueeze * (e+press* gnd.across) / m # (e-u*g.across)/m
-    else:
-        dmsqueeze = 0.
-        desqueeze = 0.
-    dm, ds, de, flux = sources(gnd, rho, v, u, urad, ltot=0., dmsqueeze = dmsqueeze, desqueeze = desqueeze)
     #
     # adding ghost zones:
     if leftpack is not None:
@@ -346,6 +335,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None):
         rho = concatenate([[rholeft], rho])
         v = concatenate([[vleft], v])
         u = concatenate([[uleft], u])
+        urad = concatenate([[uradleft], urad])
         press = concatenate([[pressleft], press])
         beta = concatenate([[betaleft], beta])
     else:
@@ -354,6 +344,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None):
         rho = concatenate([[rho[0]], rho])
         v = concatenate([[v[0]], v])
         u = concatenate([[u[0]], u])
+        urad = concatenate([[urad[0]], urad])
         press = concatenate([[press[0]], press])
         beta = concatenate([[beta[0]], beta])        
     if rightpack is not None:
@@ -362,6 +353,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None):
         rho = concatenate([rho, [rhoright]])
         v = concatenate([v, [vright]])
         u = concatenate([u, [uright]])
+        urad = concatenate([urad, [uradright]])
         press = concatenate([press, [pressright]])
         beta = concatenate([beta, [betaright]])
     else:
@@ -370,6 +362,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None):
         rho = concatenate([rho, [rho[-1]]])
         v = concatenate([v, [v[-1]]])
         u = concatenate([u, [u[-1]]])
+        urad = concatenate([urad, [urad[-1]]])
         press = concatenate([press, [press[-1]]])
         beta = concatenate([beta, [beta[-1]]])        
     fm, fs, fe = fluxes(gnd, rho, v, u, press)
@@ -412,21 +405,39 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None):
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
         dl = gnd.l[1:]-gnd.l[:-1]
-        duls_half, dule_half = diffuse(rho, urad, v, dl, l_ghalf[nd].across)
+        across = gnd.across
+        '''
+        print("flux size = "+str(size(fe_half)))
+        print("rho size = "+str(size(rho)))
+        print("v size = "+str(size(v)))
+        print("urad size = "+str(size(urad)))
+        print("dl size = "+str(size(dl)))
+        print("across size = "+str(size(across)))
+        '''
+        duls_half, dule_half = diffuse(rho, urad, v, dl, across)
         # radial diffusion suppressed, if transverse optical depth is small:
-        delta = l_ghalf[nd].delta
+        delta = (gnd.delta[1:]+gnd.delta[:-1])/2.
         duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         dule_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         fs_half += duls_half ; fe_half += dule_half         
-    ltot=trapz(flux, x=l_g[nd].l) 
-    # dmt, dst, det
-    dmt, dst, det = derivo(lhalf, m, s, e,
-                           fm_half, fs_half, fe_half, dm, ds, de)
-    #, BCleft[0], BCright[0],
-    #                       BCleft[1], BCright[1], BCleft[2], BCright[2])
+    #  sinks and sources:
+    if(squeezemode):
+        if umagtar is None:
+            umagtar = umag * ((1.+3.*gnd.cth**2)/4. * (rstar/gnd.r)**6)[1:-1]
+        dmsqueeze = 2. * m[1:-1] * sqrt(g1[1:-1]*maximum((press[1:-1]-umagtar)/rho[1:-1], 0.))/gnd.delta[1:-1]
+        if squeezeothersides:
+            dmsqueeze += 4. * m[1:-1] * sqrt(g1[1:-1]*maximum((press[1:-1]-umagtar)/rho[1:-1], 0.))/ (gnd.across[1:-1] / gnd.delta[1:-1])
+        desqueeze = dmsqueeze * (e[1:-1]+press[1:-1]* gnd.across[1:-1]) / m[1:-1] # (e-u*g.across)/m
+    else:
+        dmsqueeze = 0.
+        desqueeze = 0.
+    dm, ds, de, flux = sources(gnd, rho[1:-1], v[1:-1], u[1:-1], urad[1:-1], ltot=0., dmsqueeze = dmsqueeze, desqueeze = desqueeze)
+    ltot=trapz(flux, x=gnd.l[1:-1]) 
+
+    dmt, dst, det = derivo(lhalf, m, s, e, fm_half, fs_half, fe_half, dm, ds, de)
+
     con1 = {'N': nd, 'm': dmt, 's': dst, 'e': det, 'ltot': ltot}
-    #    print("nd = "+str(nd)+": dmt = "+str(dmt[0])+".."+str(dmt[-1]))
-    #    ii = input("dmt")
+
     return con1
 
 def updateCon(l, dl, dt):
@@ -510,12 +521,9 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
     gext = geometry_add(gleftbound, gext)
     dlleft_nd = dlleft[nd] ; dlright_nd = dlright[nd]
     lhalf = (gext.l[1:]+gext.l[:-1])/2.
-    '''
-    if lhalf[1] == lhalf[0]:
-        lhalf[0] = lhalf[1]*2.-lhalf[2]
-    if lhalf[-1] == lhalf[-2]:
-        lhalf[-1] = lhalf[-2]*2.-lhalf[-3]
-    '''
+
+    #    umagtar = umag * ((1.+3.*gext.cth**2)/4. * (rstar/gext.r)**6)[1:-1]
+    
     print("nd = "+str(nd)+": "+str(lhalf))
     #    ii = input('lhfl')
     tstore = 0. ; nout = 0
@@ -537,7 +545,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         dt = timestepmin(prim, dtpipe)
         timer.stop_comp("dt")
         timer.start_comp("RKstep")
-        dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack)
+        dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'])
 
         if ghostright is None:
             dcon1['e'][-1] = 0.
@@ -563,7 +571,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         #        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon2 = RKstep(gext, lhalf, prim1, leftpack, rightpack) # , BCfluxleft, BCfluxright)
+        dcon2 = RKstep(gext, lhalf, prim1, leftpack, rightpack, umagtar = con['umagtar']) # , BCfluxleft, BCfluxright)
 
         if ghostright is None:
             dcon2['e'][-1] = 0.
@@ -589,7 +597,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         #        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon3 = RKstep(gext, lhalf, prim2, leftpack, rightpack) #, BCfluxleft, BCfluxright)
+        dcon3 = RKstep(gext, lhalf, prim2, leftpack, rightpack, umagtar = con['umagtar']) #, BCfluxleft, BCfluxright)
 
         if ghostright is None:
             dcon3['e'][-1] = 0.
@@ -615,7 +623,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         #        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon4 = RKstep(gext, lhalf, prim3, leftpack, rightpack) # , BCfluxleft, BCfluxright)
+        dcon4 = RKstep(gext, lhalf, prim3, leftpack, rightpack, umagtar = con['umagtar']) # , BCfluxleft, BCfluxright)
 
         if ghostright is None:
             dcon4['s'][-1] = 0.
