@@ -99,10 +99,23 @@ def dlbounds_define(glist):
 def geometry_local(g, n):
     # defines a local, single-point, piece of geometry
     g1 = geometry()
-    g1.r = g.r[n] ; g1.sth = g.sth[n] ; g1.cth = g.cth[n]
-    g1.across = g.across[n] ; g1.delta = g.delta[n]
-    g1.cosa = g.cosa[n] ; g1.sina = g.sina[n]
+    g1.l = asarray([g.l[n]])  
+    g1.r = asarray([g.r[n]]) ; g1.sth = asarray([g.sth[n]]) ; g1.cth = asarray([g.cth[n]])
+    g1.across = asarray([g.across[n]]) ; g1.delta = asarray([g.delta[n]])
+    g1.cosa = asarray([g.cosa[n]]) ; g1.sina = asarray([g.sina[n]])
     return g1
+
+def geometry_add(g1, g2):
+    # merges two geometries
+    gadd = geometry()
+    #    nx1 = size(g1.r) ; nx2 = size(g2.r)
+    gadd.l = concatenate([g1.l[:], g2.l[:]])
+    gadd.r = concatenate([g1.r, g2.r]) ; gadd.sth = concatenate([g1.sth, g2.sth]) ; gadd.cth = concatenate([g1.cth, g2.cth])
+    gadd.across = concatenate([g1.across, g2.across]) 
+    gadd.delta = concatenate([g1.delta, g2.delta]) 
+    gadd.cosa = concatenate([g1.cosa, g2.cosa]) 
+    gadd.sina = concatenate([g1.sina, g2.sina]) 
+    return gadd
     
 def gread(geofile):
     ## reads a geometry file written by geometry-initialize

@@ -48,7 +48,8 @@ def time_step(prim):
     csqest = 4./3.*u/rho
     dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
     qloss = qloss_separate(rho, v, u, l_g[nd])
-    dt_thermal = Cth * abs(u*l_g[nd].across/qloss)[where((u*qloss)>0.)].min()
+    wpos = (u*qloss) > 0.
+    dt_thermal = Cth * abs((u*l_g[nd].across)[wpos]/qloss[wpos]).min()
     
     if(raddiff):
         ctmp = dlhalf**2 * 3.*rho[1:-1]
@@ -77,11 +78,7 @@ def timestepmin(prim, dtpipe):
         for k in range(parallelfactor -1):
             dtpipe[k].send(dt)
     else:
-        #            print("nd = "+str(nd))
         dt = dtpipe.recv()             
-        #            print("time step "+str(dt))
-        #        print("nd = "+str(nd)+" BC left shape "+str(shape(BCfluxleft)))
-        #        print("nd = "+str(nd)+" BC right shape "+str(shape(BCfluxright)))
     return dt
 
 #
@@ -203,22 +200,6 @@ def toprim(con):
     prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press, 'N': nd}
     return prim
 
-def diffuse_onepoint(rho, urad, v, dl, across):
-    '''
-    radial energy diffusion in one point (designed for BC)
-    rho, urad, and v are two-element lists, dl and across are scalars
-    '''
-    rtau_right = rho[1] * dl / 2.
-    rtau_left = rho[0] * dl / 2.
-    rtau = rtau_left + rtau_right
-    rtau_exp = tratfac(rtau)
-    duls_half =  nubulk  * (urad[1] * v[1] -  urad[0] * v[0])\
-                 *across / 3. * rtau_exp
-    dule_half = (urad[1] - urad[0]) * across / 3. * rtau_exp # / (rtau_left + rtau_right)
-    dule_half +=  duls_half * (v[0]+v[1])/2. # adding the viscous energy flux
-    return -duls_half, -dule_half 
-    
-
 def diffuse(rho, urad, v, dl, across):
     '''
     radial energy diffusion;
@@ -239,83 +220,7 @@ def diffuse(rho, urad, v, dl, across):
     dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux
     # -- radial diffusion
 
-    # no diffusion for the last cell:
-    #    dule_half[-1] = 0. ; duls_half[-1] = 0.
     return -duls_half, -dule_half 
-
-def bound_fluxes(l_prim, l_con, edot = 0., HL=True):
-    '''
-    computes the fluxes at the domain boundaries
-    '''
-    dno = size(l_prim)
-    #    sleft = zeros(dno) ; pleft = zeros(dno) ; feleft = zeros(dno)
-    #    sright = zeros(dno) ; pright = zeros(dno) ; feright = zeros(dno)
-    BClist = []
-    #    sleft[0] = -mdotsink ; sright[-1] = -mdot
-    #    feleft[0] = 0. ; feright[-1] = -edot
-    
-    for nd in range(dno):
-        if nd > 0:
-            across_left = l_g[nd-1].across[-1] ;  r_left = l_g[nd-1].r[-1] ;  sth_left = l_g[nd-1].sth[-1]
-            rho_left = l_prim[nd-1]['rho'][-1] ; v_left = l_prim[nd-1]['v'][-1] ; u_left = l_prim[nd-1]['u'][-1]
-            #            beta_left = l_prim[nd-1]['beta'][-1]
-            press_left = l_prim[nd-1]['press'][-1]
-            sleft = rho_left * v_left * across_left
-            #   beta_left = betafun(Fbeta(rho_left, u_left, betacoeff))
-            # press_left = u_left/3./(1.-beta_left/2.)
-            pleft = across_left * (rho_left * v_left**2 + press_left)
-            feleft = across_left*v_left*(u_left+press_left+(v_left**2/2.-1./r_left-0.5*(omega*r_left*sth_left)**2)*rho_left)
-        else:
-            sleft = 0. ; pleft = 0. ; feleft = 0.
-            # need to include energy diffusion!
-        if nd<(dno-1):
-            across_right = l_g[nd+1].across[0] ;  r_right = l_g[nd+1].r[0] ;  sth_right = l_g[nd+1].sth[0]
-            rho_right = l_prim[nd+1]['rho'][0] ; v_right = l_prim[nd+1]['v'][0] ; u_right = l_prim[nd+1]['u'][0]
-            press_right = l_prim[nd+1]['press'][0]
-            sright = rho_right * v_right * across_right
-            #            beta_right = betafun(Fbeta(rho_right, u_right, betacoeff))
-            #            press_right = u_right/3./(1.-beta_right/2.)
-            pright = across_right * (rho_right * v_right**2 + press_right)
-            feright = across_right*v_right*(u_right+press_right+(v_right**2/2.-1./r_right-0.5*(omega*r_right*sth_right)**2)*rho_right)
-        else:
-             sright = -mdot ; pright = 0.; feright = -edot
-        BClist.append({'sleft': sleft, 'sright': sright, 'pleft': pleft, 'pright': pright, 'feleft': feleft, 'feright': feright})
-    if not(HL):
-        return BClist
-    #    print("before:\n")
-    # print(BClist)
-    BClist1 = copy(BClist)
-    for nd in range(dno-1):
-        fm = asarray([BClist[nd+1]['sleft'], BClist[nd]['sright']])
-        fs = asarray([BClist[nd+1]['pleft'], BClist[nd]['pright']])
-        fe = asarray([BClist[nd+1]['feleft'], BClist[nd]['feright']])
-        m = asarray([l_con[nd]['m'][-1], l_con[nd+1]['m'][0]])
-        s = asarray([l_con[nd]['s'][-1], l_con[nd+1]['s'][0]])
-        e = asarray([l_con[nd]['e'][-1], l_con[nd+1]['e'][0]])
-        v = asarray([l_prim[nd]['v'][-1], l_prim[nd+1]['v'][0]])
-        rho = asarray([l_prim[nd]['rho'][-1], l_prim[nd+1]['rho'][0]])
-        urad = asarray([l_prim[nd]['urad'][-1], l_prim[nd+1]['urad'][0]])
-
-        g1 = asarray([Gamma1(5./3., l_prim[nd]['beta'][-1]), Gamma1(5./3., l_prim[nd+1]['beta'][0])])
-        csq = asarray([g1[0]*l_prim[nd]['press'][-1]/l_prim[nd]['rho'][-1],
-                       g1[1]*l_prim[nd+1]['press'][0]/l_prim[nd+1]['rho'][0]])
-        #        print("press = "+str(l_prim[nd]['press'][-1]))
-        #        print("v = "+str(v))
-        #        print("csq = "+str(csq))
-        vl, vm, vr = sigvel_mean(v, sqrt(csq))
-        fm_half, fs_half, fe_half = solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
-        if raddiff:
-            dl = l_g[nd+1].l[-1]-l_g[nd].l[0]
-            delta = (l_g[nd+1].delta[-1]+l_g[nd].delta[0])/2.
-            across = (l_g[nd+1].across[-1]+l_g[nd].across[0])/2.
-            duls_half, dule_half = diffuse(rho, urad, v, dl, across)
-            duls_half *= 1.-exp(-delta * (rho[0]+rho[1])/2.)
-            dule_half *= 1.-exp(-delta * (rho[0]+rho[1])/2.)
-            fs_half += duls_half ; fe_half += dule_half
-        BClist1[nd+1].update([('sleft', fm_half[0]), ('pleft', fs_half[0]),('feleft', fe_half[0])])
-        BClist1[nd].update([('sright', fm_half[0]), ('pright', fs_half[0]),('feright', fe_half[0])])        
-                
-    return BClist1
             
 def fluxes(g, rho, v, u, press):
     '''
@@ -349,7 +254,7 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     # gnd = l_g[nd]
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
-    delta = g.delta ;  across = g.across ; r = g.r ; cth = g.cth ; sth = g.sth ; cosa = g.cosa ; sina = g.sina
+    delta = g.delta[1:-1] ;  across = g.across[1:-1] ; r = g.r[1:-1] ; cth = g.cth[1:-1] ; sth = g.sth[1:-1] ; cosa = g.cosa[1:-1] ; sina = g.sina[1:-1]
     tau = rho * delta # tau in transverse direction
     tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
     taueff = copy(1./(1./tau + 1./tauphi))
@@ -390,67 +295,95 @@ def qloss_separate(rho, v, u, g):
     qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
-def derivo(ghalf, m, s, e, s_half, p_half, fe_half, dm, ds, de, dlleft, dlright,
-           sleft, sright, pleft, pright, feleft, feright):
+def derivo(l_half, m, s, e, s_half, p_half, fe_half, dm, ds, de):
+           #, dlleft, dlright,
+           #sleft, sright, pleft, pright, feleft, feright):
     '''
     main advance step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
     output: three temporal derivatives later used for the time step
     includes boundary conditions for mass and energy!
     '''
-
-    #    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
-    #    print("pright = "+str(pright))
-    l_half = ghalf.l
-    #    dlleft_nd = con['dlleft'] ; dlright_nd = con['dlright']
-    #    dlleft_nd = l_half[1]-l_half[0] ; dlright_nd = l_half[-1]-l_half[-2]
-    # why is dlleft not resolved as a global?
-    #    print("main_step: mmin = "+str(m.min()))
-    #    dm = src['m'] ; ds = src['s'] ; de = src['e'] 
     nl=size(m)
     dmt=zeros(nl) ; dst=zeros(nl); det=zeros(nl)
-    dmt[1:-1] = -(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm[1:-1]
-    dst[1:-1] = -(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds[1:-1]
-    det[1:-1] = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de[1:-1]
+    dmt = -(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm
+    dst = -(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds
+    det = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de
 
-    #    print("conpleft = "+str(con['pleft']))
-    #    print("compare to "+str(p_half[0]))
-    #left boundary conditions:
-    dmt[0] = -(s_half[0]-sleft)/dlleft + dm[0]
-    #    dst[0] = (-mdotsink-s[0])/dt # ensuring approach to -mdotsink
-    if pleft is not None:
-        dst[0] = -(p_half[0]-pleft)/dlleft + ds[0] # mdotsink_eff does not enter here, as matter should escape sideways, but through the bottom
-    else:
-        dst[0] = 0.
-    #     edotsink_eff = mdotsink * (e[0]/m[0])
-    det[0] = -(fe_half[0]-feleft)/dlleft + de[0] # no energy sink anyway
-    # right boundary conditions:
-    dmt[-1] = -(sright-s_half[-1])/dlright + dm[-1]
-    #    dst[-1] = (-mdot-s[-1])/dt # ensuring approach to -mdot
-
-    if pright is not None:
-        dst[-1] = -(pright - p_half[-1])/dlright + ds[-1] # momentum flow through the outer boundary (~= pressure in the disc)
-    else:
-        dst[-1] = 0.
-    #    edot =  abs(mdot) * 0.5/g.r[-1] + s[-1]/m[-1] * u[-1] # virial equilibrium
-    if feright is not None:
-        det[-1] = -(feright - fe_half[-1])/dlright + de[-1]
-    else:
+    '''
+    dst[0] = 0.
+    if ufixed:
         det[-1] = 0.
-
+    '''
     return dmt, dst, det
 
-def RKstep(con, prim, BCleft, BCright):
+def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None):
+    # BCleft, BCright, 
     # m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, momentum_inflow = None, energy_inflow =  None):
     '''
     calculating elementary increments of conserved quantities
     '''
     #    prim = toprim(con) # primitive from conserved
-    g1 = Gamma1(5./3., prim['beta'])
-    rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad'] ; u = prim['u']
+    rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad'] ; u = prim['u'] ; beta = prim['beta']
     nd = prim['N']
-    gnd = l_g[nd]
+    #  sinks and sources:
+    if(squeezemode):
+        if umagtar is None:
+            umagtar = umag * (1.+3.*g[nd].cth**2)/4. * (rstar/g[nd].r)**6
+        dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/gnd.delta
+        if squeezeothersides:
+            dmsqueeze += 4. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/ (gnd.across / gnd.delta)
+        desqueeze = dmsqueeze * (e+press* gnd.across) / m # (e-u*g.across)/m
+    else:
+        dmsqueeze = 0.
+        desqueeze = 0.
+    dm, ds, de, flux = sources(gnd, rho, v, u, urad, ltot=0., dmsqueeze = dmsqueeze, desqueeze = desqueeze)
+    #
+    # adding ghost zones:
+    if leftpack is not None:
+        rholeft, vleft, uleft, pressleft, uradleft, betaleft = leftpack
+        # gnd = geometry_add(gleft, gnd)
+        rho = concatenate([[rholeft], rho])
+        v = concatenate([[vleft], v])
+        u = concatenate([[uleft], u])
+        press = concatenate([[pressleft], press])
+        beta = concatenate([[betaleft], beta])
+    else:
+        if nd>0:
+            print("topology issue, nd = "+str(nd))
+        rho = concatenate([[rho[0]], rho])
+        v = concatenate([[v[0]], v])
+        u = concatenate([[u[0]], u])
+        press = concatenate([[press[0]], press])
+        beta = concatenate([[beta[0]], beta])        
+    if rightpack is not None:
+        rhoright, vright, uright, pressright, uradright, betaright = rightpack
+        # gnd = geometry_add(gnd, gright)
+        rho = concatenate([rho, [rhoright]])
+        v = concatenate([v, [vright]])
+        u = concatenate([u, [uright]])
+        press = concatenate([press, [pressright]])
+        beta = concatenate([beta, [betaright]])
+    else:
+        if nd < (parallelfactor-1):
+            print("topology issue, nd = "+str(nd))
+        rho = concatenate([rho, [rho[-1]]])
+        v = concatenate([v, [v[-1]]])
+        u = concatenate([u, [u[-1]]])
+        press = concatenate([press, [press[-1]]])
+        beta = concatenate([beta, [beta[-1]]])        
     fm, fs, fe = fluxes(gnd, rho, v, u, press)
+    if leftpack is None:
+        fm[0] = 0.
+        #        fs[0] = fs[1]
+        fe[0] = 0.
+        # gnd = geometry_add(geometry_local(gnd,0), gnd)       
+    if rightpack is None:
+        fm[-1] = -mdot
+        #        fs[-1] = fs[-2]
+        #        fe[-1] = fe[-2]
+        # gnd = geometry_add(gnd, geometry_local(gnd,0))
+    g1 = Gamma1(5./3., beta)
     csq=g1*press/rho
     if(csq.min()<csqmin):
         wneg = (csq<=csqmin)
@@ -470,10 +403,12 @@ def RKstep(con, prim, BCleft, BCright):
         print("R = "+str((gnd.r[1:])[wwrong]))
         print("signal velocities crashed")
         ii=input("cs")
-    m = con['m'] ; s = con['s'] ; e = con['e']
+    m, s, e = tocon_separate(rho, v, u, gnd) # extended conserved quantities
     #    print("size(m) = "+str(size(m)))
     # print("size(s) = "+str(size(s)))
+    #    print("size(vl) = "+str(size(vl)))
     # print("size(e) = "+str(size(e)))
+    #  print("size(fe) = "+str(size(fe))+" ( nd = "+str(nd)+" leftpack = "+str(leftpack)+") ")
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
         dl = gnd.l[1:]-gnd.l[:-1]
@@ -482,27 +417,16 @@ def RKstep(con, prim, BCleft, BCright):
         delta = l_ghalf[nd].delta
         duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         dule_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
-        fs_half += duls_half ; fe_half += dule_half
-    if(squeezemode):
-        umagtar = con['umagtar']
-        #        if umagtar is None:
-        #            umagtar = umag * (1.+3.*g[nd].cth**2)/4. * (rstar/g[nd].r)**6
-        dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/gnd.delta
-        if squeezeothersides:
-            dmsqueeze += 4. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/ (gnd.across / gnd.delta)
-        desqueeze = dmsqueeze * (e+press* gnd.across) / m # (e-u*g.across)/m
-    else:
-        dmsqueeze = 0.
-        desqueeze = 0.
-        
-    dm, ds, de, flux = sources(l_g[nd], rho, v, u, urad, ltot=0., dmsqueeze = dmsqueeze, desqueeze = desqueeze)
-    
+        fs_half += duls_half ; fe_half += dule_half         
     ltot=trapz(flux, x=l_g[nd].l) 
     # dmt, dst, det
-    dmt, dst, det = derivo(l_ghalf[nd], m, s, e, fm_half, fs_half, fe_half, dm, ds, de,
-                           con['dlleft'], con['dlright'], BCleft[0], BCright[0],
-                           BCleft[1], BCright[1], BCleft[2], BCright[2])
+    dmt, dst, det = derivo(lhalf, m, s, e,
+                           fm_half, fs_half, fe_half, dm, ds, de)
+    #, BCleft[0], BCright[0],
+    #                       BCleft[1], BCright[1], BCleft[2], BCright[2])
     con1 = {'N': nd, 'm': dmt, 's': dst, 'e': det, 'ltot': ltot}
+    #    print("nd = "+str(nd)+": dmt = "+str(dmt[0])+".."+str(dmt[-1]))
+    #    ii = input("dmt")
     return con1
 
 def updateCon(l, dl, dt):
@@ -527,45 +451,21 @@ def updateCon(l, dl, dt):
 ################################################################################
 print("if you want to start the simulation, now type `alltire(`conf')` \n")
 
-def BConce(leftpipe, rightpipe, leftpack, rightpack, nearleftpack, nearrightpack, dls):
-    # boundary conditions: send
+def BCsend(leftpipe, rightpipe, leftpack_send, rightpack_send):
     if leftpipe is not None:
-        leftpipe.send(leftpack)
+        leftpipe.send(leftpack_send)
     if rightpipe is not None:
-        rightpipe.send(rightpack)            
-        # boundary conditions: receive        
+        rightpipe.send(rightpack_send)
+        
     if leftpipe is not None:
-        #            print("nd = "+str(nd)+", receiving from the left")
-        g_left, rho_left, v_left, u_left, press_left, urad_left = leftpipe.recv()
-        BCfluxleft = list(fluxes(g_left, rho_left, v_left, u_left, press_left))
-        if raddiff:
-            g_nearleft, rho, v, u, press, urad = nearleftpack
-            dlleft_nd = dls[0]
-            # duls_left, dule_left = diffuse_onepoint([rho_left, rho], [urad_left, urad],
-            #                                        [v_left, v], dlleft_nd, (g_left.across+g_nearleft.across)/2.)
-            duls_left = 0.
-            dule_left = (urad - urad_left) / dlleft_nd / 3. * 2./ (rho_left + rho)
-            BCfluxleft[1] += duls_left ;        BCfluxleft[2] += dule_left
+        leftpack = leftpipe.recv()
     else:
-        BCfluxleft = [0., None, 0.]
+        leftpack = None
     if rightpipe is not None:
-        g_right, rho_right, v_right, u_right, press_right, urad_right = rightpipe.recv()
-        BCfluxright = list(fluxes(g_right, rho_right, v_right, u_right, press_right))
-        if raddiff:
-            g_nearright, rho, v, u, press, urad = nearrightpack
-            dlright_nd = dls[1]
-            # duls_right, dule_right = diffuse_onepoint([rho, rho_right], [urad, urad_right],
-            #                                          [v, v_right], dlright_nd, (g_right.across+g_nearright.across)/2.)
-            duls_right = 0.
-            dule_right = (urad_right - urad) / dlright_nd / 3. * 2./ (rho_right + rho)
-            BCfluxright[1] += duls_right ;         BCfluxright[2] += dule_right
+        rightpack = rightpipe.recv()
     else:
-        if ufixed:
-            BCfluxright = [-mdot, None, None]
-        else:
-            BCfluxright = [-mdot, None, 0.]
-    return BCfluxleft, BCfluxright
-
+        rightpack = None
+    return leftpack, rightpack
 
 def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
 
@@ -581,8 +481,43 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
 
     gleftbound = geometry_local(g, 0)
     grightbound = geometry_local(g, -1)
+    # topology test:
+    if ghostleft is not None:
+        ghostleft.send([nd, nd-1])
+    if ghostright is not None:
+        ghostright.send([nd, nd+1])
+    if ghostleft is not None:
+        ndleft, ndcheckleft = ghostleft.recv()
+        print("received from "+str(ndleft)+" (left), I should be "+str(ndcheckleft)+", and I am "+str(nd))
+    if ghostright is not None:
+        ndright, ndcheckright = ghostright.recv()
+        print("received from "+str(ndright)+" (right), I should be "+str(ndcheckright)+", and I am "+str(nd))
+    print("this was topology test\n")
+    # exchange geometry!
+    if ghostleft is not None:
+        ghostleft.send(gleftbound)
+    if ghostright is not None:
+        ghostright.send(grightbound)
+    if ghostleft is not None:
+        gleftbound = ghostleft.recv()
+    if ghostright is not None:
+        grightbound = ghostright.recv()
+    # if there is no exchange, the leftmost geometry just reproduces the leftmost point of the actual mesh
+    print("nd = "+str(nd)+": gright = "+str(grightbound.l))
+    print("nd = "+str(nd)+": gleft = "+str(gleftbound.l))
+    #    print("g size = "+str(shape(g.l)))
+    gext = geometry_add(g, grightbound)
+    gext = geometry_add(gleftbound, gext)
     dlleft_nd = dlleft[nd] ; dlright_nd = dlright[nd]
-
+    lhalf = (gext.l[1:]+gext.l[:-1])/2.
+    '''
+    if lhalf[1] == lhalf[0]:
+        lhalf[0] = lhalf[1]*2.-lhalf[2]
+    if lhalf[-1] == lhalf[-2]:
+        lhalf[-1] = lhalf[-2]*2.-lhalf[-3]
+    '''
+    print("nd = "+str(nd)+": "+str(lhalf))
+    #    ii = input('lhfl')
     tstore = 0. ; nout = 0
     if nd == 0:
         fflux=open(outdir+'/'+'flux.dat', 'w')
@@ -590,12 +525,11 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         timer.start("total")
 
     while(t<tmax):
-        
         timer.start_comp("BC")
-        rho = prim['rho'] ; v = prim['v'] ; u =  prim['u']  ; press =  prim['press'] ; urad = prim['urad']
-        leftpack = [gleftbound, rho[0], v[0], u[0], press[0], urad[0]]
-        rightpack = [grightbound, rho[-1], v[-1], u[-1], press[-1], urad[-1]]
-        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
+        rho = prim['rho'] ; v = prim['v'] ; u =  prim['u']  ; press =  prim['press'] ; urad = prim['urad'] ; beta = prim['beta']
+        leftpack_send = [rho[0], v[0], u[0], press[0], urad[0], beta[0]]
+        rightpack_send = [rho[-1], v[-1], u[-1], press[-1], urad[-1], beta[-1]]
+        leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
 
         # time step: all the domains send dt to first, and then the first sends the minimum value back
@@ -603,89 +537,92 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         dt = timestepmin(prim, dtpipe)
         timer.stop_comp("dt")
         timer.start_comp("RKstep")
-        dcon1 = RKstep(con, prim, BCfluxleft, BCfluxright)
-        '''
+        dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack)
+
         if ghostright is None:
             dcon1['e'][-1] = 0.
             dcon1['s'][-1] = 0.
         if ghostleft is None:
             dcon1['s'][0] = 0.            
-        '''
+
         con1 = updateCon(con, dcon1, dt/2.)
-        '''
+
         if ghostright is None:
             con1['s'][-1] = -mdot
             con1['e'][-1] = 0.
         if ghostleft is None:
             con1['s'][0] = 0.
-        '''
+
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
         prim1 = toprim(con1)
-        rho1 = prim1['rho'] ; v1 = prim1['v'] ; u1 =  prim1['u']  ; press1 =  prim1['press'] ; urad1 = prim1['urad']
-        leftpack = [gleftbound, rho1[0], v1[0], u1[0], press1[0], urad1[0]]
-        rightpack = [grightbound, rho1[-1], v1[-1], u1[-1], press1[-1], urad1[-1]]
-        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
+        rho1 = prim1['rho'] ; v1 = prim1['v'] ; u1 =  prim1['u']  ; press1 =  prim1['press'] ; urad1 = prim1['urad'] ; beta1 = prim['beta']
+        leftpack_send = [rho1[0], v1[0], u1[0], press1[0], urad1[0], beta1[0]]
+        rightpack_send = [rho1[-1], v1[-1], u1[-1], press1[-1], urad1[-1], beta1[-1]]
+        leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
+        #        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon2 = RKstep(con1, prim1, BCfluxleft, BCfluxright)
-        '''
+        dcon2 = RKstep(gext, lhalf, prim1, leftpack, rightpack) # , BCfluxleft, BCfluxright)
+
         if ghostright is None:
             dcon2['e'][-1] = 0.
             dcon2['s'][-1] = 0.
         if ghostleft is None:
             dcon2['s'][0] = 0.            
-        '''
+
         con2 = updateCon(con, dcon2, dt/2.)
-        '''
+
         if ghostright is None:
             con2['s'][-1] = -mdot
             con2['e'][-1] = 0.
         if ghostleft is None:
             con2['s'][0] = 0.
-        '''
+
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
         prim2 = toprim(con2)
-        rho2 = prim2['rho'] ; v2 = prim2['v'] ; u2 =  prim2['u']  ; press2 =  prim2['press'] ; urad2 = prim2['urad']
-        leftpack = [gleftbound, rho2[0], v2[0], u2[0], press2[0], urad2[0]]
-        rightpack = [grightbound, rho2[-1], v2[-1], u2[-1], press2[-1], urad2[-1]]
-        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
+        rho2 = prim2['rho'] ; v2 = prim2['v'] ; u2 =  prim2['u']  ; press2 =  prim2['press'] ; urad2 = prim2['urad'] ; beta2 = prim2['beta']
+        leftpack_send = [rho2[0], v2[0], u2[0], press2[0], urad2[0], beta2[0]]
+        rightpack_send = [rho2[-1], v2[-1], u2[-1], press2[-1], urad2[-1], beta2[-1]]
+        leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
+        #        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon3 = RKstep(con2, prim2, BCfluxleft, BCfluxright)
-        '''
+        dcon3 = RKstep(gext, lhalf, prim2, leftpack, rightpack) #, BCfluxleft, BCfluxright)
+
         if ghostright is None:
             dcon3['e'][-1] = 0.
             dcon3['s'][-1] = 0.
         if ghostleft is None:
             dcon3['s'][0] = 0.
-        '''
+
         con3 = updateCon(con, dcon3, dt)
-        '''
+
         if ghostright is None:
             con3['s'][-1] = -mdot
             con3['e'][-1] = 0.
         if ghostleft is None:
             con3['s'][0] = 0.
-        '''
+
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
         prim3 = toprim(con3)
-        rho3 = prim3['rho'] ; v3 = prim3['v'] ; u3 =  prim3['u']  ; press3 =  prim3['press'] ; urad3 = prim3['urad']
-        leftpack = [gleftbound, rho3[0], v3[0], u3[0], press3[0], urad3[0]]
-        rightpack = [grightbound, rho3[-1], v3[-1], u3[-1], press3[-1], urad3[-1]]
-        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
+        rho3 = prim3['rho'] ; v3 = prim3['v'] ; u3 =  prim3['u']  ; press3 =  prim3['press'] ; urad3 = prim3['urad'] ; beta3 = prim3['beta']
+        leftpack_send = [rho3[0], v3[0], u3[0], press3[0], urad3[0], beta3[0]] 
+        rightpack_send = [rho3[-1], v3[-1], u3[-1], press3[-1], urad3[-1], beta3[-1]]
+        leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
+        #        BCfluxleft, BCfluxright = BConce(ghostleft, ghostright, leftpack, rightpack, leftpack, rightpack, [dlleft_nd, dlright_nd])
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon4 = RKstep(con3, prim3, BCfluxleft, BCfluxright)
-        '''
+        dcon4 = RKstep(gext, lhalf, prim3, leftpack, rightpack) # , BCfluxleft, BCfluxright)
+
         if ghostright is None:
             dcon4['s'][-1] = 0.
             dcon4['e'][-1] = 0.
         if ghostleft is None:
             dcon4['s'][0] = 0.
-        '''
+
         timer.stop_comp("RKstep")
         timer.start_comp("updateCon")
 
@@ -743,6 +680,10 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                         plots.uplot(r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
                         plots.someplots(r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
                                         name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
+                        plots.someplots(r, [qloss*r],
+                                        name=outdir+'/qloss{:05d}'.format(nout),
+                                        ytitle=r'$\frac{d^2 E}{d\ln l dt}$', ylog=False,
+                                        formatsequence = ['k-', 'r-'])
                     # ascii output:
                     # print(nout)
                     fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
@@ -1135,7 +1076,7 @@ def alltire(conf):
         
     for k in range(parallelfactor):
         if k>0:
-            ghostleft = ghostpipe1[k-1]
+            ghostleft = ghostpipe2[k-1]
             dtpipe = dtpipes2[k-1]
             outpipe = opipes1[k-1]
         else:
@@ -1143,7 +1084,7 @@ def alltire(conf):
             dtpipe = dtpipes1
             outpipe = opipes2
         if k<(parallelfactor-1):
-            ghostright = ghostpipe2[k]
+            ghostright = ghostpipe1[k]
         else:
             ghostright = None
         p = Process(target = onedomain, args = (l_g[k], l_con[k], ghostleft, ghostright, dtpipe, outpipe, hfile))
