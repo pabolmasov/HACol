@@ -65,13 +65,16 @@ def time_step(prim, g, dl):
         dt_diff = dt_CFL * 5. # effectively infinity ;)
     return 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
 
-def timestepdetails(g, rho, press, u, v):
+def timestepdetails(g, rho, press, u, v, urad):
     dl = g.l[1:]-g.l[:-1]
-    csqest = 4./3.*press/rho
-    dt_CFL = CFL * (dl / (sqrt(csqest)+abs(v))[1:-1]).min()
+    rho_half = (rho[1:]+rho[:-1])/2. ; press_half = (press[1:]+press[:-1])/2. ; u_half = (u[1:]+u[:-1])/2. ; v_half = (v[1:]+v[:-1])/2. ; urad_half = (urad[1:]+urad[:-1])/2.
+    csqest = 4./3.*press_half/rho_half
+    dt_CFL = CFL * (dl / (sqrt(csqest)+abs(v_half))).min()
     qloss = 2.*urad/rho / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
+    wpos = ((qloss) > 0.) & (rho > 0.)
+    dt_thermal = Cth * abs((u*g.across)[wpos]/qloss[wpos]).min()
     if(raddiff):
-        ctmp = dl**2 * 3.*rho[1:-1]
+        ctmp = dl**2 * 3.*rho_half
         dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.1) # (dx^2/D)
     else:
         dt_diff = dt_CFL * 5. # effectively infinity ;)
@@ -80,7 +83,7 @@ def timestepdetails(g, rho, press, u, v):
 def timestepmin(prim, g, dl, dtpipe):
     nd = prim['N']
     if nd > 0:
-        dtlocal = time_step(prim, g, dl, details = details)
+        dtlocal = time_step(prim, g, dl)
         dtpipe.send(dtlocal)
     else:
         #        dtlocal = time_step(prim, g, dl)
@@ -635,7 +638,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
             else:
                 timer.start("io")
                 m = con['m'] ; e = con['e'] ; umagtar = con['umagtar']
-                rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; beta = prim['beta'] ; press = prim['press']
+                rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; urad = prim['urad'] ; beta = prim['beta'] ; press = prim['press']
                 for k in range(parallelfactor-1):
                     t1, g1, con1, prim1 = outpipe[k].recv()
                     # print("size(r) = "+str(shape(r))+", "+str(shape(g1.r)))
@@ -649,6 +652,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                     press = concatenate([press, prim1['press']])
                     v = concatenate([v, prim1['v']])
                     u = concatenate([u, prim1['u']])
+                    urad = concatenate([urad, prim1['urad']])
                     beta = concatenate([beta, prim1['beta']])
                     umagtar = concatenate([umagtar, con1['umagtar']])
                 qloss = qloss_separate(rho, v, u, gglobal)
@@ -660,7 +664,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                 print(str(t*tscale)+' '+str(ltot)+'\n')
                 print(str(t*tscale)+' '+str(mtot)+'\n')
                 print("dt = "+str(dt)+'\n')
-                dt, dt_CFL, dt_thermal, dt_diff = timestepdetails(gglobal, rho, press, u, v)
+                dt, dt_CFL, dt_thermal, dt_diff = timestepdetails(gglobal, rho, press, u, v, urad)
                 print("dt = "+str(dt)+" = "+str(dt_CFL)+"; "+str(dt_thermal)+"; "+str(dt_diff)+"\n")
                 # ii = input("dt")
                 fflux.flush() ; ftot.flush()
