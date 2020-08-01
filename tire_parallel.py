@@ -21,7 +21,7 @@ if(size(sys.argv)>1):
     conf=sys.argv[1]
     print(conf+" configuration set by the arguments")
 else:
-    newconf='DEFAULT'
+    conf='DEFAULT'
 
 # configuration file:
 import configparser as cp
@@ -50,15 +50,11 @@ timer = Timer(["total", "step", "io"],
 
 def time_step(prim, g, dl):
     # time step adjustment:
-    #    nd = prim['N'] # number of the domain
-    #    rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
-    # dlmin = dl.min() # (l_g[nd].l[1:]-l_g[nd].l[:-1]).min()
-    #    dlhalf = dl # (l_ghalf[nd].l[1:]-l_ghalf[nd].l[:-1])
     csqest = 4./3.*prim['press']/prim['rho']
     dt_CFL = CFL * (dl / (sqrt(csqest)+abs(prim['v']))[1:-1]).min()
     qloss = 2.*prim['urad']/prim['rho'] / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
     # approximate qloss
-    # qloss_separate(rho, v, u, g)
+
     wpos = ((qloss) > 0.) & (prim['rho'] > 0.)
     dt_thermal = Cth * abs((prim['u']*g.across)[wpos]/qloss[wpos]).min()
     
@@ -67,24 +63,31 @@ def time_step(prim, g, dl):
         dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.1) # (dx^2/D)
     else:
         dt_diff = dt_CFL * 5. # effectively infinity ;)
-    #    dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
-    #     conn.send(dt)
-    #   dt1 = conn.recv()
-    #    print("nd = "+str(nd)+": time_step dt = "+str(dt))
-    #    conn.close()
     return 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
 
+def timestepdetails(g, rho, press, u, v):
+    dl = g.l[1:]-g.l[:-1]
+    csqest = 4./3.*press/rho
+    dt_CFL = CFL * (dl / (sqrt(csqest)+abs(v))[1:-1]).min()
+    qloss = 2.*urad/rho / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
+    if(raddiff):
+        ctmp = dl**2 * 3.*rho[1:-1]
+        dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.1) # (dx^2/D)
+    else:
+        dt_diff = dt_CFL * 5. # effectively infinity ;)
+    return 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff), dt_CFL, dt_thermal, dt_diff
+    
 def timestepmin(prim, g, dl, dtpipe):
     nd = prim['N']
     if nd > 0:
-        dtlocal = time_step(prim, g, dl)
+        dtlocal = time_step(prim, g, dl, details = details)
         dtpipe.send(dtlocal)
     else:
-        dtlocal = time_step(prim, g, dl)
-        dt = dtlocal
+        #        dtlocal = time_step(prim, g, dl)
+        dt = time_step(prim, g, dl)
         for k in range(parallelfactor -1):
             dtk = dtpipe[k].recv()
-            dt = minimum(dt, dtk)            
+            dt = minimum(dt, dtk)
     if nd == 0:
         for k in range(parallelfactor -1):
             dtpipe[k].send(dt)
@@ -272,17 +275,18 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     taueff = copy(1./(1./tau + 1./tauphi))
     taufac = taufun(taueff)    # 1.-exp(-tau)
     #    taufac = 1. 
-    gamefac = tratfac(tau)
-    gamedd = eta * ltot * gamefac
+    #    gamefac = tratfac(tau)
+    #    gamedd = eta * ltot * gamefac
     sinsum = copy(sina*cth+cosa*sth) # sin(theta+alpha)
-    force = copy((-sinsum/r**2*(1.-gamedd)+omega**2*r*sth*cosa)*rho*across) # *taufac
+    force = copy((-sinsum/r**2*(1.-eta * ltot * tratfac(tau))
+                  +omega**2*r*sth*cosa)*rho*across) # *taufac
     if(forcecheck):
         network = simps(force/(rho*across), x=g.l)
         return network, (1./r[0]-1./r[-1])
     #    beta = prim['beta'] # betafun(Fbeta(rho, u, betacoeff))
     #    urad = prim['urad']
     #     urad = copy(u * (1.-beta)/(1.-beta/2.))
-    urad = (urad+abs(urad))/2.
+    #    urad = (urad+abs(urad))/2.
     qloss = copy(2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)*taufac)  # diffusion approximation; energy lost from 4 sides
     irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(tau)
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
@@ -631,7 +635,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
             else:
                 timer.start("io")
                 m = con['m'] ; e = con['e'] ; umagtar = con['umagtar']
-                rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; beta = prim['beta']
+                rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; beta = prim['beta'] ; press = prim['press']
                 for k in range(parallelfactor-1):
                     t1, g1, con1, prim1 = outpipe[k].recv()
                     # print("size(r) = "+str(shape(r))+", "+str(shape(g1.r)))
@@ -642,6 +646,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                     #                    etot += trapz(con1['e'], x=g1.l)
                     #                    r = concatenate([r, g1.r])
                     rho = concatenate([rho, prim1['rho']])
+                    press = concatenate([press, prim1['press']])
                     v = concatenate([v, prim1['v']])
                     u = concatenate([u, prim1['u']])
                     beta = concatenate([beta, prim1['beta']])
@@ -655,6 +660,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
                 print(str(t*tscale)+' '+str(ltot)+'\n')
                 print(str(t*tscale)+' '+str(mtot)+'\n')
                 print("dt = "+str(dt)+'\n')
+                dt, dt_CFL, dt_thermal, dt_diff = timestepdetails(gglobal, rho, press, u, v)
+                print("dt = "+str(dt)+" = "+str(dt_CFL)+"; "+str(dt_thermal)+"; "+str(dt_diff)+"\n")
                 # ii = input("dt")
                 fflux.flush() ; ftot.flush()
                 if hfile is not None:
