@@ -15,14 +15,23 @@ import sys
 import multiprocessing
 from multiprocessing import Pool, Pipe, Process
 
+if(np.size(sys.argv)>1):
+    print("launched with arguments "+str(', '.join(sys.argv)))
+    # new conf file
+    conf=sys.argv[1]
+    print(conf+" configuration set by the arguments")
+else:
+    newconf='DEFAULT'
+
 # configuration file:
 import configparser as cp
 conffile = 'globals.conf'
 config = cp.ConfigParser(inline_comment_prefixes="#")
 config.read(conffile) 
-ifplot = config['DEFAULT'].getboolean('ifplot')
-ifhdf = config['DEFAULT'].getboolean('ifhdf')
-verbose = config['DEFAULT'].getboolean('verbose')
+ifplot = config[conf].getboolean('ifplot')
+ifhdf = config[conf].getboolean('ifhdf')
+verbose = config[conf].getboolean('verbose')
+autostart = config[conf].getboolean('autostart')
 #
 
 # loading local modules:
@@ -455,7 +464,6 @@ def updateCon(l, dl, dt):
     return l1
 
 ################################################################################
-print("if you want to start the simulation, now type `alltire(`conf')` \n")
 
 def BCsend(leftpipe, rightpipe, leftpack_send, rightpack_send):
     if leftpipe is not None:
@@ -683,7 +691,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         ftot.close()
     dtpipe.close()
         
-def alltire(conf):
+def alltire():
     '''
     the main routine bringing all together
     '''
@@ -1068,4 +1076,6 @@ def alltire(conf):
         
     p.join()
 
-alltire('DEFAULT')
+# if we start the simulation automatically:
+if autostart:
+    alltire()

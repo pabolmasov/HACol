@@ -2,7 +2,7 @@ import multiprocessing
 from multiprocessing import Pool
 from numpy import *
 
-from tire_RK import alltire
+from tire_parallel import alltire
 
 print("now you can arrange for a proper config file list in multitire and launch it as multitire()")
 
