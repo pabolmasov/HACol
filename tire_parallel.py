@@ -15,7 +15,7 @@ import sys
 import multiprocessing
 from multiprocessing import Pool, Pipe, Process
 
-if(np.size(sys.argv)>1):
+if(size(sys.argv)>1):
     print("launched with arguments "+str(', '.join(sys.argv)))
     # new conf file
     conf=sys.argv[1]
@@ -48,37 +48,39 @@ from timer import Timer
 timer = Timer(["total", "step", "io"],
               ["BC", "dt", "RKstep", "updateCon"])
 
-def time_step(prim):
+def time_step(prim, g, dl):
     # time step adjustment:
-    nd = prim['N'] # number of the domain
-    rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
-    dlmin = (l_g[nd].l[1:]-l_g[nd].l[:-1]).min()
-    dlhalf = (l_ghalf[nd].l[1:]-l_ghalf[nd].l[:-1])
-    csqest = 4./3.*u/rho
-    dt_CFL = CFL * dlmin / sqrt(csqest.max()+(v**2).max())
-    qloss = qloss_separate(rho, v, u, l_g[nd])
-    wpos = (u*qloss) > 0.
-    dt_thermal = Cth * abs((u*l_g[nd].across)[wpos]/qloss[wpos]).min()
+    #    nd = prim['N'] # number of the domain
+    #    rho = prim['rho'] ; v = prim['v'] ; u = prim['u']
+    # dlmin = dl.min() # (l_g[nd].l[1:]-l_g[nd].l[:-1]).min()
+    #    dlhalf = dl # (l_ghalf[nd].l[1:]-l_ghalf[nd].l[:-1])
+    csqest = 4./3.*prim['press']/prim['rho']
+    dt_CFL = CFL * (dl / (sqrt(csqest)+abs(prim['v']))[1:-1]).min()
+    qloss = 2.*prim['urad']/prim['rho'] / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
+    # approximate qloss
+    # qloss_separate(rho, v, u, g)
+    wpos = ((qloss) > 0.) & (prim['rho'] > 0.)
+    dt_thermal = Cth * abs((prim['u']*g.across)[wpos]/qloss[wpos]).min()
     
     if(raddiff):
-        ctmp = dlhalf**2 * 3.*rho[1:-1]
-        dt_diff = Cdiff * quantile(ctmp[where(ctmp>0.)], 0.1) # (dx^2/D)
+        ctmp = dl**2 * 3.*prim['rho'][1:-1]
+        dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.1) # (dx^2/D)
     else:
         dt_diff = dt_CFL * 5. # effectively infinity ;)
-    dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
+    #    dt = 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
     #     conn.send(dt)
     #   dt1 = conn.recv()
     #    print("nd = "+str(nd)+": time_step dt = "+str(dt))
     #    conn.close()
-    return dt
+    return 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
 
-def timestepmin(prim, dtpipe):
+def timestepmin(prim, g, dl, dtpipe):
     nd = prim['N']
     if nd > 0:
-        dtlocal = time_step(prim)
+        dtlocal = time_step(prim, g, dl)
         dtpipe.send(dtlocal)
     else:
-        dtlocal = time_step(prim)
+        dtlocal = time_step(prim, g, dl)
         dt = dtlocal
         for k in range(parallelfactor -1):
             dtk = dtpipe[k].recv()
@@ -524,6 +526,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
     gext = geometry_add(gleftbound, gext)
     dlleft_nd = dlleft[nd] ; dlright_nd = dlright[nd]
     lhalf = (gext.l[1:]+gext.l[:-1])/2.
+    dl = (l_ghalf[nd].l[1:]-l_ghalf[nd].l[:-1])
 
     #    umagtar = umag * ((1.+3.*gext.cth**2)/4. * (rstar/gext.r)**6)[1:-1]
     
@@ -544,7 +547,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
 
         # time step: all the domains send dt to first, and then the first sends the minimum value back
         timer.start_comp("dt")
-        dt = timestepmin(prim, dtpipe)
+        dt = timestepmin(prim, g, dl, dtpipe)
         timer.stop_comp("dt")
         timer.start_comp("RKstep")
         dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'])
