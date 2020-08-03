@@ -121,7 +121,7 @@ def taufun(tau):
     wtrans = where(tau<taumin)
     wopaq = where(tau>taumax)
     wmed = where((tau>=taumin) & (tau<=taumax))
-    tt = tau[:]
+    tt = copy(tau)
     if(size(wtrans)>0):
         tt[wtrans] = (tau[wtrans]+abs(tau[wtrans]))/2.
     if(size(wopaq)>0):
@@ -136,8 +136,8 @@ def tratfac(x):
     '''
     xmin = taumin ; xmax = taumax # limits the same as for optical depth
     nx = size(x)
+    tt = copy(x)
     if nx>1:
-        tt=x[:]*0.
         w1 = where(x<= xmin) ;  w2 = where(x>= xmax) ; wmed = where((x < xmax) & (x > xmin))
         if(size(w1)>0):
             tt[w1] = 1.
@@ -194,29 +194,29 @@ def tocon(prim):
     computes conserved quantities from primitives
     '''
     #    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
-    rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; nd = con['N']
-    gnd = l_g[nd]
+    #    rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; nd = prim['N']
+    gnd = l_g[prim['N']]
     
-    m=rho*gnd.across # mass per unit length
-    s=m*v # momentum per unit length
-    e=(u+rho*(v**2/2.- 1./gnd.r - 0.5*(omega*gnd.r*gnd.sth)**2))*gnd.across  # total energy (thermal + mechanic) per unit length
-    return {'m': m, 's': s, 'e': e, 'N': nd}
+    m=prim['rho']*gnd.across # mass per unit length
+    s=m*prim['v'] # momentum per unit length
+    e=(prim['u']+prim['rho']*(prim['v']**2/2.- 1./gnd.r - 0.5*(omega*gnd.r*gnd.sth)**2))*gnd.across  # total energy (thermal + mechanic) per unit length
+    return {'m': m, 's': s, 'e': e, 'N': prim['N']}
 
 def toprim(con):
     '''
     convert conserved quantities to primitives
     '''
-    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
-    gnd = l_g[nd]
-    rho = m/gnd.across
-    v = s/m
-    u = (e-m*(v**2/2.-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2))/gnd.across
+    #  m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
+    gnd = l_g[con['N']]
+    rho = con['m']/gnd.across
+    v = con['s']/con['m']
+    u = (con['e']-con['m']*(v**2/2.-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2))/gnd.across
     #    umin = u.min()
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
     u, rho, press = regularize(u, rho, press)
     urad = u*(1.-beta)/(1.-beta/2.)
-    prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press, 'N': nd}
+    prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press, 'N': con['N']}
     return prim
 
 def diffuse(rho, urad, v, dl, across):
@@ -297,7 +297,7 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     qloss = 2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)* taufun(taueff)  # diffusion approximation; energy lost from 4 sides
     # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
-    dm = -dmsqueeze # copy(rho*0.-dmsqueeze)
+    dm = rho*0.-dmsqueeze # copy(rho*0.-dmsqueeze)
     dudt = v*force-qloss # +irradheating # copy
     ds = force - dmsqueeze * v # lost mass carries away momentum
     de = dudt - desqueeze # lost matter carries away energy (or enthalpy??)
@@ -313,9 +313,9 @@ def qloss_separate(rho, v, u, g):
     taueff = copy(1./(1./tau + 1./tauphi))
     taufac = taufun(taueff)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
-    urad = (u * (1.-beta)/(1.-beta/2.))
+    urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.    
-    qloss = (2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
+    qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
 def derivo(l_half, m, s, e, s_half, p_half, fe_half, dm, ds, de):
@@ -500,7 +500,8 @@ def BCsend(leftpipe, rightpipe, leftpack_send, rightpack_send):
         rightpack = None
     return leftpack, rightpack
 
-def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
+def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
+              t = 0., nout = 0.):
 
     con = lcon.copy()
     con1 = lcon.copy()
@@ -508,7 +509,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
     
     prim = toprim(con) # primitive from conserved
 
-    t = 0.
+    #    t = 0.
     print("nd = "+str(nd))
     print("tmax = "+str(tmax))
 
@@ -549,10 +550,14 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
     
     print("nd = "+str(nd)+": "+str(lhalf))
     #    ii = input('lhfl')
-    tstore = 0. ; nout = 0
+    tstore = t # ; nout = 0
     if nd == 0:
-        fflux=open(outdir+'/'+'flux.dat', 'w')
-        ftot=open(outdir+'/'+'totals.dat', 'w')
+        if ifrestart:
+            fflux=open(outdir+'/'+'flux.dat', 'a')
+            ftot=open(outdir+'/'+'totals.dat', 'a')
+        else:
+            fflux=open(outdir+'/'+'flux.dat', 'w')
+            ftot=open(outdir+'/'+'totals.dat', 'w')
         timer.start("total")
 
     while(t<tmax):
@@ -720,6 +725,7 @@ def alltire():
     the main routine bringing all together
     '''
     global configactual
+    global ifrestart
     global ufloor, rhofloor, betacoeff, csqmin
     global raddiff, squeezemode, ufixed, squeezeothersides
     global taumin, taumax
@@ -937,6 +943,8 @@ def alltire():
         # ii = input('prim')
     m0=m
 
+    t = 0. ; nout = 0
+    
     # if we want to restart from a stored configuration
     # works so far correctly ONLY if the mesh is identical!
     if(ifrestart):
@@ -1007,7 +1015,7 @@ def alltire():
             plots.someplots(g.r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
                             name=outdir+'/beta_restart', ytitle=r'$\beta$, $1-\beta$', ylog=True)
 
-        m, s, e = cons(rho, v, u, g)
+        m, s, e = tocon_separate(rho, v, u, g)
         nout = restartn
         #    plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie_restart', umagtar = umagtar)
     fname=outdir+'/tireout_start.dat'
@@ -1026,14 +1034,6 @@ def alltire():
         print(ulast)
         ii = input("C")
         
-    ltot=0. # estimated total luminosity
-    if(ifrestart):
-        fflux=open(outdir+'/'+'flux.dat', 'a')
-        ftot=open(outdir+'/'+'totals.dat', 'a')
-    else:
-        fflux=open(outdir+'/'+'flux.dat', 'w')
-        ftot=open(outdir+'/'+'totals.dat', 'w')
-
     if(ifhdf):
         hname = outdir+'/'+'tireout.hdf5'
         hfile = hdf.init(hname, g, configactual) # , m1, mdot, eta, afac, re, dre, omega)
@@ -1093,7 +1093,7 @@ def alltire():
             ghostright = ghostpipe1[k]
         else:
             ghostright = None
-        p = Process(target = onedomain, args = (l_g[k], l_con[k], ghostleft, ghostright, dtpipe, outpipe, hfile))
+        p = Process(target = onedomain, args = (l_g[k], l_con[k], ghostleft, ghostright, dtpipe, outpipe, hfile), kwargs = {'t': t, 'nout': nout})
         p.start()
         plist.append(p)
         hfile.close()
