@@ -56,14 +56,16 @@ def time_step(prim, g, dl):
     # approximate qloss
 
     wpos = ((qloss) > 0.) & (prim['rho'] > 0.)
-    dt_thermal = Cth * abs((prim['u']*g.across)[wpos]/qloss[wpos]).min()
+    wpos = wpos[1:-1]
+    dt_thermal = Cth * abs((prim['u']*g.across)/qloss).min()
     
     if(raddiff):
         ctmp = dl**2 * 3.*prim['rho'][1:-1]
-        dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.1) # (dx^2/D)
+        dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.01) # (dx^2/D)
     else:
         dt_diff = dt_CFL * 5. # effectively infinity ;)
-    return 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
+    
+    return minimum(dt_CFL, minimum(dt_diff, dt_thermal))# 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
 
 def timestepdetails(g, rho, press, u, v, urad):
     dl = g.l[1:]-g.l[:-1]
@@ -75,10 +77,10 @@ def timestepdetails(g, rho, press, u, v, urad):
     dt_thermal = Cth * abs((u*g.across)[wpos]/qloss[wpos]).min()
     if(raddiff):
         ctmp = dl**2 * 3.*rho_half
-        dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.1) # (dx^2/D)
+        dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.01) # (dx^2/D)
     else:
         dt_diff = dt_CFL * 5. # effectively infinity ;)
-    return 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff), dt_CFL, dt_thermal, dt_diff
+    return minimum(dt_CFL, minimum(dt_diff, dt_thermal)), dt_CFL, dt_thermal, dt_diff
     
 def timestepmin(prim, g, dl, dtpipe):
     nd = prim['N']
@@ -119,7 +121,7 @@ def taufun(tau):
     wtrans = where(tau<taumin)
     wopaq = where(tau>taumax)
     wmed = where((tau>=taumin) & (tau<=taumax))
-    tt = copy(tau)*0.
+    tt = tau[:]
     if(size(wtrans)>0):
         tt[wtrans] = (tau[wtrans]+abs(tau[wtrans]))/2.
     if(size(wopaq)>0):
@@ -135,7 +137,7 @@ def tratfac(x):
     xmin = taumin ; xmax = taumax # limits the same as for optical depth
     nx = size(x)
     if nx>1:
-        tt=copy(x)*0.
+        tt=x[:]*0.
         w1 = where(x<= xmin) ;  w2 = where(x>= xmax) ; wmed = where((x < xmax) & (x > xmin))
         if(size(w1)>0):
             tt[w1] = 1.
@@ -224,17 +226,18 @@ def diffuse(rho, urad, v, dl, across):
     across should be set at half-steps
     '''
     #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
-    rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
-    rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
-    rtau = rtau_left + rtau_right
-    rtau_exp = tratfac(copy(rtau))
-    across_half = (across[1:]+across[:-1])/2.
+    # rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
+    # rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
+    # rtau = dl * (rho[1:]+rho[:-1])/2.
+    # rtau_left + rtau_right
+    rtau_exp = tratfac(dl * (rho[1:]+rho[:-1])/2.)
+    # across_half = (across[1:]+across[:-1])/2.
     
     duls_half =  nubulk  * (( urad * v)[1:] - ( urad * v)[:-1])\
-                 *across_half / 3. * rtau_exp #  / (rtau_left + rtau_right)
+                 *(across[1:]+across[:-1]) / 6. * rtau_exp #  / (rtau_left + rtau_right)
     # -- photon bulk viscosity
     dule_half = ((urad)[1:] - (urad)[:-1])\
-                *across_half / 3. * rtau_exp # / (rtau_left + rtau_right)
+                *(across[1:]+across[:-1]) / 6. * rtau_exp # / (rtau_left + rtau_right)
     dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux
     # -- radial diffusion
 
@@ -251,10 +254,10 @@ def fluxes(g, rho, v, u, press):
     '''
     #    nd = prim['N']  # ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; press = prim['press'] ; beta = prim['beta']
     #    gnd = l_g[nd]
-    across = g.across ; r = g.r  ; sth = g.sth 
-    s = rho * v * across # mass flux (identical to momentum per unit length -- can we use it?)
-    p = across * (rho*v**2 + press) # momentum flux
-    fe = across * v * (u + press + (v**2/2.-1./r-0.5*(omega*r*sth)**2)*rho) # energy flux without diffusion
+    # across = g.across ; r = g.r  ; sth = g.sth 
+    s = rho * v * g.across # mass flux (identical to momentum per unit length -- can we use it?)
+    p = g.across * (rho*v**2 + press) # momentum flux
+    fe = g.across * v * (u + press + (v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion
     return s, p, fe
 
 def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., desqueeze = 0.):
@@ -273,16 +276,17 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
     delta = g.delta[1:-1] ;  across = g.across[1:-1] ; r = g.r[1:-1] ; cth = g.cth[1:-1] ; sth = g.sth[1:-1] ; cosa = g.cosa[1:-1] ; sina = g.sina[1:-1]
-    tau = rho * delta # tau in transverse direction
-    tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
-    taueff = copy(1./(1./tau + 1./tauphi))
-    taufac = taufun(taueff)    # 1.-exp(-tau)
+    #    tau = rho * delta # tau in transverse direction
+    #    tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
+    taueff = rho / (1./delta + 2. * delta /  across)
+    # copy(1./(1./tau + 1./tauphi))
+    #    taufac = taufun(taueff)    # 1.-exp(-tau)
     #    taufac = 1. 
     #    gamefac = tratfac(tau)
     #    gamedd = eta * ltot * gamefac
-    sinsum = copy(sina*cth+cosa*sth) # sin(theta+alpha)
-    force = copy((-sinsum/r**2*(1.-eta * ltot * tratfac(tau))
-                  +omega**2*r*sth*cosa)*rho*across) # *taufac
+    sinsum = (sina*cth+cosa*sth) # sin(theta+alpha)
+    force = ((-sinsum/r**2*(1.-eta * ltot * tratfac(rho*delta))
+              +omega**2*r*sth*cosa)*rho*across) # *taufac
     if(forcecheck):
         network = simps(force/(rho*across), x=g.l)
         return network, (1./r[0]-1./r[-1])
@@ -290,13 +294,13 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #    urad = prim['urad']
     #     urad = copy(u * (1.-beta)/(1.-beta/2.))
     #    urad = (urad+abs(urad))/2.
-    qloss = copy(2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)*taufac)  # diffusion approximation; energy lost from 4 sides
-    irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(tau)
+    qloss = 2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)* taufun(taueff)  # diffusion approximation; energy lost from 4 sides
+    # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
-    dm = copy(rho*0.-dmsqueeze)
-    dudt = copy(v*force-qloss+irradheating)
-    ds = copy(force - dmsqueeze * v) # lost mass carries away momentum
-    de = copy(dudt - desqueeze) # lost matter carries away energy (or enthalpy??)
+    dm = -dmsqueeze # copy(rho*0.-dmsqueeze)
+    dudt = v*force-qloss # +irradheating # copy
+    ds = force - dmsqueeze * v # lost mass carries away momentum
+    de = dudt - desqueeze # lost matter carries away energy (or enthalpy??)
     #    return dm, force, dudt, qloss, ueq
     return dm, ds, de, qloss
 
@@ -309,9 +313,9 @@ def qloss_separate(rho, v, u, g):
     taueff = copy(1./(1./tau + 1./tauphi))
     taufac = taufun(taueff)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
-    urad = copy(u * (1.-beta)/(1.-beta/2.))
+    urad = (u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.    
-    qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
+    qloss = (2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
 def derivo(l_half, m, s, e, s_half, p_half, fe_half, dm, ds, de):
@@ -343,7 +347,9 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
     #
     # adding ghost zones:
     if leftpack is not None:
-        rholeft, vleft, uleft, pressleft, uradleft, betaleft = leftpack
+        rholeft, vleft, uleft, betaleft = leftpack
+        uradleft = uleft * (1.-betaleft)/(1.-betaleft/2.)
+        pressleft = uleft / (1.-betaleft/2.)/3.
         # gnd = geometry_add(gleft, gnd)
         rho = concatenate([[rholeft], rho])
         v = concatenate([[vleft], v])
@@ -361,7 +367,9 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         press = concatenate([[press[0]], press])
         beta = concatenate([[beta[0]], beta])        
     if rightpack is not None:
-        rhoright, vright, uright, pressright, uradright, betaright = rightpack
+        rhoright, vright, uright, betaright = rightpack
+        pressright = uright / (1.-betaright/2.)/3.
+        uradright = uright * (1.-betaright)/(1.-betaright/2.)
         # gnd = geometry_add(gnd, gright)
         rho = concatenate([rho, [rhoright]])
         v = concatenate([v, [vright]])
@@ -390,18 +398,20 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         #        fe[-1] = fe[-2]
         # gnd = geometry_add(gnd, geometry_local(gnd,0))
     g1 = Gamma1(5./3., beta)
+    '''
     csq=g1*press/rho
     if(csq.min()<csqmin):
         wneg = (csq<=csqmin)
         csq[wneg] = csqmin
     #    cs = sqrt(csq)
-    vl, vm, vr =sigvel_mean(v, sqrt(csq))
+    '''
+    vl, vm, vr =sigvel_mean(v, sqrt(g1*press/rho))
     # sigvel_linearized(v, cs, g1, rho, press)
     # sigvel_isentropic(v, cs, g1, csqmin=csqmin)
     if any(vl>=vm) or any(vm>=vr):
         wwrong = (vl >=vm) | (vm<=vr)
         print("rho = "+str((rho[1:])[wwrong]))
-        print("u = "+str((u[1:])[wwrong]))
+        print("press = "+str((press[1:])[wwrong]))
         print(vl[wwrong])
         print(vm[wwrong])
         print(vr[wwrong])
@@ -417,8 +427,8 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
     #  print("size(fe) = "+str(size(fe))+" ( nd = "+str(nd)+" leftpack = "+str(leftpack)+") ")
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
-        dl = gnd.l[1:]-gnd.l[:-1]
-        across = gnd.across
+        #        dl = gnd.l[1:]-gnd.l[:-1]
+        #  across = gnd.across
         '''
         print("flux size = "+str(size(fe_half)))
         print("rho size = "+str(size(rho)))
@@ -427,7 +437,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         print("dl size = "+str(size(dl)))
         print("across size = "+str(size(across)))
         '''
-        duls_half, dule_half = diffuse(rho, urad, v, dl, across)
+        duls_half, dule_half = diffuse(rho, urad, v, gnd.l[1:]-gnd.l[:-1], gnd.across)
         # radial diffusion suppressed, if transverse optical depth is small:
         delta = (gnd.delta[1:]+gnd.delta[:-1])/2.
         duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
@@ -547,8 +557,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
 
     while(t<tmax):
         timer.start_comp("BC")
-        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['press'][0], prim['urad'][0], prim['beta'][0]]
-        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['press'][-1], prim['urad'][-1], prim['beta'][-1]]
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
 
@@ -569,8 +579,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
         prim = toprim(con1)
-        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['press'][0], prim['urad'][0], prim['beta'][0]]
-        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['press'][-1], prim['urad'][-1], prim['beta'][-1]]
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
@@ -586,8 +596,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
         prim = toprim(con2)
-        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['press'][0], prim['urad'][0], prim['beta'][0]]
-        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['press'][-1], prim['urad'][-1], prim['beta'][-1]]
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
@@ -604,8 +614,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile):
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
         prim = toprim(con3)
-        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['press'][0], prim['urad'][0], prim['beta'][0]]
-        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['press'][-1], prim['urad'][-1], prim['beta'][-1]]
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
@@ -806,7 +816,7 @@ def alltire():
     if verbose:
         print(conf+": replenishment time "+str(tr))
     tmax = tr * configactual.getfloat('tmax')
-    dtout = 0.0001/tscale                    # tr * configactual.getfloat('dtout')
+    dtout = tr * configactual.getfloat('dtout')                   # tr * configactual.getfloat('dtout')
     ifplot = configactual.getboolean('ifplot')
     ifhdf = configactual.getboolean('ifhdf')
     plotalias = configactual.getint('plotalias')
@@ -1089,6 +1099,8 @@ def alltire():
         hfile.close()
         
     p.join()
+    if(ifhdf):
+        hdf.close(hfile)
 
 # if we start the simulation automatically:
 if autostart:
