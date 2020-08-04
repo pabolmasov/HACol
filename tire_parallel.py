@@ -63,7 +63,7 @@ def time_step(prim, g, dl):
         ctmp = dl**2 * 3.*prim['rho'][1:-1]
         dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.01) # (dx^2/D)
     else:
-        dt_diff = dt_CFL * 5. # effectively infinity ;)
+        dt_diff = dt_CFL * 50. # effectively infinity ;)
     
     return minimum(dt_CFL, minimum(dt_diff, dt_thermal))# 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
 
@@ -149,7 +149,7 @@ def tratfac(x):
         if(size(wnan)>0):
             tt[wnan] = 0.
             print("trat = "+str(x.min())+".."+str(x.max()))
-            #        ip = input('trat')
+            ip = input('trat')
         return tt
     else:
         if x <= xmin:
@@ -189,25 +189,27 @@ def tocon_separate(rho, v, u, g):
 
 # conversion between conserved and primitive variables using dictionaries and multiple domains
 
-def tocon(prim):
+def tocon(prim, gnd = None):
     '''
     computes conserved quantities from primitives
     '''
     #    m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
     #    rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; nd = prim['N']
-    gnd = l_g[prim['N']]
+    if gnd is None:
+        gnd = l_g[prim['N']]
     
     m=prim['rho']*gnd.across # mass per unit length
     s=m*prim['v'] # momentum per unit length
     e=(prim['u']+prim['rho']*(prim['v']**2/2.- 1./gnd.r - 0.5*(omega*gnd.r*gnd.sth)**2))*gnd.across  # total energy (thermal + mechanic) per unit length
     return {'m': m, 's': s, 'e': e, 'N': prim['N']}
 
-def toprim(con):
+def toprim(con, gnd = None):
     '''
     convert conserved quantities to primitives
     '''
     #  m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
-    gnd = l_g[con['N']]
+    if gnd is None:
+        gnd = l_g[con['N']]
     rho = con['m']/gnd.across
     v = con['s']/con['m']
     u = (con['e']-con['m']*(v**2/2.-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2))/gnd.across
@@ -459,9 +461,9 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
 
     dmt, dst, det = derivo(lhalf, m, s, e, fm_half, fs_half, fe_half, dm, ds, de)
 
-    con1 = {'N': nd, 'm': dmt, 's': dst, 'e': det} # , 'ltot': ltot}
+    # con1 = {'N': nd, 'm': dmt, 's': dst, 'e': det} # , 'ltot': ltot}
 
-    return con1
+    return {'N': nd, 'm': dmt, 's': dst, 'e': det}
 
 def updateCon(l, dl, dt):
     '''
@@ -507,7 +509,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
     con1 = lcon.copy()
     nd = con['N']
     
-    prim = toprim(con) # primitive from conserved
+    prim = toprim(con, gnd = g) # primitive from conserved
 
     #    t = 0.
     print("nd = "+str(nd))
@@ -551,6 +553,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
     print("nd = "+str(nd)+": "+str(lhalf))
     #    ii = input('lhfl')
     tstore = t # ; nout = 0
+    timectr = 0
     if nd == 0:
         if ifrestart:
             fflux=open(outdir+'/'+'flux.dat', 'a')
@@ -568,9 +571,15 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         timer.stop_comp("BC")
 
         # time step: all the domains send dt to first, and then the first sends the minimum value back
-        timer.start_comp("dt")
-        dt = timestepmin(prim, g, dl, dtpipe)
-        timer.stop_comp("dt")
+        if timectr == 0:
+            timer.start_comp("dt")
+            dt = timestepmin(prim, g, dl, dtpipe)
+            timer.stop_comp("dt")
+        #        print("timectr = "+str(timectr))
+        #        print("dt = "+str(dt))
+        timectr += 1
+        if timectr >= timeskip:
+            timectr = 0
         timer.start_comp("RKstep")
         dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'])
         con1 = updateCon(con, dcon1, dt/2.)
@@ -583,7 +592,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
      
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
-        prim = toprim(con1)
+        prim = toprim(con1, gnd = g)
         leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
         rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
@@ -600,7 +609,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
      
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
-        prim = toprim(con2)
+        prim = toprim(con2, gnd = g)
         leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
         rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
@@ -618,7 +627,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
      
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
-        prim = toprim(con3)
+        prim = toprim(con3, gnd = g)
         leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
         rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
@@ -635,12 +644,12 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
             con['e'][-1] = 0.
         if ghostleft is None:
             con['s'][0] = 0.
-        prim = toprim(con)
+            #        prim = toprim(con, gnd = g)
         timer.stop_comp("updateCon")
  
         t += dt
         #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
-        prim = toprim(con) # primitive from conserved
+        prim = toprim(con, gnd = g) # primitive from conserved
         if nd == 0:
             timer.lap("step")
 
@@ -731,7 +740,7 @@ def alltire():
     global taumin, taumax
     global m1, mdot, mdotsink, afac, r_e, dr_e, omega, rstar, umag, xirad
     global eta, heatingeff, nubulk, weinberg
-    global CFL, Cth, Cdiff
+    global CFL, Cth, Cdiff, timeskip
 
     global tscale
     
@@ -755,6 +764,7 @@ def alltire():
     CFL = configactual.getfloat('CFL')
     Cth = configactual.getfloat('Cth')
     Cdiff = configactual.getfloat('Cdiff')
+    timeskip = configactual.getint('timeskip')
     ufloor = configactual.getfloat('ufloor')
     rhofloor = configactual.getfloat('rhofloor')
     csqmin = configactual.getfloat('csqmin')
