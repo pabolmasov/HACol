@@ -870,9 +870,21 @@ def alltire():
     else:
         luni=linspace((g.l).min(), (g.l).max(), nx, endpoint=False)
     g.l -= rbase ; luni -= rbase
-    luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     rfun=interp1d(g.l, g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
+    iftail = configactual.getboolean('iftail')
+    if (iftail):
+        print(luni)
+        rtail = configactual.getfloat('rtailfactor') * rmax
+        lend = luni.max()
+        luni *= sqrt((1.+exp((rnew/rtail)**2))/2.)
+        luni *= lend / luni.max()    
+        print(luni)
+        ii = input('luni')
+        # rfun=interp1d(g.l, g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
+        rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
+
+    luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
     if verbose:
         print(conf+": Across(0) = "+str(g.across[0]))
@@ -1111,7 +1123,7 @@ def alltire():
     p.join()
     if(ifhdf):
         hdf.close(hfile)
-
+        
 # if we start the simulation automatically:
 if autostart:
     alltire()

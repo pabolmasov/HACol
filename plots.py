@@ -32,6 +32,25 @@ use('Agg')
 
 formatsequence = ['k-', 'r:', 'g--', 'b-.']
 
+def qloss_separate(rho, v, u, g, conf):
+    '''
+    standalone estimate for flux distribution
+    '''
+
+    betacoeff = conf.getfloat('betacoeff')
+    xirad = conf.getfloat('xirad')
+    betafun = betafun_define()
+    tau = rho * g.delta
+    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
+    taueff = copy(1./(1./tau + 1./tauphi))
+    taufac =  1.-exp(-tau)
+    beta = betafun(Fbeta(rho, u, betacoeff))
+    urad = copy(u * (1.-beta)/(1.-beta/2.))
+    urad = (urad+abs(urad))/2.    
+    qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
+    return qloss
+
+
 #############################################################
 # Plotting block 
 def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None, configactual = None):
@@ -580,3 +599,44 @@ def allfluxes():
     savefig('allfluxes.png')
     savefig('allfluxes.eps')
     close('all')
+
+def plot_dts(n, prefix = 'out/tireout', postfix = '.dat', conf = 'DEFAULT'):
+    configactual = config[conf]
+    CFL = configactual.getfloat('CFL')
+    Cth = configactual.getfloat('Cth')
+    Cdiff = configactual.getfloat('Cdiff')
+    rstar = configactual.getfloat('rstar')
+    mu30 = configactual.getfloat('mu30')
+    m1 = configactual.getfloat('m1')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3)
+    
+    geofile = os.path.dirname(prefix)+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile)
+    g = geo.geometry()
+    g.r = r ; g.theta = theta ; g.alpha = alpha ; g.l = l ; g.delta = delta
+    g.across = across ; g.cth = cos(theta)
+    dl = l[1:]-l[:-1]
+    dl = concatenate([dl, [dl[-1]]])
+
+    umag = b12**2*2.29e6*m1
+    umagtar = umag * ((1.+3.*g.cth**2)/4. * (rstar/g.r)**6)
+    
+    fname = prefix + entryname(n, ndig=5) + postfix
+    print(fname)
+    lines = loadtxt(fname, comments="#")
+    print(shape(lines))
+    r1 = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3] * umagtar
+    print(shape(r1))
+    print((r1-r).std())
+    csq = 4./3.*u/rho
+    dt_CFL = CFL * dl / (sqrt(csq)+abs(v))
+    
+    qloss = qloss_separate(rho, v, u, g, configactual)
+
+    dt_thermal = Cth * u * g.across / qloss
+
+    dt_diff = Cdiff * dl**2 * rho * 3.
+    someplots(r, [dl], ylog = True, ytitle='$\Delta l$', name = 'dl', formatsequence = ['k-'])
+
+    someplots(r, [dt_CFL, dt_thermal, dt_diff], ylog = True, ytitle='$\Delta t$', name = 'dts', formatsequence = ['k-', 'b:', 'r--'])
