@@ -550,7 +550,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
 
     #    umagtar = umag * ((1.+3.*gext.cth**2)/4. * (rstar/gext.r)**6)[1:-1]
     
-    print("nd = "+str(nd)+": "+str(lhalf))
+    #    print("nd = "+str(nd)+": "+str(lhalf))
     #    ii = input('lhfl')
     tstore = t # ; nout = 0
     timectr = 0
@@ -562,6 +562,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
             fflux=open(outdir+'/'+'flux.dat', 'w')
             ftot=open(outdir+'/'+'totals.dat', 'w')
         timer.start("total")
+        print("dtout = "+str(dtout))
 
     while(t<tmax):
         timer.start_comp("BC")
@@ -571,15 +572,15 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         timer.stop_comp("BC")
 
         # time step: all the domains send dt to first, and then the first sends the minimum value back
+        timer.start_comp("dt")
         if timectr == 0:
-            timer.start_comp("dt")
             dt = timestepmin(prim, g, dl, dtpipe)
-            timer.stop_comp("dt")
         #        print("timectr = "+str(timectr))
         #        print("dt = "+str(dt))
         timectr += 1
         if timectr >= timeskip:
             timectr = 0
+        timer.stop_comp("dt")
         timer.start_comp("RKstep")
         dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'])
         con1 = updateCon(con, dcon1, dt/2.)
@@ -663,10 +664,12 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
                 timer.start("io")
                 m = con['m'] ; e = con['e'] ; umagtar = con['umagtar']
                 rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; urad = prim['urad'] ; beta = prim['beta'] ; press = prim['press']
+                r = g.r
                 for k in range(parallelfactor-1):
                     t1, g1, con1, prim1 = outpipe[k].recv()
                     # print("size(r) = "+str(shape(r))+", "+str(shape(g1.r)))
                     #      ltot += ltot1
+                    r = concatenate([r, g1.r])
                     m = concatenate([m, con1['m']])
                     e = concatenate([e, con1['e']])
                     #                    mtot += trapz(con1['m'], x=g1.l)
@@ -679,6 +682,9 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
                     urad = concatenate([urad, prim1['urad']])
                     beta = concatenate([beta, prim1['beta']])
                     umagtar = concatenate([umagtar, con1['umagtar']])
+                wsort = argsort(r) # restoring the proper order of inputs
+                r = r[wsort] ;  m = m[wsort] ;  e = e[wsort]
+                rho = rho[wsort] ; v = v[wsort] ; u = u[wsort] ; urad = urad[wsort] ; beta = beta[wsort] ; umagtar = umagtar[wsort]
                 qloss = qloss_separate(rho, v, u, gglobal)
                 ltot = trapz(qloss, x = gglobal.l)
                 mtot = trapz(m, x = gglobal.l)
@@ -880,7 +886,7 @@ def alltire():
         luni *= sqrt((1.+exp((rnew/rtail)**2))/2.)
         luni *= lend / luni.max()    
         print(luni)
-        ii = input('luni')
+        #       ii = input('luni')
         # rfun=interp1d(g.l, g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
         rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
 
@@ -1060,6 +1066,8 @@ def alltire():
         hname = outdir+'/'+'tireout.hdf5'
         hfile = hdf.init(hname, g, configactual) # , m1, mdot, eta, afac, re, dre, omega)
         print("output to "+hname)
+    else:
+        hfile = None
         
     crash = False # we have not crashed (yet)
 
@@ -1102,7 +1110,8 @@ def alltire():
         opipes1.append(o1) ; opipes2.append(o2)
     plist = []
         
-    for k in range(parallelfactor):
+    for k in parallelfactor-arange(parallelfactor)-1:
+        # starting in reverse order
         if k>0:
             ghostleft = ghostpipe2[k-1]
             dtpipe = dtpipes2[k-1]
@@ -1118,9 +1127,9 @@ def alltire():
         p = Process(target = onedomain, args = (l_g[k], l_con[k], ghostleft, ghostright, dtpipe, outpipe, hfile), kwargs = {'t': t, 'nout': nout})
         p.start()
         plist.append(p)
-        hfile.close()
+        #        hfile.close()
         
-    p.join()
+    #    p.join()
     if(ifhdf):
         hdf.close(hfile)
         
