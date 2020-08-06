@@ -555,12 +555,6 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
     tstore = t # ; nout = 0
     timectr = 0
     if nd == 0:
-        if ifrestart:
-            fflux=open(outdir+'/'+'flux.dat', 'a')
-            ftot=open(outdir+'/'+'totals.dat', 'a')
-        else:
-            fflux=open(outdir+'/'+'flux.dat', 'w')
-            ftot=open(outdir+'/'+'totals.dat', 'w')
         timer.start("total")
         print("dtout = "+str(dtout))
 
@@ -649,7 +643,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         timer.stop_comp("updateCon")
  
         t += dt
-        #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
+        #    print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
         prim = toprim(con, gnd = g) # primitive from conserved
         if nd == 0:
             timer.lap("step")
@@ -658,83 +652,82 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
             #            ltot = (dcon1['ltot'] + 2.*dcon2['ltot'] + 2.*dcon3['ltot'] + dcon4['ltot'])/6.
             tstore += dtout
             # sending data:
-            if nd > 0:
-                outpipe.send([t, g, con, prim])
-            else:
-                timer.start("io")
+            timer.start("io")
+            outpipe.send([t, g, con, prim])
+            timer.stop("io")
+            if (nd == 0) & (nout%ascalias == 0):
+                timer.stats("step")
+                timer.stats("io")
+                timer.comp_stats()
+                timer.start("step") #refresh lap counter (avoids IO profiling)
+                timer.purge_comps()
+            nout += 1
+    #    dtpipe.close()
+    
+##########################################################
+def tireouts(outpipes, hfile, fflux, ftot):
+    t = 0. ; nout = 0
+
+    while t<tmax:
+        print("tireouts: t = "+str(t))
+        for k in range(size(outpipes)):
+            t, g, con, prim = outpipes[k].recv()
+            if k == 0:
                 m = con['m'] ; e = con['e'] ; umagtar = con['umagtar']
                 rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; urad = prim['urad'] ; beta = prim['beta'] ; press = prim['press']
                 r = g.r
-                for k in range(parallelfactor-1):
-                    t1, g1, con1, prim1 = outpipe[k].recv()
-                    # print("size(r) = "+str(shape(r))+", "+str(shape(g1.r)))
-                    #      ltot += ltot1
-                    r = concatenate([r, g1.r])
-                    m = concatenate([m, con1['m']])
-                    e = concatenate([e, con1['e']])
-                    #                    mtot += trapz(con1['m'], x=g1.l)
-                    #                    etot += trapz(con1['e'], x=g1.l)
-                    #                    r = concatenate([r, g1.r])
-                    rho = concatenate([rho, prim1['rho']])
-                    press = concatenate([press, prim1['press']])
-                    v = concatenate([v, prim1['v']])
-                    u = concatenate([u, prim1['u']])
-                    urad = concatenate([urad, prim1['urad']])
-                    beta = concatenate([beta, prim1['beta']])
-                    umagtar = concatenate([umagtar, con1['umagtar']])
-                wsort = argsort(r) # restoring the proper order of inputs
-                r = r[wsort] ;  m = m[wsort] ;  e = e[wsort]
-                rho = rho[wsort] ; v = v[wsort] ; u = u[wsort] ; urad = urad[wsort] ; beta = beta[wsort] ; umagtar = umagtar[wsort]
-                qloss = qloss_separate(rho, v, u, gglobal)
-                ltot = trapz(qloss, x = gglobal.l)
-                mtot = trapz(m, x = gglobal.l)
-                etot = trapz(e, x = gglobal.l)
-                fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
-                ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
-                print(str(t*tscale)+' '+str(ltot)+'\n')
-                print(str(t*tscale)+' '+str(mtot)+'\n')
-                print("dt = "+str(dt)+'\n')
-                dt, dt_CFL, dt_thermal, dt_diff = timestepdetails(gglobal, rho, press, u, v, urad)
-                print("dt = "+str(dt)+" = "+str(dt_CFL)+"; "+str(dt_thermal)+"; "+str(dt_diff)+"\n")
-                # ii = input("dt")
-                fflux.flush() ; ftot.flush()
-                if hfile is not None:
-                    hdf.dump(hfile, nout, t, rho, v, u, qloss)
-                if not(ifhdf) or (nout%ascalias == 0):
-                    if ifplot:
-                        plots.vplot(gglobal.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
-                        plots.uplot(gglobal.r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
-                        plots.someplots(gglobal.r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
-                                        name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
-                        plots.someplots(gglobal.r, [qloss*gglobal.r],
-                                        name=outdir+'/qloss{:05d}'.format(nout),
-                                        ytitle=r'$\frac{d^2 E}{d\ln l dt}$', ylog=False,
-                                        formatsequence = ['k-', 'r-'])
-                    # ascii output:
-                    # print(nout)
-                    fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
-                    if verbose:
-                        print(" ASCII output to "+fname)
-                    fstream=open(fname, 'w')
-                    fstream.write('# t = '+str(t*tscale)+'s\n')
-                    fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
-                    nx = size(gglobal.r)
-                    for k in arange(nx):
-                        fstream.write(str(gglobal.r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
-                    fstream.close()
-                timer.stop("io")
-                if (nout%ascalias == 0):
-                    timer.stats("step")
-                    timer.stats("io")
-                    timer.comp_stats()
-                    timer.start("step") #refresh lap counter (avoids IO profiling)
-                    timer.purge_comps()
-            nout += 1
-    if nd == 0:
-        fflux.close()
-        ftot.close()
-    dtpipe.close()
-        
+            else:
+                r = concatenate([r, g.r])
+                m = concatenate([m, con['m']])
+                e = concatenate([e, con['e']])
+                rho = concatenate([rho, prim['rho']])
+                press = concatenate([press, prim['press']])
+                v = concatenate([v, prim['v']])
+                u = concatenate([u, prim['u']])
+                urad = concatenate([urad, prim['urad']])
+                beta = concatenate([beta, prim['beta']])
+                umagtar = concatenate([umagtar, con['umagtar']])
+        wsort = argsort(r) # restoring the proper order of inputs
+        r = r[wsort] ;  m = m[wsort] ;  e = e[wsort]
+        rho = rho[wsort] ; v = v[wsort] ; u = u[wsort] ; urad = urad[wsort] ; beta = beta[wsort] ; umagtar = umagtar[wsort]
+        qloss = qloss_separate(rho, v, u, gglobal)
+        ltot = trapz(qloss, x = gglobal.l)
+        mtot = trapz(m, x = gglobal.l)
+        etot = trapz(e, x = gglobal.l)
+        fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
+        ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
+        print(str(t*tscale)+' '+str(ltot)+'\n')
+        print(str(t*tscale)+' '+str(mtot)+'\n')
+        # print("dt = "+str(dt)+'\n')
+        dt, dt_CFL, dt_thermal, dt_diff = timestepdetails(gglobal, rho, press, u, v, urad)
+        print("dt = "+str(dt)+" = "+str(dt_CFL)+"; "+str(dt_thermal)+"; "+str(dt_diff)+"\n")
+        fflux.flush() ; ftot.flush()
+        if hfile is not None:
+            hdf.dump(hfile, nout, t, rho, v, u, qloss)
+        if not(ifhdf) or (nout%ascalias == 0):
+            if ifplot:
+                plots.vplot(gglobal.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
+                plots.uplot(gglobal.r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
+                plots.someplots(gglobal.r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
+                                name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
+                plots.someplots(gglobal.r, [qloss*gglobal.r],
+                                name=outdir+'/qloss{:05d}'.format(nout),
+                                ytitle=r'$\frac{d^2 E}{d\ln l dt}$', ylog=False,
+                                formatsequence = ['k-', 'r-'])
+            # ascii output:
+            # print(nout)
+            fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
+            if verbose:
+                print(" ASCII output to "+fname)
+            fstream=open(fname, 'w')
+            fstream.write('# t = '+str(t*tscale)+'s\n')
+            fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
+            nx = size(gglobal.r)
+            for k in arange(nx):
+                fstream.write(str(gglobal.r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
+            fstream.close()
+        nout += 1
+
 def alltire():
     '''
     the main routine bringing all together
@@ -1106,30 +1099,45 @@ def alltire():
         ghostpipe1.append(gh1) ;  ghostpipe2.append(gh2)
         dt1, dt2 = Pipe(duplex = True)
         dtpipes1.append(dt1) ;dtpipes2.append(dt2)
+    for k in range(parallelfactor):
         o1, o2 = Pipe(duplex = True)
         opipes1.append(o1) ; opipes2.append(o2)
     plist = []
         
-    for k in parallelfactor-arange(parallelfactor)-1:
+    if ifrestart:
+        fflux=open(outdir+'/'+'flux.dat', 'a')
+        ftot=open(outdir+'/'+'totals.dat', 'a')
+    else:
+        fflux=open(outdir+'/'+'flux.dat', 'w')
+        ftot=open(outdir+'/'+'totals.dat', 'w')
+
+    op = Process(target = tireouts, args = (opipes1, hfile, fflux, ftot))
+    for k in range(parallelfactor):
         # starting in reverse order
         if k>0:
             ghostleft = ghostpipe2[k-1]
             dtpipe = dtpipes2[k-1]
-            outpipe = opipes1[k-1]
         else:
             ghostleft = None
             dtpipe = dtpipes1
-            outpipe = opipes2
         if k<(parallelfactor-1):
             ghostright = ghostpipe1[k]
         else:
             ghostright = None
+        outpipe = opipes2[k]
         p = Process(target = onedomain, args = (l_g[k], l_con[k], ghostleft, ghostright, dtpipe, outpipe, hfile), kwargs = {'t': t, 'nout': nout})
-        p.start()
         plist.append(p)
+
+    for k in range(parallelfactor):
+        plist[k].start()
+    op.start()
         #        hfile.close()
-        
-    #    p.join()
+    '''
+    for k in range(parallelfactor):
+        plist[k].join()
+    op.join()
+   ''' 
+    fflux.close() ; ftot.close()
     if(ifhdf):
         hdf.close(hfile)
         
