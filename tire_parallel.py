@@ -344,12 +344,15 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
     calculating elementary increments of conserved quantities
     '''
     #    prim = toprim(con) # primitive from conserved
-    rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad'] ; u = prim['u'] ; beta = prim['beta']
+    rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad'] ; u = prim['u']
+    beta = prim['beta']
+    #    beta = betafun(Fbeta(rho, u, betacoeff))
     nd = prim['N']
     #
     # adding ghost zones:
     if leftpack is not None:
-        rholeft, vleft, uleft, betaleft = leftpack
+        rholeft, vleft, uleft = leftpack
+        betaleft = betafun(Fbeta(rholeft, uleft, betacoeff))
         uradleft = uleft * (1.-betaleft)/(1.-betaleft/2.)
         pressleft = uleft / (1.-betaleft/2.)/3.
         # gnd = geometry_add(gleft, gnd)
@@ -369,7 +372,8 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         press = concatenate([[press[0]], press])
         beta = concatenate([[beta[0]], beta])        
     if rightpack is not None:
-        rhoright, vright, uright, betaright = rightpack
+        rhoright, vright, uright = rightpack
+        betaright = betafun(Fbeta(rhoright, uright, betacoeff))
         pressright = uright / (1.-betaright/2.)/3.
         uradright = uright * (1.-betaright)/(1.-betaright/2.)
         # gnd = geometry_add(gnd, gright)
@@ -560,8 +564,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
 
     while(t<tmax):
         timer.start_comp("BC")
-        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
-        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0]] # , prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1]] #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
 
@@ -588,8 +592,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
         prim = toprim(con1, gnd = g)
-        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
-        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0]] # , prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1]] # , prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
@@ -605,8 +609,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
         prim = toprim(con2, gnd = g)
-        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
-        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0]] # , prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1]] # , prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
@@ -623,8 +627,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         timer.stop_comp("RKstep")
         timer.start_comp("BC")
         prim = toprim(con3, gnd = g)
-        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0], prim['beta'][0]]
-        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1], prim['beta'][-1]]
+        leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0]] # , prim['beta'][0]]
+        rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1]] # , prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
