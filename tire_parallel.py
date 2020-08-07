@@ -573,8 +573,9 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         timer.start_comp("dt")
         if timectr == 0:
             dt = timestepmin(prim, g, dl, dtpipe)
+        #  dt = time_step(prim, g, dl)
         #        print("timectr = "+str(timectr))
-        #        print("dt = "+str(dt))
+        # print("dt = "+str(dt))
         timectr += 1
         if timectr >= timeskip:
             timectr = 0
@@ -647,7 +648,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         timer.stop_comp("updateCon")
  
         t += dt
-        #    print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
+        #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
         prim = toprim(con, gnd = g) # primitive from conserved
         if nd == 0:
             timer.lap("step")
@@ -900,15 +901,7 @@ def alltire():
     dl=g.l[1:]-g.l[:-1] # cell sizes
     dlhalf=ghalf.l[1:]-ghalf.l[:-1] # cell sizes
 
-    # if we are doing parallel calculation:
-    #    if parallelfactor > 1:
-    gglobal = g
-    l_g = geometry_split(g, parallelfactor)
-    l_ghalf = geometry_split(ghalf, parallelfactor, half = True)
-    # now, g is a list of geometries
-    # else:
-    #    print("to perform parallel computation, you need parallelfactor > 1!")
-    #    exit(1)
+
     BSgamma = (g.across/g.delta**2)[0]/mdot*rstar
     BSeta = (8./21./sqrt(2.)*umag*3.)**0.25*sqrt(g.delta[0])/(rstar)**0.125
     if verbose:
@@ -1068,13 +1061,41 @@ def alltire():
         
     crash = False # we have not crashed (yet)
 
-    l_m = array_split(m, parallelfactor) ; l_e = array_split(e, parallelfactor) ; l_s = array_split(s, parallelfactor)
+    # if we want the simulation domains to be unequal in size, scaling as a square of their number:
+    ifquadratic = configactual.getboolean('ifquadratic')
+    if ifquadratic:
+        aind = ceil(nx/parallelfactor**2).astype(int) # ceil(6.*nx/parallelfactor/(parallelfactor+1.)/(2.*parallelfactor+1.)).astype(int)
+        print("first partition is "+str())
+        inds = aind * (arange(parallelfactor-1, dtype = int)+1)**2
+        print(inds)
+    else:
+        inds = parallelfactor
+    
+    # if we are doing parallel calculation:
+    #    if parallelfactor > 1:
+    gglobal = g
+    l_g = geometry_split(g, inds)
+    l_ghalf = geometry_split(ghalf, inds, half = True)
+
+    '''
+    print(size(l_g[0].r))
+    print(size(l_g[1].r))
+    print(size(l_g[2].r))
+    print(shape(array_split(m, inds)[0]))
+    print(shape(array_split(m, inds)[1]))
+    print(shape(array_split(m, inds)[2]))
+    print(size(l_g[2].r))
+    print(size(l_ghalf[2].r))
+    ii = input("inds")
+    '''
+
+    l_m = array_split(m, inds) ; l_e = array_split(e, inds) ; l_s = array_split(s, inds)
     l_con = [{'N': i, 'm': l_m[i], 's': l_s[i], 'e': l_e[i]} for i in range(parallelfactor)] # list of conserved quantities, each item organized as a dictionary
-    l_u = array_split(u, parallelfactor) ; l_rho = array_split(rho, parallelfactor) ; l_v = array_split(v, parallelfactor)
-    l_umagtar = array_split(umagtar, parallelfactor)
-    l_press = array_split(press, parallelfactor) ;    l_urad = array_split(urad, parallelfactor)
+    l_u = array_split(u, inds) ; l_rho = array_split(rho, inds) ; l_v = array_split(v, inds)
+    l_umagtar = array_split(umagtar, inds)
+    l_press = array_split(press, inds) ;    l_urad = array_split(urad, inds)
     beta = betafun(Fbeta(rho, u, betacoeff))
-    l_beta = array_split(beta, parallelfactor) 
+    l_beta = array_split(beta, inds) 
 
     l_prim = [{'N': i, 'rho': l_rho[i], 'v': l_v[i], 'u': l_u[i], 'press': l_press[i], 'urad': l_urad[i], 'beta': l_beta[i]} for i in range(parallelfactor)]
     

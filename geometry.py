@@ -48,23 +48,45 @@ def geometry_split(ginit, np, half = False):
     '''
     replaces the single solid mesh with np chunks of equal length
     '''
-    if np <= 1:
+    nx = size(ginit.r)
+    if np.sum() <= 1:
         return [ginit]
     else:
-        if not(half):
-            nchunk = size(ginit.r) // np
-        else:
-            nchunk = (size(ginit.r)+1) // np
-        if ((nchunk * np) != size(ginit.r)) and not(half):
-            print("geometry_split: dimensions unequal")
-            exit(1)
-        glist = []
-        for k in arange(np):
-            start = nchunk*k
+        scalar = size(np) <= 1
+        if scalar:
             if not(half):
-                finish = start+nchunk
+                nchunk = nx // np
             else:
-                finish = start+nchunk-1
+                nchunk = (nx+1) // np
+            if ((nchunk * np) != size(ginit.r)) and not(half):
+                print("geometry_split: dimensions unequal")
+                exit(1)
+            npp = np
+        else:
+            npp = size(np)+1   
+        glist = []
+        for k in arange(npp):
+            if scalar:
+                start = nchunk*k
+                if not(half):
+                    finish = start+nchunk
+                else:
+                    finish = start+nchunk-1
+            else:
+                if k > 0:
+                    start = np[k-1]
+                else:
+                    start = 0
+                if k < (npp-1):
+                    finish = np[k]
+                else:
+                    finish = nx
+                if half:
+                    if k == 0:
+                        start += 1
+                    else:
+                        if k < (npp-1):
+                            finish -= 1
             g = geometry()
             g.r = ginit.r[start:finish]
             g.l = ginit.l[start:finish]
