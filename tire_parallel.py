@@ -657,6 +657,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
             #            ltot = (dcon1['ltot'] + 2.*dcon2['ltot'] + 2.*dcon3['ltot'] + dcon4['ltot'])/6.
             tstore += dtout
             # sending data:
+            timer.stop("step")
             timer.start("io")
             outpipe.send([t, g, con, prim])
             timer.stop("io")
