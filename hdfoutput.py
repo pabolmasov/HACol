@@ -69,7 +69,7 @@ def read(hname, nentry):
     read a single entry from an HDF5
     '''
     glosave = dict()
-    hfile = h5py.File(hname, "r")
+    hfile = h5py.File(hname, "r", libver='latest')
     geom=hfile["geometry"]
     glo=hfile["globals"]
     glosave["rstar"] = glo.attrs["rstar"]

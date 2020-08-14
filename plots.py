@@ -452,7 +452,8 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
             kctr += 1
     plot(r, -1./sqrt(r*rstar), '--k', label='virial')
     plot(r, -1./7./sqrt(r*rstar), ':k', label=r'$\frac{1}{7}$ virial')
-    legend()
+    if nt < 10:
+        legend()
     xscale('log')
     vmin = maximum(vmin, -1.) ; vmax = minimum(vmax, 1.)
     ylim(vmin, vmax)
@@ -537,7 +538,7 @@ def multishock_plot(fluxfile, frontfile):
     someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
     
-def multimultishock_plot(prefices):
+def multimultishock_plot(prefices, parflux = False):
         # fluxfile1, frontfile1, fluxfile2, frontfile2):
     '''
     plotting many shock fronts together
@@ -554,11 +555,19 @@ def multimultishock_plot(prefices):
         frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
         frontinfo = loadtxt(frontfile+'glo.dat', comments="#", delimiter=" ", unpack=False)
         
-        tf=fluxlines[:,0] ; f=fluxlines[:,1]
+        tf=fluxlines[:,0] # ; f=fluxlines[:,1]
+        if parflux:
+            f = frontlines[1:,4]
+        else:
+            f = fluxlines[:,1]
         ts=frontlines[1:,0] ; s=frontlines[1:,1] ; ds=frontlines[1:,2]
-        tlist.append(ts) 
-        fint = interp1d(tf, f, bounds_error=False)        
-        slist.append(s); flist.append(fint(ts)/4./pi)
+        tlist.append(ts)
+        if parflux:
+            f1 = f # / 4./pi
+        else:
+            fint = interp1d(tf, f, bounds_error=False)
+            f1 = fint(ts)/4./pi
+        slist.append(s); flist.append(f1)
 
         if k == 0:
             eqlum = frontinfo[0] ; rs = frontinfo[1]

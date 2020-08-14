@@ -671,8 +671,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
     #    dtpipe.close()
     
 ##########################################################
-def tireouts(outpipes, hfile, fflux, ftot):
-    t = 0. ; nout = 0
+def tireouts(outpipes, hfile, fflux, ftot, nout = 0):
+    t = 0. 
 
     while t<tmax:
         print("tireouts: t = "+str(t))
@@ -969,7 +969,7 @@ def alltire():
     if(ifrestart):
         ifhdf_restart = configactual.getboolean('ifhdf_restart')
         restartn = configactual.getint('restartn')
-        
+        nout = restartn
         if(ifhdf_restart):
             # restarting from a HDF5 file
             restartfile = configactual.get('restartfile')
@@ -1157,7 +1157,7 @@ def alltire():
     for k in range(parallelfactor):
         plist[k].start()
     op.start()
-        #        hfile.close()
+    #    hfile.close()
     '''
     for k in range(parallelfactor):
         plist[k].join()
@@ -1166,7 +1166,10 @@ def alltire():
     fflux.close() ; ftot.close()
     if(ifhdf):
         hdf.close(hfile)
-        
+    print("zehu\n")
+    for k in range(parallelfactor):
+        plist[k].join()
+    op.join()
 # if we start the simulation automatically:
 if autostart:
     alltire()

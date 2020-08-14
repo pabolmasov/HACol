@@ -49,7 +49,7 @@ def geometry_split(ginit, np, half = False):
     replaces the single solid mesh with np chunks of equal length
     '''
     nx = size(ginit.r)
-    if np.sum() <= 1:
+    if sum(np) <= 1:
         return [ginit]
     else:
         scalar = size(np) <= 1

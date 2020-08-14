@@ -2,11 +2,11 @@ import multiprocessing
 from multiprocessing import Pool
 from numpy import *
 
-from tire_parallel import alltire
+from tire_RK import alltire
 
 print("now you can arrange for a proper config file list in multitire and launch it as multitire()")
 
-def multitire(glolist = ['WIDE', 'WIDENOD', 'WUF'], nproc = None):
+def multitire(glolist = ['WIDE', 'WIDENOD'], nproc = None):
 
     nglo = size(glolist)
     if nproc is None:
