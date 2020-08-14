@@ -507,7 +507,7 @@ def BCsend(leftpipe, rightpipe, leftpack_send, rightpack_send):
     return leftpack, rightpack
 
 def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
-              t = 0., nout = 0.):
+              t = 0., nout = 0):
 
     con = lcon.copy()
     con1 = lcon.copy()
@@ -671,8 +671,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
     #    dtpipe.close()
     
 ##########################################################
-def tireouts(outpipes, hfile, fflux, ftot, nout = 0):
-    t = 0. 
+def tireouts(outpipes, hfile, fflux, ftot, nout = 0, t=0.):
 
     while t<tmax:
         print("tireouts: t = "+str(t))
@@ -1137,7 +1136,7 @@ def alltire():
         fflux=open(outdir+'/'+'flux.dat', 'w')
         ftot=open(outdir+'/'+'totals.dat', 'w')
 
-    op = Process(target = tireouts, args = (opipes1, hfile, fflux, ftot))
+    op = Process(target = tireouts, args = (opipes1, hfile, fflux, ftot), kwargs = {'t': t, 'nout': nout})
     for k in range(parallelfactor):
         # starting in reverse order
         if k>0:
