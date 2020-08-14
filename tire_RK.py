@@ -14,12 +14,22 @@ import sys
 
 # configuration file:
 import configparser as cp
+
+if(size(sys.argv)>1):
+    print("launched with arguments "+str(', '.join(sys.argv)))
+    # new conf file
+    conf=sys.argv[1]
+    print(conf+" configuration set by the arguments")
+else:
+    conf='DEFAULT'
+
 conffile = 'globals.conf'
 config = cp.ConfigParser(inline_comment_prefixes="#")
 config.read(conffile) 
-ifplot = config['DEFAULT'].getboolean('ifplot')
-ifhdf = config['DEFAULT'].getboolean('ifhdf')
-verbose = config['DEFAULT'].getboolean('verbose')
+ifplot = config[conf].getboolean('ifplot')
+ifhdf = config[conf].getboolean('ifhdf')
+verbose = config[conf].getboolean('verbose')
+autostart = config[conf].getboolean('autostart')
 #
 
 # loading local modules:
@@ -311,7 +321,7 @@ def RKstep(m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, mome
 ################################################################################
 print("if you want to start the simulation, now type `alltire(`conf')` \n")
 
-def alltire(conf):
+def alltire():
     '''
     the main routine bringing all together
     '''
@@ -322,11 +332,7 @@ def alltire(conf):
     global m1, mdot, mdotsink, afac, r_e, dr_e, omega, rstar, umag, xirad
     global eta, heatingeff, nubulk, weinberg
     
-    # initializing variables:
-    if conf is None:
-        configactual = config['DEFAULT']
-    else:
-        configactual = config[conf]
+    configactual = config[conf]
     # geometry:
     nx = configactual.getint('nx')
     nx0 = configactual.getint('nx0factor') * nx
@@ -741,6 +747,9 @@ def alltire(conf):
         hdf.close(hfile)
 # if you want to make a movie of how the velocity changes with time:
 # ffmpeg -f image2 -r 15 -pattern_type glob -i 'out/vtie*0.png' -pix_fmt yuv420p -b 4096k v.mp4
-# if you want the main procedure to start running immediately after the compilation, uncomment the following:
-# alltire('globals')
+
+# if we start the simulation automatically:
+if autostart:
+    alltire()
+
 
