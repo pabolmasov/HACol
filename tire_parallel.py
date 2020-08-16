@@ -508,7 +508,9 @@ def BCsend(leftpipe, rightpipe, leftpack_send, rightpack_send):
 
 def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
               t = 0., nout = 0):
-
+    '''
+    single domain, calculated by a single core
+    '''
     con = lcon.copy()
     con1 = lcon.copy()
     nd = con['N']
@@ -701,6 +703,7 @@ def tireouts(outpipes, hfile, fflux, ftot, nout = 0, t=0.):
         etot = trapz(e, x = gglobal.l)
         fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
         ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+'\n')
+        print(str(t/tmax)+" calculated\n")
         print(str(t*tscale)+' '+str(ltot)+'\n')
         print(str(t*tscale)+' '+str(mtot)+'\n')
         # print("dt = "+str(dt)+'\n')
@@ -735,21 +738,19 @@ def tireouts(outpipes, hfile, fflux, ftot, nout = 0, t=0.):
 
 def alltire():
     '''
-    the main routine bringing all together
+    the main routine starting all the processes 
+    if autostart is set True in globals, it is started automatically
     '''
-    global configactual
+    global configactual # the config set of the current simulation 
     global ifrestart
-    global ufloor, rhofloor, betacoeff, csqmin
-    global raddiff, squeezemode, ufixed, squeezeothersides
-    global taumin, taumax
-    global m1, mdot, mdotsink, afac, r_e, dr_e, omega, rstar, umag, xirad
-    global eta, heatingeff, nubulk, weinberg
-    global CFL, Cth, Cdiff, timeskip
-
-    global tscale
-    
-    global tmax, parallelfactor, dtout, outdir, ascalias, ifhdf
-
+    global ufloor, rhofloor, betacoeff, csqmin # floors for primitive variables
+    global raddiff, squeezemode, squeezeothersides, ufixed # if we take into account radiation diffusion along the line, matter loss from two or four sides, and also the properties of the BC for energy at the upper boundary
+    global taumin, taumax # minimal/maximal optical depth (if tau< taumin, we consider the flow optically thick; if tau>taumax, we use diffusion approximation)
+    global m1, mdot, mdotsink, afac, r_e, dr_e, omega, rstar, umag, xirad # mass, accretion rate, mass loss through the NS surface (ignored so far), azimuthal size of the flow, magnetosphere size, penetration depth, rotation frequency, NS radius, magnetic energy density on the NS surface, radiation diffusion parameter \xi_r
+    global eta, heatingeff, nubulk, weinberg # irratiation parameter eta, heating efficiency \eta_h, bulk viscosity parameter, weinberg regime (boolean) for bulk viscosity
+    global CFL, Cth, Cdiff, timeskip # Fourant-Friedrichs-Levy, thermal, and diffusion dime step multipliers; tie alias for dt adjustment
+    global tscale # time scale     
+    global tmax, parallelfactor, dtout, outdir, ascalias, ifhdf # maximal time, number of parallel cores used for calculations (+ one core for output!), dt for outputs, output directory, alias for graphic outputs, (boolean) if we are using HDF5 for outputs
     global gglobal, l_g, l_ghalf, dlleft, dlright  # geometry and boundary positions
     
     # initializing variables:
@@ -852,7 +853,7 @@ def alltire():
         print(conf+": nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
         print(conf+": nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
 
-    timer.start("total")
+    #    timer.start("total")
 
     # if the outpur directory does not exist:
     if not os.path.exists(outdir):
@@ -877,6 +878,7 @@ def alltire():
     rfun=interp1d(g.l, g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
     rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
     iftail = configactual.getboolean('iftail')
+    # if we want to make the radial mesh even more non-linear:
     if (iftail):
         print(luni)
         rtail = configactual.getfloat('rtailfactor') * rmax
@@ -886,7 +888,7 @@ def alltire():
         print(luni)
         #       ii = input('luni')
         # rfun=interp1d(g.l, g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
-        rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
+        rnew=rfun(luni)
 
     luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
     g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
@@ -900,7 +902,6 @@ def alltire():
     ghalf.l += g.l[1]/2. # mid-step mesh starts halfstep later
     dl=g.l[1:]-g.l[:-1] # cell sizes
     dlhalf=ghalf.l[1:]-ghalf.l[:-1] # cell sizes
-
 
     BSgamma = (g.across/g.delta**2)[0]/mdot*rstar
     BSeta = (8./21./sqrt(2.)*umag*3.)**0.25*sqrt(g.delta[0])/(rstar)**0.125
@@ -973,7 +974,6 @@ def alltire():
             # restarting from a HDF5 file
             restartfile = configactual.get('restartfile')
             entryname, t, l1, r1, sth1, rho1, u1, v1, qloss1, glosave = hdf.read(restartfile, restartn)
-            tstore = t
             print("restarted from file "+restartfile+", entry "+entryname)
         else:
             # restarting from an ascii output
@@ -992,7 +992,6 @@ def alltire():
             tline = tfile.readline()
             tfile.close()
             t=double(re.search(r'\d+.\d+', tline).group()) / tscale
-            tstore = t
             print("restarted from ascii output "+ascrestartname)
             print("t = "+str(t))
         if verbose:
@@ -1050,8 +1049,7 @@ def alltire():
     if ulast < 0.:
         print("negative internal energy in the IC\n")
         print(ulast)
-        ii = input("C")
-        
+        ii = input("C")        
     if(ifhdf):
         hname = outdir+'/'+'tireout.hdf5'
         hfile = hdf.init(hname, g, configactual) # , m1, mdot, eta, afac, re, dre, omega)
@@ -1120,12 +1118,12 @@ def alltire():
     
     for k in range(parallelfactor-1):
         # connects kth with (k+1)th
-        gh1, gh2 = Pipe(duplex = True)
+        gh1, gh2 = Pipe(duplex = True) # pipes between the domains
         ghostpipe1.append(gh1) ;  ghostpipe2.append(gh2)
-        dt1, dt2 = Pipe(duplex = True)
+        dt1, dt2 = Pipe(duplex = True) # pipes exchanging the time step
         dtpipes1.append(dt1) ;  dtpipes2.append(dt2)
     for k in range(parallelfactor):
-        o1, o2 = Pipe(duplex = True)
+        o1, o2 = Pipe(duplex = True) # pipes for output
         opipes1.append(o1) ; opipes2.append(o2)
     plist = []
         
@@ -1136,7 +1134,7 @@ def alltire():
     fflux=open(outdir+'/'+'flux.dat', 'w')
     ftot=open(outdir+'/'+'totals.dat', 'w')
 
-    op = Process(target = tireouts, args = (opipes1, hfile, fflux, ftot), kwargs = {'t': t, 'nout': nout})
+    op = Process(target = tireouts, args = (opipes1, hfile, fflux, ftot), kwargs = {'t': t, 'nout': nout}) # output process
     for k in range(parallelfactor):
         # starting in reverse order
         if k>0:
@@ -1150,7 +1148,7 @@ def alltire():
         else:
             ghostright = None
         outpipe = opipes2[k]
-        p = Process(target = onedomain, args = (l_g[k], l_con[k], ghostleft, ghostright, dtpipe, outpipe, hfile), kwargs = {'t': t, 'nout': nout})
+        p = Process(target = onedomain, args = (l_g[k], l_con[k], ghostleft, ghostright, dtpipe, outpipe, hfile), kwargs = {'t': t, 'nout': nout}) # main calculations 
         plist.append(p)
 
     for k in range(parallelfactor):

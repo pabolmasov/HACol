@@ -115,17 +115,18 @@ class Timer:
             t0 = np.sum(ts)
 
             if t0 < 1.0e-6:
-                print("--- {:.10 }   time: {:8.5f} mus /  {:3d}  ({})".format(name.ljust(10), t0/1.0e6, cnts, t0))
+                #    print("--- {:.10 }   time: {:8.5f} mus /  {:3d}  ({})".format(name.ljust(10), t0/1.0e6, cnts, t0))
+                print("--- {:.10}   time: {:8.5f} ms  /  {:3d}  ({})".format(name.ljust(10), t0/1.0e6, cnts, t0), flush=True)
             elif 1.0e-6 < t0 < 1.0e-3:
-                print("--- {:.10}   time: {:8.5f} ms  /  {:3d}  ({})".format(name.ljust(10), t0/1.0e3, cnts, t0))
+                print("--- {:.10}   time: {:8.5f} ms  /  {:3d}  ({})".format(name.ljust(10), t0/1.0e3, cnts, t0), flush=True)
             elif 1.0e-3 < t0:
-                print("--- {:.10}   time: {:8.5f} s   /  {:3d}  ({})".format(name.ljust(10), t0,       cnts, t0))
+                print("--- {:.10}   time: {:8.5f} s   /  {:3d}  ({})".format(name.ljust(10), t0,       cnts, t0), flush=True)
 
             if cnts > 1:
-                print("- - -          avg: {:8.5f} s   /  {:3d}  ({})".format(tavg, cnts, tavg))
-                print("- - -          std: {:8.5f} s   /  {:3d}  ({})".format(tstd, cnts, tstd))
+                print("- - -          avg: {:8.5f} s   /  {:3d}  ({})".format(tavg, cnts, tavg), flush=True)
+                print("- - -          std: {:8.5f} s   /  {:3d}  ({})".format(tstd, cnts, tstd), flush=True)
 
-        print("--------------------------------------------------")
+        print("--------------------------------------------------", flush=True)
 
 
     def dump(self):
