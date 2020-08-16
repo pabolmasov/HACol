@@ -1123,18 +1123,18 @@ def alltire():
         gh1, gh2 = Pipe(duplex = True)
         ghostpipe1.append(gh1) ;  ghostpipe2.append(gh2)
         dt1, dt2 = Pipe(duplex = True)
-        dtpipes1.append(dt1) ;dtpipes2.append(dt2)
+        dtpipes1.append(dt1) ;  dtpipes2.append(dt2)
     for k in range(parallelfactor):
         o1, o2 = Pipe(duplex = True)
         opipes1.append(o1) ; opipes2.append(o2)
     plist = []
         
-    if ifrestart:
-        fflux=open(outdir+'/'+'flux.dat', 'a')
-        ftot=open(outdir+'/'+'totals.dat', 'a')
-    else:
-        fflux=open(outdir+'/'+'flux.dat', 'w')
-        ftot=open(outdir+'/'+'totals.dat', 'w')
+    #    if ifrestart:
+    #        fflux=open(outdir+'/'+'flux.dat', 'a')
+    #        ftot=open(outdir+'/'+'totals.dat', 'a')
+    #    else:
+    fflux=open(outdir+'/'+'flux.dat', 'w')
+    ftot=open(outdir+'/'+'totals.dat', 'w')
 
     op = Process(target = tireouts, args = (opipes1, hfile, fflux, ftot), kwargs = {'t': t, 'nout': nout})
     for k in range(parallelfactor):
@@ -1161,7 +1161,7 @@ def alltire():
     for k in range(parallelfactor):
         plist[k].join()
     op.join()
-   ''' 
+    ''' 
     fflux.close() ; ftot.close()
     if(ifhdf):
         hdf.close(hfile)
