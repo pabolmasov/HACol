@@ -272,7 +272,7 @@ def shock_dat(n, prefix = "out/tireout", kleap = 1):
     #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
     return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.,v[maximum(wcomp-kleap,00)], v[minimum(wcomp+1+kleap, size(r)-1)]
     
-def multishock(n1, n2, dn, prefix = "out/tireout", dat = True, conf = None, kleap = 5, xest = 4.):
+def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kleap = 5, xest = 4.):
     '''
     draws the motion of the shock front with time, for a given set of HDF5 entries or ascii outputs
     '''
@@ -333,6 +333,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = True, conf = None, klea
 
     print("predicted shock position: xs = "+str(xs)+" (rstar)")
     print("cooling limit: rcool/rstar = "+str(rcool/rstar))
+    print("flux array size "+str(size(lc_tot)))
     ff /= 4.*pi  ; eqlum /= 4.*pi ; lc_tot /= 4.*pi ; lc_part /= 4.*pi
     t *= tscale
 
@@ -341,8 +342,8 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = True, conf = None, klea
         ws=where(s>1.)
         n=ws
         plots.someplots(t[ws], [s[ws], s*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
-        plots.someplots(lc_part[ws], [s[ws], s*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog= (ff[n].max()/ff[n].min()) > 3., ylog= (s[ws].max()/s[ws].min()> 3.), formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
-        plots.someplots(t[ws], [ff[n], lc_part[ws], ff[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False, formatsequence = ['k:', 'k-', 'r-'])
+        plots.someplots(lc_part[ws], [s[ws], s*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog= (lc_tot[ws].max()/lc_tot[ws].min()) > 10., ylog= (s[ws].max()/s[ws].min()> 10.), formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
+        # plots.someplots(t[ws], [ff[n], lc_part[ws], ff[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False, formatsequence = ['k:', 'k-', 'r-'])
         plots.someplots(t[ws], [-v1[ws], -v2[ws], sqrt(2./s[ws]/rstar), sqrt(2./s[ws]/rstar)/7.], name = outdir+"/vleap",xtitle=r'$t$, s', ytitle=r'$ v /c$', xlog=False, formatsequence = ['k-', 'b:', 'r-', 'r-'])
 
     print("effective compression factor "+str(compression[isfinite(compression)].mean()))
@@ -365,7 +366,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = True, conf = None, klea
     wlate = where(tf > (tf.max()*0.9))
     xmean = s[wlaten].mean() ; xrms = s[wlaten].std()+ds[wlaten].mean()
     print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
-    fmean = ff[wlaten].mean() ; frms = ff[wlaten].std()
+    fmean = ff[wlate].mean() ; frms = ff[wlate].std()
     print("flux = "+str(fmean)+"+/-"+str(frms)+"\n")
     print("OR flux = "+str(lc_tot[wlaten].mean())+".."+str(lc_part[wlaten].mean())+"\n")
     
@@ -504,7 +505,7 @@ def virialtest(n1, n2, prefix = 'out/tireout'):
     if(ifplot):
         plots.someplots(tar, [virar], name = prefix+"_vire", xtitle=r'$t$', ytitle=r'$E_{\rm k} / E_{\rm g}$', xlog=False, ylog=False, formatsequence=['k-'])
 
-def filteredflux(hfile, n1, n2, rfraction = 0.9):
+def filteredflux(hfile, n1, n2, rfraction = 0.9, conf = 'DEFAULT'):
     '''
     calculates the flux excluding several outer points affected by the outer BC
     hfile is the input HDF5 file
@@ -515,6 +516,8 @@ def filteredflux(hfile, n1, n2, rfraction = 0.9):
     geofile = os.path.dirname(hfile)+"/geo.dat"
     r, theta, alpha, across, l, delta = geo.gread(geofile)
     wr = r < (r.max()*rfraction)
+
+    tscale = config[conf].getfloat('tscale') * config[conf].getfloat('m1')
 
     lint = zeros(n2-n1)
     ltot = zeros(n2-n1)
@@ -527,6 +530,7 @@ def filteredflux(hfile, n1, n2, rfraction = 0.9):
         ltot[k] = simps(qloss, x=l)
         tar[k] = t
     ltot /= 4.*pi ; lint /= 4.*pi # convert to Eddington units
+    tar *= tscale
     if(ifplot):
         # overplotting with the total flux
         plots.someplots(tar, [lint, ltot, ltot-lint, lint*0.+mdot*0.2], xlog=False, formatsequence = ['k-', 'g--', 'b--', 'r-'], xtitle='t, s', ytitle=r'$L/L_{\rm Edd}$', name= os.path.dirname(hfile)+'/cutflux')

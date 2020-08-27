@@ -3,8 +3,6 @@ import h5py
 import os.path
 from numpy import arange, size
 
-# TODO: make a merger!
-
 def entryname(n, ndig = 6):
     entry = str(n).rjust(ndig, '0') # allows for 6 positions (hundreds of thousand of entries)
     return entry
@@ -114,7 +112,7 @@ def stitch(hname1, hname2):
         geom.create_dataset(k, data=geom1[k])
     print(glo.attrs["rstar"])
     print(geom["l"])
-    ii=input("k")
+    #    ii=input("k")
    
     # all the entries, excluding globals and geometry
     keys1 = list(hfile1.keys())[:-2] ; keys2 = list(hfile2.keys())[:-2] 
@@ -135,7 +133,7 @@ def stitch(hname1, hname2):
     keys22 = [i for i in keys2 if i not in keys1]
         
     for k in arange(size(keys22)):
-        entry = keys2[k]
+        entry = keys22[k]
         grp = hnew.create_group(entry)
         data = hfile2[entry]
         grp.attrs["t"] = data.attrs["t"]

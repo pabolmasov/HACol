@@ -34,6 +34,8 @@ verbose = config[conf].getboolean('verbose')
 autostart = config[conf].getboolean('autostart')
 #
 
+ttest = False
+
 # loading local modules:
 if ifplot:
     import plots
@@ -50,6 +52,7 @@ timer = Timer(["total", "step", "io"],
 
 def time_step(prim, g, dl):
     # time step adjustment:
+    # also outputs total luminosity of the fraction of the flow, if global eta>0.
     csqest = 4./3.*prim['press']/prim['rho']
     dt_CFL = CFL * (dl / (sqrt(csqest)+abs(prim['v']))[1:-1]).min()
     qloss = 2.*prim['urad']/prim['rho'] / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
@@ -61,11 +64,15 @@ def time_step(prim, g, dl):
     
     if(raddiff):
         ctmp = dl**2 * 3.*prim['rho'][1:-1]
-        dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.01) # (dx^2/D)
+        dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.1) # (dx^2/D)
     else:
-        dt_diff = dt_CFL * 50. # effectively infinity ;)
-    
-    return minimum(dt_CFL, minimum(dt_diff, dt_thermal))# 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
+        dt_diff = dt_CFL * 5. # effectively infinity ;)
+
+    if eta>0.:
+        ltot = trapz(qloss, x = g.l)
+        return minimum(dt_CFL, minimum(dt_diff, dt_thermal)), ltot
+    else:
+        return minimum(dt_CFL, minimum(dt_diff, dt_thermal))# 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
 
 def timestepdetails(g, rho, press, u, v, urad):
     dl = g.l[1:]-g.l[:-1]
@@ -85,20 +92,41 @@ def timestepdetails(g, rho, press, u, v, urad):
 def timestepmin(prim, g, dl, dtpipe):
     nd = prim['N']
     if nd > 0:
-        dtlocal = time_step(prim, g, dl)
-        dtpipe.send(dtlocal)
+        if eta>0.:
+            dtlocal, ltot = time_step(prim, g, dl)
+            dtpipe.send([dtlocal, ltot])
+        else:
+            dtlocal = time_step(prim, g, dl)
+            dtpipe.send(dtlocal)
     else:
         #        dtlocal = time_step(prim, g, dl)
-        dt = time_step(prim, g, dl)
+        if eta>0.:
+            dt, ltot = time_step(prim, g, dl)
+        else:
+            dt = time_step(prim, g, dl)
         for k in range(parallelfactor -1):
-            dtk = dtpipe[k].recv()
+            if eta>0.:
+                dtk, ltk = dtpipe[k].recv()
+            else:
+                dtk = dtpipe[k].recv()
             dt = minimum(dt, dtk)
+            if eta>0.:
+                ltot += ltk
     if nd == 0:
         for k in range(parallelfactor -1):
-            dtpipe[k].send(dt)
+            if eta>0.:
+                dtpipe[k].send([dt, ltot])
+            else:
+                dtpipe[k].send(dt)
     else:
-        dt = dtpipe.recv()             
-    return dt
+        if eta>0.:
+            dt, ltot = dtpipe.recv()
+        else:
+            dt = dtpipe.recv()             
+    if eta > 0.:
+        return dt, ltot
+    else:
+        return dt
 
 #
 def regularize(u, rho, press):
@@ -517,6 +545,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
     
     prim = toprim(con, gnd = g) # primitive from conserved
 
+    ltot = 0. # total luminosity of the flow (required for IRR)
+    
     #    t = 0.
     print("nd = "+str(nd))
     print("tmax = "+str(tmax))
@@ -524,17 +554,18 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
     gleftbound = geometry_local(g, 0)
     grightbound = geometry_local(g, -1)
     # topology test:
-    if ghostleft is not None:
-        ghostleft.send([nd, nd-1])
-    if ghostright is not None:
-        ghostright.send([nd, nd+1])
-    if ghostleft is not None:
-        ndleft, ndcheckleft = ghostleft.recv()
-        print("received from "+str(ndleft)+" (left), I should be "+str(ndcheckleft)+", and I am "+str(nd))
-    if ghostright is not None:
-        ndright, ndcheckright = ghostright.recv()
-        print("received from "+str(ndright)+" (right), I should be "+str(ndcheckright)+", and I am "+str(nd))
-    print("this was topology test\n")
+    if ttest:
+        if ghostleft is not None:
+            ghostleft.send([nd, nd-1])
+        if ghostright is not None:
+            ghostright.send([nd, nd+1])
+        if ghostleft is not None:
+            ndleft, ndcheckleft = ghostleft.recv()
+            print("received from "+str(ndleft)+" (left), I should be "+str(ndcheckleft)+", and I am "+str(nd))
+        if ghostright is not None:
+            ndright, ndcheckright = ghostright.recv()
+            print("received from "+str(ndright)+" (right), I should be "+str(ndcheckright)+", and I am "+str(nd))
+        print("this was topology test\n")
     # exchange geometry!
     if ghostleft is not None:
         ghostleft.send(gleftbound)
@@ -574,16 +605,20 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         # time step: all the domains send dt to first, and then the first sends the minimum value back
         timer.start_comp("dt")
         if timectr == 0:
-            dt = timestepmin(prim, g, dl, dtpipe)
-        #  dt = time_step(prim, g, dl)
-        #        print("timectr = "+str(timectr))
-        # print("dt = "+str(dt))
+            if eta>0.:
+                dt, ltot = timestepmin(prim, g, dl, dtpipe)
+            else:
+                dt = timestepmin(prim, g, dl, dtpipe)
+                ltot = 0.
+            #  dt = time_step(prim, g, dl)
+            #        print("timectr = "+str(timectr))
+            # print("dt = "+str(dt))                
         timectr += 1
         if timectr >= timeskip:
             timectr = 0
         timer.stop_comp("dt")
         timer.start_comp("RKstep")
-        dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'])
+        dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot)
         con1 = updateCon(con, dcon1, dt/2.)
      
         if ghostright is None:
@@ -600,7 +635,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon2 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar']) # , BCfluxleft, BCfluxright)
+        dcon2 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , BCfluxleft, BCfluxright)
         con2 = updateCon(con, dcon2, dt/2.)
      
         if ghostright is None:
@@ -617,7 +652,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon3 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar']) #, BCfluxleft, BCfluxright)
+        dcon3 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) #, BCfluxleft, BCfluxright)
 
         con3 = updateCon(con, dcon3, dt)
         
@@ -635,7 +670,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
-        dcon4 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar']) # , BCfluxleft, BCfluxright)
+        dcon4 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , BCfluxleft, BCfluxright)
         timer.stop_comp("RKstep")
         timer.start_comp("updateCon")
 
@@ -676,7 +711,7 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
 def tireouts(outpipes, hfile, fflux, ftot, nout = 0, t=0.):
 
     while t<tmax:
-        print("tireouts: t = "+str(t))
+        print("tireouts: t = "+str(t)+"; tmax = "+str(tmax))
         for k in range(size(outpipes)):
             t, g, con, prim = outpipes[k].recv()
             if k == 0:
@@ -810,7 +845,9 @@ def alltire():
     dr_e = configactual.getfloat('drrat') * r_e
     omega = configactual.getfloat('omegafactor')*r_e**(-1.5)
     if verbose:
+        print("r_e = "+str(r_e/rstar))
         print(conf+": "+str(omega))
+        ii =input("R")
 
     vout = configactual.getfloat('voutfactor')  /sqrt(r_e) # velocity at the outer boundary
     minitfactor = configactual.getfloat('minitfactor') # initial total mass in the units of equilibrium mass
@@ -1035,6 +1072,7 @@ def alltire():
         m, s, e = tocon_separate(rho, v, u, g)
         nout = restartn
         #    plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie_restart', umagtar = umagtar)
+        tmax += t
     fname=outdir+'/tireout_start.dat'
     if verbose:
         print("ASCII initial state")
