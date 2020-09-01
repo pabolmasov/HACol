@@ -308,7 +308,10 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     delta = g.delta[1:-1] ;  across = g.across[1:-1] ; r = g.r[1:-1] ; cth = g.cth[1:-1] ; sth = g.sth[1:-1] ; cosa = g.cosa[1:-1] ; sina = g.sina[1:-1]
     #    tau = rho * delta # tau in transverse direction
     #    tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
-    taueff = rho / (1./delta + 2. * delta /  across)
+    if cooltwosides:
+        taueff = rho *delta
+    else:
+        taueff = rho / (1./delta + 2. * delta /  across)
     # copy(1./(1./tau + 1./tauphi))
     #    taufac = taufun(taueff)    # 1.-exp(-tau)
     #    taufac = 1. 
@@ -324,7 +327,10 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #    urad = prim['urad']
     #     urad = copy(u * (1.-beta)/(1.-beta/2.))
     #    urad = (urad+abs(urad))/2.
-    qloss = 2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)* taufun(taueff)  # diffusion approximation; energy lost from 4 sides
+    if cooltwosides:
+        qloss = 2.*urad/(xirad*taueff+1.)*(across/delta)* taufun(taueff)  # diffusion approximation; energy lost from 4 sides
+    else:
+        qloss = 2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)* taufun(taueff)  # diffusion approximation; energy lost from 4 sides
     # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = rho*0.-dmsqueeze # copy(rho*0.-dmsqueeze)
@@ -779,7 +785,7 @@ def alltire():
     global configactual # the config set of the current simulation 
     global ifrestart
     global ufloor, rhofloor, betacoeff, csqmin # floors for primitive variables
-    global raddiff, squeezemode, squeezeothersides, ufixed # if we take into account radiation diffusion along the line, matter loss from two or four sides, and also the properties of the BC for energy at the upper boundary
+    global raddiff, squeezemode, squeezeothersides, cooltwosides, ufixed # if we take into account radiation diffusion along the line, matter loss from two or four sides, and also the properties of the BC for energy at the upper boundary
     global taumin, taumax # minimal/maximal optical depth (if tau< taumin, we consider the flow optically thick; if tau>taumax, we use diffusion approximation)
     global m1, mdot, mdotsink, afac, r_e, dr_e, omega, rstar, umag, xirad # mass, accretion rate, mass loss through the NS surface (ignored so far), azimuthal size of the flow, magnetosphere size, penetration depth, rotation frequency, NS radius, magnetic energy density on the NS surface, radiation diffusion parameter \xi_r
     global eta, heatingeff, nubulk, weinberg # irratiation parameter eta, heating efficiency \eta_h, bulk viscosity parameter, weinberg regime (boolean) for bulk viscosity
@@ -825,6 +831,7 @@ def alltire():
     ufixed = configactual.getboolean('ufixed')
     squeezemode = configactual.getboolean('squeezemode')
     squeezeothersides = configactual.getboolean('squeezeothersides')
+    cooltwosides = configactual.getboolean('cooltwosides')
 
     # radiation transfer:
     raddiff = configactual.getboolean('raddiff')
@@ -847,7 +854,6 @@ def alltire():
     if verbose:
         print("r_e = "+str(r_e/rstar))
         print(conf+": "+str(omega))
-        ii =input("R")
 
     vout = configactual.getfloat('voutfactor')  /sqrt(r_e) # velocity at the outer boundary
     minitfactor = configactual.getfloat('minitfactor') # initial total mass in the units of equilibrium mass
@@ -869,10 +875,11 @@ def alltire():
     
     if verbose & (omega>0.):
         print(conf+": spin period "+str(2.*pi/omega*tscale)+"s")
-    # output options
-    tr = afac * dr_e/r_e /xifac / rstar * r_e**2.5 # replenishment time scale of the column
+    tr = afac * dr_e/r_e / xifac * r_e**2.5 / rstar # replenishment time scale of the column
     if verbose:
-        print(conf+": replenishment time "+str(tr))
+        print("r_e = "+str(r_e))
+        print(conf+": replenishment time "+str(tr*tscale))
+        ii =input("R")
     tmax = tr * configactual.getfloat('tmax')
     dtout = tr * configactual.getfloat('dtout')                   # tr * configactual.getfloat('dtout')
     ifplot = configactual.getboolean('ifplot')

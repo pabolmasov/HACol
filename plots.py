@@ -30,7 +30,7 @@ close('all')
 ioff()
 use('Agg')
 
-formatsequence = ['k-', 'r:', 'g--', 'b-.']
+formatsequence = ['k-', 'g:', 'r--', 'b-.']
 
 def qloss_separate(rho, v, u, g, conf):
     '''
@@ -307,7 +307,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
     colorbar()
 #    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
+    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
     savefig(outdir+'/q2d_v.png')
@@ -321,7 +321,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     plot(rnew, varmean+varstd, color='gray')
     plot(rnew, varmean-varstd, color='gray')
     ylim((varmean-varstd*2.).min(), (varmean+varstd*2.).max())
-    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14)
+    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14)
     ylabel(r'$\langle v\rangle /c$', fontsize=14)
     fig.set_size_inches(3.35, 2.)
     fig.tight_layout()
@@ -343,7 +343,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     contourf(rnew, tar*tscale, lurel, cmap='hot', levels=lulev)
     colorbar()
     contour(rnew, tar*tscale, par/umagtar, levels=[0.9], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
+    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
     savefig(outdir+'/q2d_u.png')
@@ -356,7 +356,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
     colorbar()
 #    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
+    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
     savefig(outdir+'/q2d_q.png')
@@ -383,7 +383,7 @@ def postplot(hname, nentry, ifdat = True):
     #    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
     #    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
     someplots(r, [-v*rho*across, v*rho*across], name=hname+entryname+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])
-    someplots(r, [-u*v*(r/r.min())**4], name=hname+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm NS}\right)^4$", ylog=True)
+    someplots(r, [-u*v*(r/r.min())**4], name=hname+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm *}\right)^4$", ylog=True)
     
 def multiplots(hname, n1, n2):
     '''
@@ -538,7 +538,7 @@ def multishock_plot(fluxfile, frontfile):
     someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
     
-def multimultishock_plot(prefices, parflux = False):
+def multimultishock_plot(prefices, parflux = False, sfilter = 1.):
         # fluxfile1, frontfile1, fluxfile2, frontfile2):
     '''
     plotting many shock fronts together
@@ -567,7 +567,7 @@ def multimultishock_plot(prefices, parflux = False):
         else:
             fint = interp1d(tf, f, bounds_error=False)
             f1 = fint(ts)/4./pi
-        slist.append(s); flist.append(f1)
+        slist.append(s[s>sfilter]); flist.append(f1[s>sfilter])
 
         if k == 0:
             eqlum = frontinfo[0] ; rs = frontinfo[1]
@@ -578,7 +578,7 @@ def multimultishock_plot(prefices, parflux = False):
     plot([minimum(flist[0].min(), flist[1].min()), maximum(flist[0].max(), flist[-1].max())], [rs, rs], 'r-')
     plot([eqlum, eqlum], [minimum(slist[0].min(), slist[-1].min()), maximum(slist[0].max(), slist[-1].max())], 'r-')
     xlabel(r'$L/L_{\rm Edd}$', fontsize=14) ; ylabel(r'$R_{\rm shock}/R_*$', fontsize=14)
-    savefig("manyfluxfronts.png") ;   savefig("manyfluxfronts.eps")
+    savefig("manyfluxfronts.png") ;   savefig("manyfluxfronts.pdf")
     close('all')
     
 #############################################################
