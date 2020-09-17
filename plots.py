@@ -184,7 +184,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     xlabel(xtitle, fontsize=14) ; ylabel(ytitle, fontsize=14)
     plt.tick_params(labelsize=12, length=1, width=1., which='minor')
     plt.tick_params(labelsize=12, length=3, width=1., which='major')
-    fig.set_size_inches(4, 4)
+    fig.set_size_inches(6, 4)
     fig.tight_layout()
     savefig(name+'.png')
     close('all')
@@ -213,6 +213,28 @@ def binplot_short(freq, dfreq, pds, dpds, outfile='binnedpds'):
     ylabel('PDS') ; xlabel('$f$, Hz')
     savefig(outfile+'.png')
     close()
+
+def errorplot(x, dx, y, dy, outfile = 'errorplot', xtitle = None, ytitle = None, fit = None,
+              yrange = None):
+
+    clf()
+    fig = figure()
+    errorbar(x, y, xerr=dx, yerr=dy, fmt='.k')
+    if fit is not None:
+        xtmp = linspace(x.min(), x.max(), 100)
+        plot(xtmp, exp(log(xtmp)*fit[0]+fit[1]), 'r-')
+        ylim((y-dy).min(), (y+dy).max())
+    if xtitle is not None:
+        xlabel(xtitle)
+    if ytitle is not None:
+        ylabel(ytitle)
+    if yrange is not None:
+        ylim(yrange[0], yrange[1])
+    xscale('log') ; yscale('log')
+    fig.set_size_inches(4., 6.)
+    fig.tight_layout()
+    savefig(outfile+'.png')
+    close()
     
 def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
 
@@ -224,8 +246,9 @@ def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     fmin=binfreqc[nbin>nbin0].min()
     fmax=binfreqc[nbin>nbin0].max()
     clf()
+    fig = figure()
     pcolormesh(t2, binfreq2, pds2, cmap='hot') #, vmin=10.**lmin, vmax=10.**lmax)
-    colorbar()
+    #    colorbar()
     if omega != None:
         plot([t2.min(), t2.max()], [omega/2./pi, omega/2./pi], color='k')
     xlim(t2.min(), t2.max())
@@ -233,9 +256,12 @@ def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     yscale('log')
     xlabel(r'$t$, s')
     ylabel('$f$, Hz')
+    fig.set_size_inches(6., 6.)
+    fig.tight_layout()
     savefig(outfile+'.png')
     savefig(outfile+'.eps')
     close()
+    return [fmin, fmax] # outputting the frequency range
 
 #############################################
 def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
@@ -538,7 +564,7 @@ def multishock_plot(fluxfile, frontfile):
     someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
     
-def multimultishock_plot(prefices, parflux = False, sfilter = 1.):
+def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
         # fluxfile1, frontfile1, fluxfile2, frontfile2):
     '''
     plotting many shock fronts together
@@ -567,7 +593,9 @@ def multimultishock_plot(prefices, parflux = False, sfilter = 1.):
         else:
             fint = interp1d(tf, f, bounds_error=False)
             f1 = fint(ts)/4./pi
-        slist.append(s[s>sfilter]); flist.append(f1[s>sfilter])
+        if smax is None:
+            smax = s.max()
+        slist.append(s[(s>sfilter)&(s<smax)]); flist.append(f1[(s>sfilter)&(s<smax)])
 
         if k == 0:
             eqlum = frontinfo[0] ; rs = frontinfo[1]

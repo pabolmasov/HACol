@@ -46,16 +46,18 @@ def galjaread(infile):
     '''
     lines = loadtxt(infile+'.dat', comments="#", delimiter="\t", unpack=False)
     
-    x = squeeze(lines[:,0]) ; u = 3.*squeeze(lines[:,3]) ; v = squeeze(lines[:,5])
-    prat =  squeeze(lines[:,11])
+    x = squeeze(lines[:,0]) ; u = 3.*squeeze(lines[:,2]) ; v = squeeze(lines[:,3])
+    prat =  squeeze(lines[:,6])
 
     #    plots.someplots(x, [v], name=infile+'_u', ylog=True, formatsequence=['k-'])
     
     return x, u, v, prat
 
-def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf = 'DEFAULT'):
+def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf = 'DEFAULT', vone = None):
 
     xg, ug, vg, pratg = galjaread(ingalja)
+    if vone is not None:
+        vg *= vone
     
     rstar = config[conf].getfloat('rstar')
     m1 = config[conf].getfloat('m1')
@@ -85,9 +87,10 @@ def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf 
     pratp = betap / (1.-betap)
 
     if ifplot:
-        plots.someplots([xg, xp], [ug, up], name='BScompare_u', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
-        plots.someplots([xg, xp], [vg, vp], name='BScompare_v', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$v/c$', multix = True)
-        plots.someplots([xg, xp], [pratg, pratp], name='BScompare_p', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$P_{\rm gas} / P_{\rm rad}$', multix = True)
+        outdir = os.path.dirname(ingalja)+'/'
+        plots.someplots([xg, xp], [ug, up], name=outdir+'BScompare_u', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
+        plots.someplots([xg, xp], [vg, vp], name=outdir+'BScompare_v', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$v/c$', multix = True)
+        plots.someplots([xg, xp], [pratg, pratp], name=outdir+'BScompare_p', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$P_{\rm gas} / P_{\rm rad}$', multix = True)
 # comparer('galia_F/BS_solution_F', 'titania_fidu/tireout01000', vnorm = -0.000173023, conf = 'FIDU')
 
     
@@ -97,7 +100,7 @@ def rcoolfun(geometry, mdot):
     '''
     r = geometry[:,0] ; across = geometry[:,3] ; delta = geometry[:,5]
 
-    f = delta**2/across * mdot- r
+    f = delta**2/across * mdot - r
     ffun = interp1d(f, r, bounds_error = False)
     return ffun(0.)
     
@@ -145,15 +148,23 @@ def pds(infile='out/flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False):
+def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
     '''
     lines = loadtxt(infile+".dat", comments="#", delimiter=" ", unpack=False)
-    t=lines[:,0] ; l=lines[:,1]
+    slines = shape(lines)
+    if ncol >= slines[1]:
+        ncol = -1
+    t=lines[:,0] ; l=lines[:,ncol]
+    if iffront:
+        xs = lines[:,1] # if we want to correlate the maximum with the mean front position
+    else:
+        xs = l # or, we can calculate a bin-average flux instead
     nsize=size(t)
     tbin=linspace(t.min(), t.max(), ntimes+1)
     tcenter=(tbin[1:]+tbin[:-1])/2.
+    tsize = (tbin[1:]-tbin[:-1])/2.
     freq1=1./(t.max())*double(ntimes)/2. ; freq2=freq1*double(nsize)/double(ntimes)/2.
     if(binlogscale):
         binfreq=logspace(log10(freq1), log10(freq2), num=nbins+1)
@@ -164,11 +175,18 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False):
     t2=zeros([ntimes+1, nbins+1], dtype=double)
     nbin=zeros([ntimes, nbins], dtype=double)
     binfreq2=zeros([ntimes+1, nbins+1], dtype=double)
+    fmax = zeros(ntimes) ;   dfmax = zeros(ntimes)
+    xmean = zeros(ntimes) ; xstd = zeros(ntimes)
     fdyns=open(infile+'_dyns.dat', 'w')
+    ffreqmax = open(infile+'_fmax.dat', 'w')
     for kt in arange(ntimes):
         wt=(t<tbin[kt+1]) & (t>=tbin[kt])
         lt=l[wt]
-        fsp=fft.rfft((lt-lt.mean())/l.std(), norm="ortho")
+        pfit = polyfit(t[wt], lt, 1)
+        if deline:
+            fsp=fft.rfft((lt-pfit[0]*t[wt]-pfit[1])/lt.std(), norm="ortho")
+        else:
+            fsp=fft.rfft((lt-lt.mean())/lt.std(), norm="ortho")
         nt=size(lt)
         freq = fft.rfftfreq(nt, (t[wt].max()-t[wt].min())/double(nt))
         pds=abs(fsp*freq)**2
@@ -182,11 +200,26 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False):
             pds2[kt, kb]=pds[wb].mean() ; dpds2[kt, kb]=pds[wb].std()
             # ascii output:
             fdyns.write(str(tcenter[kt])+' '+str(binfreq[kb])+' '+str(binfreq[kb+1])+' '+str(pds2[kt,kb])+' '+str(dpds2[kt,kb])+" "+str(nbin[kt,kb])+"\n")
+        # finding maximum:
+        nfmax = (pds2[kt,:]).argmax()
+        fmax[kt] = (binfreq2[kt,nfmax]+binfreq2[kt+1,nfmax+1])/2. # frequency of the maximum
+        dfmax[kt] = (-binfreq2[kt,nfmax]+binfreq2[kt+1,nfmax+1])/2. 
+        ffreqmax.write(str(tcenter[kt])+" "+str(tsize[kt])+" "+str(fmax[kt])+" "+str(dfmax[kt])+"\n")
+        xmean[kt] = xs[wt].mean() ; xstd[kt] = xs[wt].std()
     fdyns.close()
+    ffreqmax.close()
     print(t2.max())
     if ifplot:
-        plots.plot_dynspec(t2,binfreq2, log10(pds2), outfile=infile+'_dyns', nbin=nbin)
-
+        frange = plots.plot_dynspec(t2,binfreq2, log10(pds2), outfile=infile+'_dyns', nbin=nbin)
+        plots.errorplot(tcenter, tsize, fmax, dfmax, outfile = infile + '_ffmax', xtitle = '$t$, s', ytitle = '$f$, Hz')
+        if iffront:
+            goodx = (xmean > 3.*xstd) * (tcenter> tcenter[2])
+            pfit, pcov = polyfit(log(xmean[goodx]), log(fmax[goodx]), 1, cov = True)
+            print("dln(f)/dln(R_s) = "+str(pfit[0])+"+/-"+str(pcov[0,0]))
+            plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', fit = pfit, yrange = frange)
+        else:
+            plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_lfmax', xtitle = r'$L/L_{\rm Edd}$', ytitle = '$f$, Hz')
+            
 #############################################
 def fhist(infile = "out/flux"):
     '''
@@ -307,9 +340,12 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     BSgamma = (across0/delta0**2)/mdot*rstar / (realxirad/1.5)
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
-    xs = bs.xis(BSgamma, BSeta, x0=xest)
-    #     print("xs = "+str(xs))
-    #    ii=input("xs")
+    xs, BSbeta = bs.xis(BSgamma, BSeta, x0=xest, ifbeta = True)
+    print("eta = "+str(BSeta))
+    print("gamma = "+str(BSgamma))
+    print("eta gamma^{1/4} = "+str(BSeta*BSgamma**0.25))
+    print("beta = "+str(BSbeta))
+    ii = input("xs")
     # spherization radius
     rsph =1.5*mdot/4./pi
     eqlum = mdot/rstar
@@ -349,9 +385,10 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     print("effective compression factor "+str(compression[isfinite(compression)].mean()))
     # ascii output
     fout = open(outdir+'/sfront.dat', 'w')
-    fout.write("# time -- shock position -- downstream velocity -- upstream velocity -- partial flux \n")
+    #    foutflux = open(outdir+'/sflux.dat', 'w')
+    fout.write("# time -- shock position -- downstream velocity -- upstream velocity -- total flux -- partial flux \n")
     for k in arange(size(n)):
-        fout.write(str(t[k])+" "+str(s[k])+" "+str(v1[k])+" "+str(v2[k])+" "+str(lc_part[k])+"\n")
+        fout.write(str(t[k])+" "+str(s[k])+" "+str(v1[k])+" "+str(v2[k])+" "+str(lc_tot[k])+" "+str(lc_part[k])+"\n")
     fout.close()
     fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
     fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')
