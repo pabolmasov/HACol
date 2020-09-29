@@ -215,22 +215,33 @@ def binplot_short(freq, dfreq, pds, dpds, outfile='binnedpds'):
     close()
 
 def errorplot(x, dx, y, dy, outfile = 'errorplot', xtitle = None, ytitle = None, fit = None,
-              yrange = None):
+              yrange = None, addline = None, xlog = False, ylog = False, pointlabels = None):
 
     clf()
     fig = figure()
     errorbar(x, y, xerr=dx, yerr=dy, fmt='.k')
+    if addline is not None:
+        plot(x, addline, 'r:')
     if fit is not None:
         xtmp = linspace(x.min(), x.max(), 100)
         plot(xtmp, exp(log(xtmp)*fit[0]+fit[1]), 'r-')
+        plot(xtmp, 1e3/(xtmp/5.5)**3.5, 'b:')
         ylim((y-dy).min(), (y+dy).max())
+    if pointlabels:
+        for k in arange(size(x)):
+            text(x[k], y[k], pointlabels[k])
     if xtitle is not None:
-        xlabel(xtitle)
+        xlabel(xtitle, fontsize=16)
     if ytitle is not None:
-        ylabel(ytitle)
+        ylabel(ytitle, fontsize=16)
     if yrange is not None:
         ylim(yrange[0], yrange[1])
-    xscale('log') ; yscale('log')
+    if xlog:
+        xscale('log')
+    if ylog:
+        yscale('log')
+    plt.tick_params(labelsize=14, length=1, width=1., which='minor', direction = "in")
+    plt.tick_params(labelsize=14, length=3, width=1., which='major', direction = "in")
     fig.set_size_inches(4., 6.)
     fig.tight_layout()
     savefig(outfile+'.png')
@@ -248,14 +259,18 @@ def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     clf()
     fig = figure()
     pcolormesh(t2, binfreq2, pds2, cmap='hot') #, vmin=10.**lmin, vmax=10.**lmax)
-    #    colorbar()
+    cbar = colorbar()
+    cbar.ax.tick_params(labelsize=10, length=3, width=1., which='major', direction ='in')
+    cbar.set_label(r'$\log_{10}PDS$, relative units', fontsize=12)
     if omega != None:
         plot([t2.min(), t2.max()], [omega/2./pi, omega/2./pi], color='k')
     xlim(t2.min(), t2.max())
     ylim(fmin, fmax)
-    yscale('log')
-    xlabel(r'$t$, s')
-    ylabel('$f$, Hz')
+    #    yscale('log')
+    xlabel(r'$t$, s', fontsize = 16)
+    ylabel('$f$, Hz', fontsize = 16)
+    plt.tick_params(labelsize=14, length=1, width=1., which='minor', direction = "in")
+    plt.tick_params(labelsize=14, length=3, width=1., which='major', direction = "in")
     fig.set_size_inches(6., 6.)
     fig.tight_layout()
     savefig(outfile+'.png')

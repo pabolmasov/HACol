@@ -5,6 +5,11 @@ from numpy import *
 ufloor = 1e-15
 rhofloor = 1e-15
 
+# speed of sound multiplier (see Chandrasekhar 1967 or Johnson 2008):
+def Gamma1(gamma, beta):
+    g1 = gamma - 1.
+    return beta + 9. * g1 * (beta-4./3.)**2/(beta+12.*g1 * (1.-beta))
+
 # calculating beta = pgas / p as a function of rho and P, and back 
 def Fbeta(rho, u, betacoeff):
     '''

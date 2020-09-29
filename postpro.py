@@ -64,6 +64,7 @@ def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf 
     mu30 = config[conf].getfloat('mu30')
     mdot = config[conf].getfloat('mdot') * 4.*pi
     afac = config[conf].getfloat('afac')
+    mass1 = config[conf].getfloat('m1')
     realxirad = config[conf].getfloat('xirad')
     mow = config[conf].getfloat('mow')
     b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
@@ -80,17 +81,23 @@ def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf 
         up, vp, rhop = qp
     geofile = os.path.dirname(inpasha)+"/geo.dat"
     r, theta, alpha, across, l, delta = geo.gread(geofile)
-
+   
     umagtar = umag * (1.+3.*cos(theta)**2)/4. * xp**(-6.)
     
     betap = beta.Fbeta(rhop, up * umagtar, betacoeff)
     pratp = betap / (1.-betap)
 
+    # internal temperatures:
+    tempp = (up * umagtar / mass1)**(0.25) * 3.35523 # keV
+    umagtar_g = umag * (1.+3.*(1.-xg/xp.max()))/4. * xg**(-6.)
+    tempg = (ug * umagtar_g / mass1)**(0.25) * 3.35523 # keV
+    
     if ifplot:
         outdir = os.path.dirname(ingalja)+'/'
         plots.someplots([xg, xp], [ug, up], name=outdir+'BScompare_u', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
-        plots.someplots([xg, xp], [vg, vp], name=outdir+'BScompare_v', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$v/c$', multix = True)
+        plots.someplots([xp, xg], [-vp, -vg], name=outdir+'BScompare_v', ylog=True, formatsequence=['r--', 'k-'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
         plots.someplots([xg, xp], [pratg, pratp], name=outdir+'BScompare_p', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$P_{\rm gas} / P_{\rm rad}$', multix = True)
+        plots.someplots([xg, xp], [tempg, tempp], name=outdir+'BScompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True)
 # comparer('galia_F/BS_solution_F', 'titania_fidu/tireout01000', vnorm = -0.000173023, conf = 'FIDU')
 
     
@@ -148,7 +155,7 @@ def pds(infile='out/flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False):
+def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False, stnorm = False):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
     '''
@@ -184,9 +191,11 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
         lt=l[wt]
         pfit = polyfit(t[wt], lt, 1)
         if deline:
-            fsp=fft.rfft((lt-pfit[0]*t[wt]-pfit[1])/lt.std(), norm="ortho")
+            fsp=fft.rfft((lt-pfit[0]*t[wt]-pfit[1]), norm="ortho")
         else:
-            fsp=fft.rfft((lt-lt.mean())/lt.std(), norm="ortho")
+            fsp=fft.rfft((lt-lt.mean()), norm="ortho")
+        if stnorm:
+            fsp /= lt.std()
         nt=size(lt)
         freq = fft.rfftfreq(nt, (t[wt].max()-t[wt].min())/double(nt))
         pds=abs(fsp*freq)**2
@@ -213,10 +222,24 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
         frange = plots.plot_dynspec(t2,binfreq2, log10(pds2), outfile=infile+'_dyns', nbin=nbin)
         plots.errorplot(tcenter, tsize, fmax, dfmax, outfile = infile + '_ffmax', xtitle = '$t$, s', ytitle = '$f$, Hz')
         if iffront:
+            # we need geometry:
+            outdir = os.path.dirname(infile)
+            geometry = loadtxt(outdir+"/geo.dat", comments="#", delimiter=" ", unpack=False)
+            geo_r = geometry[:,0]  ; across = geometry[:,3]  ;   delta = geometry[:,5]
+            deltafun = interp1d(geo_r, delta)
+            delta_s = deltafun(xmean)
+            acrossfun = interp1d(geo_r, across)
+            across_s = acrossfun(xmean)
+            # TODO: read from the conf. file
+            rstar = 4.86 ; xirad = 1.5 ; m1 =1.4 ; mdot = 10. ; tscale = 4.92594e-06 * m1
+            tth = tscale * mdot *  7.* sqrt(rstar * xmean) * delta_s**2/across_s * (1.+2.*across_s/delta_s**2)
+            fth = 1./tth
+            # 0.0227364 / xirad / sqrt(rstar*xmean)/rstar / mdot * (1./delta_s+2.*delta_s / across_s)**2 * 2.03e5/m1 # Hz
+            print(fth)
             goodx = (xmean > 3.*xstd) * (tcenter> tcenter[2])
             pfit, pcov = polyfit(log(xmean[goodx]), log(fmax[goodx]), 1, cov = True)
             print("dln(f)/dln(R_s) = "+str(pfit[0])+"+/-"+str(pcov[0,0]))
-            plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', fit = pfit, yrange = frange)
+            plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', yrange = frange, addline = fth, xlog=True, ylog=False)
         else:
             plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_lfmax', xtitle = r'$L/L_{\rm Edd}$', ytitle = '$f$, Hz')
             
@@ -345,6 +368,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     print("gamma = "+str(BSgamma))
     print("eta gamma^{1/4} = "+str(BSeta*BSgamma**0.25))
     print("beta = "+str(BSbeta))
+    print("predicted shock position = "+str(xs))
     ii = input("xs")
     # spherization radius
     rsph =1.5*mdot/4./pi
@@ -409,28 +433,50 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     
         
 ###############################
+
+# power-law fit to the decay tail
 def tailfitfun(x, p, n, x0, y0):
     return ((x-x0)**2)**(p/2.)*n+y0
 
-def tailfit(prefix = 'out/flux', trange = None):
+# exponential tail to the decay tail
+def tailexpfun(x, xdec, n, x0, y0):
+    return exp(-abs(x-x0)/xdec)*n+y0
+
+def tailfit(prefix = 'out/flux', trange = None, ifexp = False, ncol = -1):
+    '''
+    fits the later shape of the light curve (or shock front position, if prefix is a sfront file, and ncol = 1), assuming it approaches equilibrium. 
+    trange sets the range of time (s), ifexp switches between two fitting functions (power-law and exponential), ncol sets the column of the data file to be used. 
+    '''
     fluxlines = loadtxt(prefix+".dat", comments="#", delimiter=" ", unpack=False)
     
-    t=fluxlines[:,0] ; f=fluxlines[:,1]
+    t=fluxlines[:,0] ; f=fluxlines[:,ncol]
     if(trange is None):
         t1 = t; f1 = f
     else:
         t1=t[(t>trange[0])&(t<trange[1])]
         f1=f[(t>trange[0])&(t<trange[1])]
-    par, pcov = curve_fit(tailfitfun, t1, f1, p0=[-2.,5., 0., f1.min()])
+    if ifexp:
+        par, pcov = curve_fit(tailexpfun, t1, f1, p0=[t1.max()/5.,f1.max()-f1.min(), 0., f1.min()])
+    else:
+        par, pcov = curve_fit(tailfitfun, t1, f1, p0=[-2.,5., 0., f1.min()])
     if ifplot:
-        plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'])
-    print("slope ="+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
+        if ifexp:
+            plots.someplots(t, [f, tailexpfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'])
+            plots.someplots(t, [f-par[3], tailexpfun(t, par[0], par[1], par[2], 0.)], name = prefix+"_dfit", xtitle=r'$t$, s', ytitle=r'$\Delta L$', formatsequence=['k.', 'r-'], ylog = True, xlog = False)
+        else:
+            plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'])
+            plots.someplots(t, [f-par[3], tailfitfun(t, par[0], par[1], par[2], 0.)], name = prefix+"_dfit", xtitle=r'$t$, s', ytitle=r'$\Delta L$', formatsequence=['k.', 'r-'], ylog = True, xlog = False)
+    
+    if ifexp:
+        print("decay time = "+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
+    else:
+        print("slope ="+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
     print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))
 
 ##################################################################
 def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False, mdot = None):
     # reconstructs the mass flow
-    # reding geometry:
+    # reading geometry:
     if mdot is None:
         mdot = config['DEFAULT'].getfloat('mdot')
     geofile = os.path.dirname(prefix)+"/geo.dat"
@@ -608,3 +654,48 @@ def massplot(prefix = "out/tireout"):
 
     if ifplot:
         plots.someplots(tene, [mass, mdot * tene/tscale * massscale/1e16+mass[0], mass*0. + mcol], formatsequence = ['k-', 'r:', 'g--'], name = os.path.dirname(prefix)+"/masstest", xtitle='t, s', ytitle=r'$M$, $10^{16}$g', xlog = False, ylog = False)
+
+
+        
+def lplot():
+
+    prefices = ['titania_mdot1', 'titania_mdot3', 'titania_fidu', 'titania_mdot30', 'titania_dhuge', 'titania_nod']
+
+    confs = ['M1', 'M3', 'FIDU', 'M30', 'DHUGE', 'NOD']
+
+    xests = [1.5, 2., 4., 8., 4., 4.]
+    
+    npref = size(prefices)
+
+    lrad = zeros(npref) ; dlrad = zeros(npref) ; ltot = zeros(npref) ; gammas = zeros(npref) ; betas = zeros(npref)
+
+    for k in arange(npref):
+        rstar = config[confs[k]].getfloat('rstar')
+        m1 = config[confs[k]].getfloat('m1')
+        mu30 = config[confs[k]].getfloat('mu30')
+        mdot = config[confs[k]].getfloat('mdot') * 4.*pi
+        afac = config[confs[k]].getfloat('afac')
+        realxirad = config[confs[k]].getfloat('xirad')
+        b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+        umag = b12**2*2.29e6*m1
+        geometry = loadtxt(prefices[k]+"/geo.dat", comments="#", delimiter=" ", unpack=False)
+        across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
+        BSgamma = (across0/delta0**2)/mdot*rstar / (realxirad/1.5)
+        # umag is magnetic pressure
+        BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
+        xs, BSbeta = bs.xis(BSgamma, BSeta, x0=xests[k], ifbeta = True)
+
+        frontfile = prefices[k]+'/sfront'
+        frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
+
+        f = frontlines[:,5] # partial flux from below the shock
+        nt = size(f)
+        lrad[k] = f[round(nt*0.9):].mean()
+        dlrad[k] = f[round(nt*0.9):].std()
+        ltot[k] = mdot * 0.205 / 4./pi
+        gammas[k] = BSgamma
+        betas[k] = BSbeta
+        print(ltot[k])
+
+    plots.errorplot(1./gammas, gammas*0., lrad/ltot, dlrad/ltot, outfile = 'bsfig2',
+                    xtitle = r'$\gamma^{-1}$', ytitle = r'$L_{\rm s}/L_{\rm tot}$', addline  = 1.-betas, xlog = True, pointlabels = confs)

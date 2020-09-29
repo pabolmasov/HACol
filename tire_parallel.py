@@ -34,28 +34,36 @@ verbose = config[conf].getboolean('verbose')
 autostart = config[conf].getboolean('autostart')
 #
 
-ttest = False
+ttest = False # set True to output topology test (which domains are connected to which)
 
 # loading local modules:
 if ifplot:
     import plots
 if ifhdf:
     import hdfoutput as hdf
-import bassun as bs
-import solvers as solv
-from sigvel import *
-from geometry import *
+import bassun as bs # Basko-Sunyaev solution 
+import solvers as solv # Riemann solvers
+from sigvel import * # signal velocities
+from geometry import * #
+from tauexp import *
 
 from timer import Timer
 timer = Timer(["total", "step", "io"],
               ["BC", "dt", "RKstep", "updateCon"])
+
+# beta = Pgas / Ptot: define once and globally
+from beta import *
+betafun = betafun_define() # defines the interpolated function for beta (\rho, U)
+betafun_p = betafun_press_define() # defines the interpolated function for beta (\rho, P)
 
 def time_step(prim, g, dl):
     # time step adjustment:
     # also outputs total luminosity of the fraction of the flow, if global eta>0.
     csqest = 4./3.*prim['press']/prim['rho']
     dt_CFL = CFL * (dl / (sqrt(csqest)+abs(prim['v']))[1:-1]).min()
-    qloss = 2.*prim['urad']/prim['rho'] / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
+    taueff = prim['rho']/(1./g.delta + 2.*g.delta/g.across)
+    qloss = 2.*prim['urad']/(1.+xirad*taueff)* (g.across/g.delta + 2.*g.delta) * taufun(taueff, taumin, taumax)
+    #    qloss = 2.*prim['urad']/prim['rho'] / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
     # approximate qloss
 
     wpos = ((qloss) > 0.) & (prim['rho'] > 0.)
@@ -68,6 +76,7 @@ def time_step(prim, g, dl):
     else:
         dt_diff = dt_CFL * 5. # effectively infinity ;)
 
+    # outputs luminosity if irradiation is included
     if eta>0.:
         ltot = trapz(qloss, x = g.l)
         return minimum(dt_CFL, minimum(dt_diff, dt_thermal)), ltot
@@ -79,7 +88,9 @@ def timestepdetails(g, rho, press, u, v, urad):
     rho_half = (rho[1:]+rho[:-1])/2. ; press_half = (press[1:]+press[:-1])/2. ; u_half = (u[1:]+u[:-1])/2. ; v_half = (v[1:]+v[:-1])/2. ; urad_half = (urad[1:]+urad[:-1])/2.
     csqest = 4./3.*press_half/rho_half
     dt_CFL = CFL * (dl / (sqrt(csqest)+abs(v_half))).min()
-    qloss = 2.*urad/rho / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
+    taueff = rho/(1./g.delta + 2.*g.delta/g.across)
+    qloss = 2.*urad/(1.+xirad*taueff)* (g.across/g.delta + 2.*g.delta) * taufun(taueff, taumin, taumax)
+    #    qloss = 2.*urad/rho / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
     wpos = ((qloss) > 0.) & (rho > 0.)
     dt_thermal = Cth * abs((u*g.across)[wpos]/qloss[wpos]).min()
     if(raddiff):
@@ -90,6 +101,7 @@ def timestepdetails(g, rho, press, u, v, urad):
     return minimum(dt_CFL, minimum(dt_diff, dt_thermal)), dt_CFL, dt_thermal, dt_diff
     
 def timestepmin(prim, g, dl, dtpipe):
+    # minimal time step
     nd = prim['N']
     if nd > 0:
         if eta>0.:
@@ -134,65 +146,8 @@ def regularize(u, rho, press):
     if internal energy goes below ufloor, we heat the matter up artificially
     '''
     #    u1=u-ufloor ; rho1=rho-rhofloor ; press1 = press-ufloor
-    return (u+ufloor+fabs(u-ufloor))/2., (rho+rhofloor+fabs(rho-rhofloor))/2., (press+ufloor +fabs(press-ufloor))/2.
+    return (u+ufloor+fabs(u-ufloor))/2., (rho+rhofloor+fabs(rho-rhofloor))/2., (press+ufloor +fabs(press-ufloor))/2.    
 
-# speed of sound multiplier (see Chandrasekhar 1967 or Johnson 2008):
-def Gamma1(gamma, beta):
-    g1 = gamma - 1.
-    return beta + 9. * g1 * (beta-4./3.)**2/(beta+12.*g1 * (1.-beta))
-
-# smooth factor for optical depth
-def taufun(tau):
-    '''
-    calculates 1-exp(-x) in a reasonably smooth way trying to avoid round-off errors for small and large x
-    '''
-    wtrans = where(tau<taumin)
-    wopaq = where(tau>taumax)
-    wmed = where((tau>=taumin) & (tau<=taumax))
-    tt = copy(tau)
-    if(size(wtrans)>0):
-        tt[wtrans] = (tau[wtrans]+abs(tau[wtrans]))/2.
-    if(size(wopaq)>0):
-        tt[wopaq] = 1.
-    if(size(wmed)>0):
-        tt[wmed] = 1. - exp(-tau[wmed])
-    return tt
-
-def tratfac(x):
-    '''
-    an accurate smooth version of (1-e^{-x})/x
-    '''
-    xmin = taumin ; xmax = taumax # limits the same as for optical depth
-    nx = size(x)
-    tt = copy(x)
-    if nx>1:
-        w1 = where(x<= xmin) ;  w2 = where(x>= xmax) ; wmed = where((x < xmax) & (x > xmin))
-        if(size(w1)>0):
-            tt[w1] = 1.
-        if(size(w2)>0):
-            tt[w2] = 1./x[w2]
-        if(size(wmed)>0):
-            tt[wmed] = (1.-exp(-x[wmed]))/x[wmed]
-        wnan=where(isnan(x))
-        if(size(wnan)>0):
-            tt[wnan] = 0.
-            print("trat = "+str(x.min())+".."+str(x.max()))
-            ip = input('trat')
-        return tt
-    else:
-        if x <= xmin:
-            return 1.
-        else:
-            if x>=xmax:
-                return 1./x
-            else:
-                return (1.-exp(x))/x
-            
-
-# define once and globally
-from beta import *
-betafun = betafun_define() # defines the interpolated function for beta (\rho, U)
-betafun_p = betafun_press_define() # defines the interpolated function for beta (\rho, P)
 
 ##############################################################################
 
@@ -206,6 +161,8 @@ def toprim_separate(m, s, e, g):
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
     u, rho, press = regularize(u, rho, press)
+    # after regularization, we need to update beta
+    beta = betafun(Fbeta(rho, u, betacoeff))
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
 def tocon_separate(rho, v, u, g):
@@ -245,6 +202,7 @@ def toprim(con, gnd = None):
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
     u, rho, press = regularize(u, rho, press)
+    beta = betafun(Fbeta(rho, u, betacoeff)) # not the most efficient
     urad = u*(1.-beta)/(1.-beta/2.)
     prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press, 'N': con['N']}
     return prim
@@ -260,7 +218,7 @@ def diffuse(rho, urad, v, dl, across):
     # rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
     # rtau = dl * (rho[1:]+rho[:-1])/2.
     # rtau_left + rtau_right
-    rtau_exp = tratfac(dl * (rho[1:]+rho[:-1])/2.)
+    rtau_exp = tratfac(dl * (rho[1:]+rho[:-1])/2., taumin, taumax)
     # across_half = (across[1:]+across[:-1])/2.
     
     duls_half =  nubulk  * (( urad * v)[1:] - ( urad * v)[:-1])\
@@ -294,7 +252,7 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
         # prim, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
     '''
     computes the RHSs of conservation equations
-    no changes in mass
+    mass loss (and associated energy loss) is calculated separately (dmsqueeze)
     momentum injection through gravitational and centrifugal forces
     energy losses through the surface
     outputs: dm, ds, de, and separately the amount of energy radiated per unit length per unit time ("flux")
@@ -313,12 +271,12 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     else:
         taueff = rho / (1./delta + 2. * delta /  across)
     # copy(1./(1./tau + 1./tauphi))
-    #    taufac = taufun(taueff)    # 1.-exp(-tau)
+    #    taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     #    taufac = 1. 
-    #    gamefac = tratfac(tau)
+    #    gamefac = tratfac(tau, taumin, taumax)
     #    gamedd = eta * ltot * gamefac
     sinsum = (sina*cth+cosa*sth) # sin(theta+alpha)
-    force = ((-sinsum/r**2*(1.-eta * ltot * tratfac(rho*delta))
+    force = ((-sinsum/r**2*(1.-eta * ltot * tratfac(rho*delta, taumin, taumax))
               +omega**2*r*sth*cosa)*rho*across) # *taufac
     if(forcecheck):
         network = simps(force/(rho*across), x=g.l)
@@ -328,10 +286,10 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #     urad = copy(u * (1.-beta)/(1.-beta/2.))
     #    urad = (urad+abs(urad))/2.
     if cooltwosides:
-        qloss = 2.*urad/(xirad*taueff+1.)*(across/delta)* taufun(taueff)  # diffusion approximation; energy lost from 4 sides
+        qloss = 2.*urad/(xirad*taueff+1.)*(across/delta)* taufun(taueff, taumin, taumax)  # diffusion approximation; energy lost from 4 sides
     else:
-        qloss = 2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)* taufun(taueff)  # diffusion approximation; energy lost from 4 sides
-    # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff) !!! need to include irradheating later!
+        qloss = 2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)* taufun(taueff, taumin, taumax)  # diffusion approximation; energy lost from 4 sides
+    # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff, taumin, taumax) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = rho*0.-dmsqueeze # copy(rho*0.-dmsqueeze)
     dudt = v*force-qloss # +irradheating # copy
@@ -347,7 +305,7 @@ def qloss_separate(rho, v, u, g):
     tau = rho * g.delta
     tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
     taueff = copy(1./(1./tau + 1./tauphi))
-    taufac = taufun(taueff)    # 1.-exp(-tau)
+    taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.    
@@ -368,7 +326,7 @@ def derivo(l_half, m, s, e, s_half, p_half, fe_half, dm, ds, de):
     dmt = -(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm
     dst = -(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds
     det = -(fe_half[1:]-fe_half[:-1])/(l_half[1:]-l_half[:-1]) + de
-
+    
     return dmt, dst, det
 
 def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):

@@ -18,7 +18,7 @@ def xis(gamma, eta, n=3, x0=20., ifbeta = False):
     '''
     if((eta*gamma**0.25)<1.) | (gamma>100.):
         return nan
-    x = fsolve(fxis, x0, args=(gamma, eta, n))
+    x = fsolve(fxis, x0, args=(gamma, eta, n), maxfev = 1000, xtol=1e-10)
     #    print(fxis(x, gamma, eta, n))
     if ifbeta:
         beta = 1.-gamma*exp(gamma)*(expn(1,gamma)-expn(1, gamma*x))
