@@ -1,21 +1,36 @@
 from scipy.interpolate import interp1d
 from numpy import *
-from globals import *
+
+# TODO: merge these values with the config file
+ufloor = 1e-15
+rhofloor = 1e-15
+
+# speed of sound multiplier (see Chandrasekhar 1967 or Johnson 2008):
+def Gamma1(gamma, beta):
+    g1 = gamma - 1.
+    return beta + 9. * g1 * (beta-4./3.)**2/(beta+12.*g1 * (1.-beta))
 
 # calculating beta = pgas / p as a function of rho and P, and back 
-def Fbeta(rho, u):
+def Fbeta(rho, u, betacoeff):
     '''
     calculates a function of 
     beta = pg/p from rho and u (dimensionless units)
     F(beta) itself is F = beta / (1-beta)**0.25 / (1-beta/2)**0.75
     '''
-    beta = rho*0.+1.
-    wpos=where(u>ufloor)
-    if(size(wpos)>0):
-        beta[wpos]=betacoeff * rho[wpos] / u[wpos]**0.75
+    nx = size(rho)
+    if nx <= 1:
+        if (u*rho) > 0.:
+            beta = betacoeff * rho / u**0.75
+        else:
+            beta = 1.
+    else:
+        beta = rho*0.+1.
+        wpos=where(u>ufloor)
+        if(size(wpos)>0):
+            beta[wpos]=betacoeff * rho[wpos] / u[wpos]**0.75
     return beta 
 
-def Fbeta_press(rho, press):
+def Fbeta_press(rho, press, betacoeff):
     '''
     calculates a function of 
     beta = pg/p from rho and pressure (dimensionless units)

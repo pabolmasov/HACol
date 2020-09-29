@@ -1,9 +1,8 @@
 from numpy import *
-
 # All the global parameters used in the code
 # let us assume GM=1, c=1, kappa=1; this implies Ledd=4.*pi
 
-nx=1000 # the actual number of points in use
+nx=3000 # the actual number of points in use
 nx0=nx*50 # first we make a finer mesh for interpolation
 logmesh=True
 rbasefactor = 0.9 #
@@ -90,7 +89,7 @@ ascalias = 10 # make an ascii file every Nth output step
 
 # output options:
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
-outdir = "out"
+outdir = "out3000"
 
 # restart options
 ifrestart = False
@@ -106,4 +105,3 @@ print("nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
 # estimated heat flux at the outer boundary:
 print("heat coming from the outer BC "+str(-vout * 4.*pi*r_e*dr_e * 3.*umagout))
 print("compare to "+str(mdot/rstar))
-

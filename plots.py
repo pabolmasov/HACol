@@ -18,22 +18,52 @@ rc('text', usetex=True)
 # #add amsmath to the preamble
 matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
-import hdfoutput as hdf
+from hdfoutput import read, entryname
 import geometry as geo
-from globals import *
 from beta import *
+import configparser as cp
+conffile = 'globals.conf'
+config = cp.ConfigParser(inline_comment_prefixes="#")
+config.read(conffile)
 
 close('all')
 ioff()
 use('Agg')
 
+formatsequence = ['k-', 'g:', 'r--', 'b-.']
+
+def qloss_separate(rho, v, u, g, conf):
+    '''
+    standalone estimate for flux distribution
+    '''
+
+    betacoeff = conf.getfloat('betacoeff')
+    xirad = conf.getfloat('xirad')
+    betafun = betafun_define()
+    tau = rho * g.delta
+    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
+    taueff = copy(1./(1./tau + 1./tauphi))
+    taufac =  1.-exp(-tau)
+    beta = betafun(Fbeta(rho, u, betacoeff))
+    urad = copy(u * (1.-beta)/(1.-beta/2.))
+    urad = (urad+abs(urad))/2.    
+    qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
+    return qloss
+
+
 #############################################################
 # Plotting block 
-def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None):
+def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None, configactual = None):
     '''
     energy u supplemented by rest-mass energy rho c^2
     '''
-    if(umag is None):
+    if configactual is None:
+        umag = 1. # no normalization
+        omega = 0.
+    else:
+        umag = configactual.getfloat('umag')
+        omega = configactual.getfloat('omega')
+    if umagtar is None:
         umagtar = umag*(rstar/r)**6
     ioff()
     clf()
@@ -49,10 +79,7 @@ def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None):
     B=u*4./3.+rho*(-1./r-0.5*(r*omega*sth)**2+v**2/2.)
     plot(r, B/umagtar, 'g', label='$B$', linestyle='dotted')
     plot(r, -B/umagtar, 'g', label='$-B$')
-    #    plot(x, y0, 'b')
-    #    xscale('log')
-    #    ylim(umag*((rstar/r)**6).min(), umag)
-    ylim(((u/umagtar)[u>0.]).min(), (u/umagtar).max())
+    ylim(((u/umagtar)[u>0.]).min(), maximum((u/umagtar).max(), 3.))
     xlabel('$r$, $GM/c^2$ units')
     ylabel(r'$U/U_{\rm mag}$')
     yscale('log')
@@ -125,11 +152,18 @@ def plot_somemap(fname):
     somemap(x, y, -q/mdot, name=fname+".png", levels=arange(50)/30.,
             xlog=False, xtitle='$r/R_*$')
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, multix = False):
     '''
     plots a series of curves  
+    if multix is off, we assume that the independent variable is the same for all the data 
     '''
     ny=shape(ys)[0]
+
+    if multix:
+        nx = shape(x)[0]
+        if nx != ny:
+            print("X and Y arrays do not match")
+            return 0
 
     if formatsequence is None:
         formatsequence = ["." for x in range(ny)]
@@ -139,7 +173,10 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     for k in arange(ny):
         if vertical is not None:
             plot([vertical, vertical], [ys[k].min(), ys[k].max()], 'r-')
-        plot(x, ys[k], formatsequence[k])
+        if multix:
+            plot(x[k], ys[k], formatsequence[k])
+        else:
+            plot(x, ys[k], formatsequence[k])
     if(xlog):
         xscale('log')
     if(ylog):
@@ -147,11 +184,11 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     xlabel(xtitle, fontsize=14) ; ylabel(ytitle, fontsize=14)
     plt.tick_params(labelsize=12, length=1, width=1., which='minor')
     plt.tick_params(labelsize=12, length=3, width=1., which='major')
-    fig.set_size_inches(4, 4)
+    fig.set_size_inches(6, 4)
     fig.tight_layout()
     savefig(name+'.png')
     close('all')
-  
+    
 #########################################################################
 # post-processing PDS plot:
 
@@ -176,6 +213,39 @@ def binplot_short(freq, dfreq, pds, dpds, outfile='binnedpds'):
     ylabel('PDS') ; xlabel('$f$, Hz')
     savefig(outfile+'.png')
     close()
+
+def errorplot(x, dx, y, dy, outfile = 'errorplot', xtitle = None, ytitle = None, fit = None,
+              yrange = None, addline = None, xlog = False, ylog = False, pointlabels = None):
+
+    clf()
+    fig = figure()
+    errorbar(x, y, xerr=dx, yerr=dy, fmt='.k')
+    if addline is not None:
+        plot(x, addline, 'r:')
+    if fit is not None:
+        xtmp = linspace(x.min(), x.max(), 100)
+        plot(xtmp, exp(log(xtmp)*fit[0]+fit[1]), 'r-')
+        plot(xtmp, 1e3/(xtmp/5.5)**3.5, 'b:')
+        ylim((y-dy).min(), (y+dy).max())
+    if pointlabels:
+        for k in arange(size(x)):
+            text(x[k], y[k], pointlabels[k])
+    if xtitle is not None:
+        xlabel(xtitle, fontsize=16)
+    if ytitle is not None:
+        ylabel(ytitle, fontsize=16)
+    if yrange is not None:
+        ylim(yrange[0], yrange[1])
+    if xlog:
+        xscale('log')
+    if ylog:
+        yscale('log')
+    plt.tick_params(labelsize=14, length=1, width=1., which='minor', direction = "in")
+    plt.tick_params(labelsize=14, length=3, width=1., which='major', direction = "in")
+    fig.set_size_inches(4., 6.)
+    fig.tight_layout()
+    savefig(outfile+'.png')
+    close()
     
 def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
 
@@ -187,21 +257,29 @@ def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     fmin=binfreqc[nbin>nbin0].min()
     fmax=binfreqc[nbin>nbin0].max()
     clf()
+    fig = figure()
     pcolormesh(t2, binfreq2, pds2, cmap='hot') #, vmin=10.**lmin, vmax=10.**lmax)
-    colorbar()
+    cbar = colorbar()
+    cbar.ax.tick_params(labelsize=10, length=3, width=1., which='major', direction ='in')
+    cbar.set_label(r'$\log_{10}PDS$, relative units', fontsize=12)
     if omega != None:
         plot([t2.min(), t2.max()], [omega/2./pi, omega/2./pi], color='k')
     xlim(t2.min(), t2.max())
     ylim(fmin, fmax)
-    yscale('log')
-    xlabel(r'$t$, s')
-    ylabel('$f$, Hz')
+    #    yscale('log')
+    xlabel(r'$t$, s', fontsize = 16)
+    ylabel('$f$, Hz', fontsize = 16)
+    plt.tick_params(labelsize=14, length=1, width=1., which='minor', direction = "in")
+    plt.tick_params(labelsize=14, length=3, width=1., which='major', direction = "in")
+    fig.set_size_inches(6., 6.)
+    fig.tight_layout()
     savefig(outfile+'.png')
     savefig(outfile+'.eps')
     close()
+    return [fmin, fmax] # outputting the frequency range
 
 #############################################
-def quasi2d(hname, n1, n2):
+def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     '''
     makes quasi-2D Rt plots
     '''
@@ -211,7 +289,24 @@ def quasi2d(hname, n1, n2):
 
     nt=n2-n1
     # first frame
-    entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n1)
+    entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, n1)
+
+    rstar = glo['rstar']
+    umag = glo['umag']
+    
+    tscale = config[conf].getfloat('tscale')
+    rstar = config[conf].getfloat('rstar')
+    m1 = config[conf].getfloat('m1')
+    mu30 = config[conf].getfloat('mu30')
+    mdot = config[conf].getfloat('mdot') * 4.*pi
+    afac = config[conf].getfloat('afac')
+    realxirad = config[conf].getfloat('xirad')
+    mow = config[conf].getfloat('mow')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    umag1 = b12**2*2.29e6*m1
+    print("Umag = "+str(umag)+" = "+str(umag1)+"\n")
+    betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
+    
     nr=size(r)
     nrnew = 500 # radial mesh interpolated to nrnew
     rnew = (r.max()/r.min())**(arange(nrnew)/double(nrnew-1))*r.min()
@@ -225,14 +320,14 @@ def quasi2d(hname, n1, n2):
     tar = zeros(nt, dtype=double)
     #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
     for k in arange(n2-n1):
-        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, n1+k)
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, n1+k)
         vfun = interp1d(r, v, kind = 'linear')
         var[k, :] = vfun(rnew)
         qfun = interp1d(r, qloss, kind = 'linear')
         qar[k, :] = qfun(rnew)
         ufun = interp1d(r, u, kind = 'linear')
         uar[k, :] = ufun(rnew)
-        beta = betafun(Fbeta(rho, u))
+        beta = betafun(Fbeta(rho, u, betacoeff))
         press = u/3./(1.-beta/2.)
         pfun = interp1d(r, press, kind = 'linear')
         par[k, :] = pfun(rnew)
@@ -240,6 +335,7 @@ def quasi2d(hname, n1, n2):
     nv=30
     vmin = round(var.min(),2)
     vmax = round(var.max(),2)
+    vmin = maximum(vmin, -1.) ; vmax = minimum(vmax, 1.)
     vlev=linspace(vmin, vmax, nv, endpoint=True)
     print(var.min())
     print(var.max())
@@ -252,7 +348,7 @@ def quasi2d(hname, n1, n2):
     #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
     colorbar()
 #    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
+    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
     savefig(outdir+'/q2d_v.png')
@@ -266,7 +362,7 @@ def quasi2d(hname, n1, n2):
     plot(rnew, varmean+varstd, color='gray')
     plot(rnew, varmean-varstd, color='gray')
     ylim((varmean-varstd*2.).min(), (varmean+varstd*2.).max())
-    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14)
+    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14)
     ylabel(r'$\langle v\rangle /c$', fontsize=14)
     fig.set_size_inches(3.35, 2.)
     fig.tight_layout()
@@ -288,7 +384,7 @@ def quasi2d(hname, n1, n2):
     contourf(rnew, tar*tscale, lurel, cmap='hot', levels=lulev)
     colorbar()
     contour(rnew, tar*tscale, par/umagtar, levels=[0.9], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
+    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
     savefig(outdir+'/q2d_u.png')
@@ -301,7 +397,7 @@ def quasi2d(hname, n1, n2):
     #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
     colorbar()
 #    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm NS}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
+    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
     fig.set_size_inches(4, 6)
     fig.tight_layout()
     savefig(outdir+'/q2d_q.png')
@@ -318,17 +414,17 @@ def postplot(hname, nentry, ifdat = True):
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     if(ifdat):
-        fname = hname + hdf.entryname(nentry, ndig=5) + ".dat"
-        entryname = hdf.entryname(nentry, ndig=5)
+        fname = hname + entryname(nentry, ndig=5) + ".dat"
+        entryname = entryname(nentry, ndig=5)
         print(fname)
         lines = loadtxt(fname, comments="#")
         r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3]
     else:
-        entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, nentry)
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, nentry)
     #    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
     #    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
     someplots(r, [-v*rho*across, v*rho*across], name=hname+entryname+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])
-    someplots(r, [-u*v*(r/r.min())**4], name=hname+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm NS}\right)^4$", ylog=True)
+    someplots(r, [-u*v*(r/r.min())**4], name=hname+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm *}\right)^4$", ylog=True)
     
 def multiplots(hname, n1, n2):
     '''
@@ -338,13 +434,14 @@ def multiplots(hname, n1, n2):
         postplot(hname, k)
 
 #####################################
-def curvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat"):
+def curvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", conf = 'DEFAULT'):
     '''
     plots a series of U/Umag curves from the ascii output
     '''
     clf()
+    fig = figure()
     for k in arange(n1,n2,step):
-        fname = prefix + hdf.entryname(k, ndig=5) + postfix
+        fname = prefix + entryname(k, ndig=5) + postfix
         print(fname)
         lines = loadtxt(fname, comments="#")
         print(shape(lines))
@@ -355,19 +452,24 @@ def curvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat"):
     legend()
     xscale('log') ; yscale('log')
     xlabel(r'$R/R_*$') ; ylabel(r'$U/U_{\rm mag}$')
+    fig.set_size_inches(5, 4)
+    fig.tight_layout()
     savefig("curvestack.png")
     close('all')
 
-def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=False):
+def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=False, conf = 'DEFAULT'):
     '''
     plots a series of velocity curves from the ascii output
     '''
+    rstar = config[conf].getfloat('rstar')
+
     kctr = 0
     vmin=0. ; vmax=0.
     
     clf()
+    fig = figure()
     for k in arange(n1,n2,step):
-        fname = prefix + hdf.entryname(k, ndig=5) + postfix
+        fname = prefix + entryname(k, ndig=5) + postfix
         print(fname)
         lines = loadtxt(fname, comments="#")
         print(shape(lines))
@@ -391,10 +493,14 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
             kctr += 1
     plot(r, -1./sqrt(r*rstar), '--k', label='virial')
     plot(r, -1./7./sqrt(r*rstar), ':k', label=r'$\frac{1}{7}$ virial')
-    legend()
+    if nt < 10:
+        legend()
     xscale('log')
+    vmin = maximum(vmin, -1.) ; vmax = minimum(vmax, 1.)
     ylim(vmin, vmax)
     xlabel(r'$R/R_*$') ; ylabel(r'$v/c$')
+    fig.set_size_inches(5, 4)
+    fig.tight_layout()
     savefig("Vcurvestack.png")
     if(plot2d):
         nv=20
@@ -473,40 +579,50 @@ def multishock_plot(fluxfile, frontfile):
     someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
     
-def twomultishock_plot(fluxfile1, frontfile1, fluxfile2, frontfile2):
+def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
+        # fluxfile1, frontfile1, fluxfile2, frontfile2):
     '''
-    plotting two shock fronts together
+    plotting many shock fronts together
     '''
-    # twomultishock_plot("titania_fidu/flux", "titania_fidu/sfront", "titania_rot/flux", "titania_rot/sfront")
-    fluxlines1 = loadtxt(fluxfile1+'.dat', comments="#", delimiter=" ", unpack=False)
-    frontlines1 = loadtxt(frontfile1+'.dat', comments="#", delimiter=" ", unpack=False)
-    frontinfo1 = loadtxt(frontfile1+'glo.dat', comments="#", delimiter=" ", unpack=False)
-    fluxlines2 = loadtxt(fluxfile2+'.dat', comments="#", delimiter=" ", unpack=False)
-    frontlines2 = loadtxt(frontfile2+'.dat', comments="#", delimiter=" ", unpack=False)
-    frontinfo2 = loadtxt(frontfile2+'glo.dat', comments="#", delimiter=" ", unpack=False)
-    tf1=fluxlines1[:,0] ; f1=fluxlines1[:,1]
-    ts1=frontlines1[1:,0] ; s1=frontlines1[1:,1] ; ds1=frontlines1[1:,2]
-    tf2=fluxlines2[:,0] ; f2=fluxlines2[:,1]
-    ts2=frontlines2[1:,0] ; s2=frontlines2[1:,1] ; ds2=frontlines2[1:,2]
-    eqlum = frontinfo1[0] ; rs = frontinfo1[1]
+    # multimultishock_plot(["titania_fidu", "titania_v5", "titania_v30"])
 
-    f1 /= 4.*pi ; f2 /= 4.*pi  # ; eqlum /= 4.*pi
-    
-    # interpolate!
-    fint1 = interp1d(tf1, f1, bounds_error=False)
-    fint2 = interp1d(tf2, f2, bounds_error=False)
-    sint = interp1d(ts2, s2, bounds_error=False) # second shock position
+    nf = size(prefices)
+    tlist = [] ;   flist = [];   slist = [] ;  dslist = []
 
+    for k in arange(nf):
+        fluxfile = prefices[k]+'/flux'
+        frontfile = prefices[k]+'/sfront'
+        fluxlines = loadtxt(fluxfile+'.dat', comments="#", delimiter=" ", unpack=False)
+        frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
+        frontinfo = loadtxt(frontfile+'glo.dat', comments="#", delimiter=" ", unpack=False)
+        
+        tf=fluxlines[:,0] # ; f=fluxlines[:,1]
+        if parflux:
+            f = frontlines[1:,4]
+        else:
+            f = fluxlines[:,1]
+        ts=frontlines[1:,0] ; s=frontlines[1:,1] ; ds=frontlines[1:,2]
+        tlist.append(ts)
+        if parflux:
+            f1 = f # / 4./pi
+        else:
+            fint = interp1d(tf, f, bounds_error=False)
+            f1 = fint(ts)/4./pi
+        if smax is None:
+            smax = s.max()
+        slist.append(s[(s>sfilter)&(s<smax)]); flist.append(f1[(s>sfilter)&(s<smax)])
+
+        if k == 0:
+            eqlum = frontinfo[0] ; rs = frontinfo[1]
     clf()
-    plot(fint1(ts1), s1, 'g--', linewidth = 2)
-    plot(fint2(ts2), s2, 'k-')
-    plot([minimum(f1.min(), f2.min()), maximum(f1.max(), f2.max())], [rs, rs], 'r-')
-    plot([eqlum, eqlum], [minimum(s1.min(), s2.min()), maximum(s1.max(), s2.max())], 'r-')
+    for k in arange(nf):
+        plot(flist[k], slist[k], formatsequence[k])
+
+    plot([minimum(flist[0].min(), flist[1].min()), maximum(flist[0].max(), flist[-1].max())], [rs, rs], 'r-')
+    plot([eqlum, eqlum], [minimum(slist[0].min(), slist[-1].min()), maximum(slist[0].max(), slist[-1].max())], 'r-')
     xlabel(r'$L/L_{\rm Edd}$', fontsize=14) ; ylabel(r'$R_{\rm shock}/R_*$', fontsize=14)
-    savefig("twofluxfronts.png") ;   savefig("twofluxfronts.eps")
+    savefig("manyfluxfronts.png") ;   savefig("manyfluxfronts.pdf")
     close('all')
-    
-    #    someplots(fint1(ts1), [s1, sint(ts1), s1*0. + rs], name = "twofluxfronts", xtitle=r'Flux', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
     
 #############################################################
 def allfluxes():
@@ -535,3 +651,44 @@ def allfluxes():
     savefig('allfluxes.png')
     savefig('allfluxes.eps')
     close('all')
+
+def plot_dts(n, prefix = 'out/tireout', postfix = '.dat', conf = 'DEFAULT'):
+    configactual = config[conf]
+    CFL = configactual.getfloat('CFL')
+    Cth = configactual.getfloat('Cth')
+    Cdiff = configactual.getfloat('Cdiff')
+    rstar = configactual.getfloat('rstar')
+    mu30 = configactual.getfloat('mu30')
+    m1 = configactual.getfloat('m1')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3)
+    
+    geofile = os.path.dirname(prefix)+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile)
+    g = geo.geometry()
+    g.r = r ; g.theta = theta ; g.alpha = alpha ; g.l = l ; g.delta = delta
+    g.across = across ; g.cth = cos(theta)
+    dl = l[1:]-l[:-1]
+    dl = concatenate([dl, [dl[-1]]])
+
+    umag = b12**2*2.29e6*m1
+    umagtar = umag * ((1.+3.*g.cth**2)/4. * (rstar/g.r)**6)
+    
+    fname = prefix + entryname(n, ndig=5) + postfix
+    print(fname)
+    lines = loadtxt(fname, comments="#")
+    print(shape(lines))
+    r1 = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3] * umagtar
+    print(shape(r1))
+    print((r1-r).std())
+    csq = 4./3.*u/rho
+    dt_CFL = CFL * dl / (sqrt(csq)+abs(v))
+    
+    qloss = qloss_separate(rho, v, u, g, configactual)
+
+    dt_thermal = Cth * u * g.across / qloss
+
+    dt_diff = Cdiff * dl**2 * rho * 3.
+    someplots(r, [dl], ylog = True, ytitle='$\Delta l$', name = 'dl', formatsequence = ['k-'])
+
+    someplots(r, [dt_CFL, dt_thermal, dt_diff], ylog = True, ytitle='$\Delta t$', name = 'dts', formatsequence = ['k-', 'b:', 'r--'])

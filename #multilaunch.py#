@@ -1,0 +1,14 @@
+import multiprocessing
+from multiprocessing import Pool
+
+
+
+nproc = 2
+
+glolist = ['globals_fidu', 'globals_fidu_noR']
+
+pool = multiprocessing.Pool(nproc)
+
+for k arange(nglo):
+    
+    
