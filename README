@@ -1,20 +1,20 @@
 
 INSTALLATION AND RUNNING
 
-To run the code, make sure you have python3 (checked for python3.6) and preferrably ipython. The main file is tire_RK.py, and the main procedure is alltire(). Tune all the global parameters in globals.py and then run your ipython or python. From ipython, compile the code
+To run the code, make sure you have python3 (checked for python3.6) and preferrably ipython. The configuration file is globals.conf. Probably, you would not need to change anything in the code, only in the configuration. globals.conf contains different configurations of the code, differing in physical and numerical parameters.
+The main file for sqeuential calculations is tire_RK.py, and the main procedure is alltire(). Tune all the global parameters in globals.conf and then run your ipython or python. From ipython, compile the code
 > %run tire_RK
 and then run the main routine
 > alltire()
-if everything is fine, the "out/" directory (or the output directory set by "outdir" in the "globals" configuration file) should immediately (unless you turned the graphical output off by setting ifplot = False in globals.py) start filling with files like vtie..png and tireout..dat containing the snapshots of your simulation. Also, current total flux (namely, luminosity in L_Edd/4\pi units) will be written to "flux.dat". The main output is either tireout.hdf5 (if "ifhdf" flag is True in globals.py) or, alternatively, a series of ..dat files with snapshots. 
-
-The code also supports running with an arbitrary configuration file (useful if you want to run several simulations simultaneously). Just make your own version of globals.py, make a fancy name for it (say, myglobals.py), and compile the code as
-> %run tire_RK myglobals
+If "autostart" is set in globals.conf, "alltire" will launch automatically. For parallel calculations you may try tire_parallel instead of tire_RK. All you need is to ensure you have the number of cores equal to the number of domains set by "parallelfactor" in globals.conf plus 2 (one for the main thread, one for output). 
+If everything is fine, the "out/" directory (or the output directory set by "outdir" in the "globals" configuration file) should immediately (unless you turned the graphical output off by setting ifplot = False in globals.py) start filling with files like vtie..png and tireout..dat containing the snapshots of your simulation. Also, current total flux (namely, luminosity in L_Edd/4\pi units) will be written to "flux.dat". The main output is either tireout.hdf5 (if "ifhdf" flag is True in globals.conf) or, alternatively, a series of ..dat files with snapshots. 
 Make sure that the outputs of different simulations do not interfere. For this, set different outdir names in the configuration files. 
 
 To run the code without ipython, you need to be sure that all the necessary libraries like scipy are linked. Then you can uncomment the "alltire()" line at the end of tire_RK and run the code from the command line as
 > python tire_RK.py
 or
-> python tire_RK myglobals
+> python tire_RK <CONF>,
+where <CONF> stands for the name of the configuration. 
 
 If you are running the code on a machine that does not support matplotlib, make sure that graphic output is off (ifplot=False in globals.py). 
 
@@ -35,5 +35,4 @@ As the code produces a lot of individual output files, you may encounter problem
 The code is designed in a way to make the results accessable as soon as possible. You do not need to wait until the simulation ends to read and reduce the output entries. If you need to kill the code during the simulation, all the results would be saved. However, the output files are not accessable for reading from the same ipython session then. 
 
 TODO: 
-0) 2X or not 2X? 
 1) how fine the resolution should be?
