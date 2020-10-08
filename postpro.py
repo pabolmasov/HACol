@@ -95,7 +95,7 @@ def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf 
     if ifplot:
         outdir = os.path.dirname(ingalja)+'/'
         plots.someplots([xg, xp], [ug, up], name=outdir+'BScompare_u', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
-        plots.someplots([xp, xg], [-vp, -vg], name=outdir+'BScompare_v', ylog=True, formatsequence=['r--', 'k-'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
+        plots.someplots([xp, xg, xp, xp], [-vp, -vg, 1./sqrt(rstar*xp), 1./sqrt(rstar*xp)/7.], name=outdir+'BScompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
         plots.someplots([xg, xp], [pratg, pratp], name=outdir+'BScompare_p', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$P_{\rm gas} / P_{\rm rad}$', multix = True)
         plots.someplots([xg, xp], [tempg, tempp], name=outdir+'BScompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True)
 # comparer('galia_F/BS_solution_F', 'titania_fidu/tireout01000', vnorm = -0.000173023, conf = 'FIDU')
@@ -474,25 +474,21 @@ def tailfit(prefix = 'out/flux', trange = None, ifexp = False, ncol = -1):
     print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))
 
 ##################################################################
-def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False, mdot = None):
+def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False, conf='DEFAULT'):
     # reconstructs the mass flow
     # reading geometry:
-    if mdot is None:
-        mdot = config['DEFAULT'].getfloat('mdot')
     geofile = os.path.dirname(prefix)+"/geo.dat"
-    fluxfile = os.path.dirname(prefix)+"/flux.dat"
-    fluxlines = loadtxt(fluxfile, comments="#")
-    tar=fluxlines[:,0]
+    #    fluxfile = os.path.dirname(prefix)+"/flux.dat"
+    #    fluxlines = loadtxt(fluxfile, comments="#")
+    #    tar=fluxlines[:,0]
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
-    print(mdot)
     nr = size(r) 
     indices = arange(n1, n2, step)
     nind = size(indices)
     md2 = zeros([nind, nr], dtype=double)
     t2 = zeros([nind, nr], dtype=double)
     r2 = zeros([nind, nr], dtype=double)   
-
     
     for k in arange(nind): # arange(n1, n2, step):
         hname = prefix + ".hdf5"
@@ -502,10 +498,13 @@ def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False, mdot = None):
             lines = loadtxt(fname, comments="#")
             r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2]
             t=tar[indices[k]]
+            mdot = config[conf].getfloat('mdot') * 4.*pi
         else:
-            entryname, t, l, r, sth, rho, u, v, qloss = hdf.read(hname, indices[k])
+            entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, indices[k])
+            mdot = glo['mdot'] * 4.*pi
         md2[k, :] = (rho * v * across)[:]
         t2[k, :] = t  ;     r2[k, :] = r[:]
+        tscale = config[conf].getfloat('tscale') * 4.*pi
 
     # ascii output:
     fmap = open(prefix+"_mdot.dat", "w")
@@ -516,8 +515,9 @@ def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False, mdot = None):
     if(ifplot):
         # graphic output
         nlev=30
-        plots.somemap(r2, t2, -md2/mdot, name=prefix+"_mdot", levels = 2.*arange(nlev)/double(nlev-2))
         mdmean = -md2.mean(axis=0)
+        plots.somemap(r2, t2*tscale, -md2/mdot, name=prefix+"_mdot", levels = (3.*arange(nlev)/double(nlev-2)-1.),
+                      inchsize = [4,6], cbtitle = r'$\dot{M}/\dot{M}_{\rm out}$')
         plots.someplots(r, [mdmean/(4.*pi), mdmean*0.+mdot/(4.*pi)], name=prefix+"_mdmean",
                         xtitle='$R/R_*$', ytitle=r"$\dot{M}c^2/L_{\rm Edd}$", formatsequence=['k.', 'r-'])
         

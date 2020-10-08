@@ -121,7 +121,7 @@ def splot(x, y, name='outplot', fmt='-k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     savefig(name+'.png')
     close('all')
 
-def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle='$r$, $GM/c^2$ units', ytitle='$t$, s', levels = None):
+def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle=r'$R/R_*$', ytitle='$t$, s', levels = None, inchsize = None, cbtitle = None):
     '''
     plots a 2dmap
     '''
@@ -131,13 +131,21 @@ def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle='$r$, $GM/c^2$ un
         pcolormesh(x, y, q, cmap='hot', vmin = levels.min(), vmax=levels.max())
     else:
         pcolormesh(x, y, q, cmap='hot')
-    colorbar()
+    cb = colorbar()
+    if cbtitle is not None:
+        cb.set_label(r' '+cbtitle, fontsize=14)
+    cb.ax.tick_params(labelsize=12, length=3, width=1., which='major', direction ='in')
+    tick_params(labelsize=14, length=3, width=1., which='minor', direction='in')
+    tick_params(labelsize=14, length=6, width=1., which='major', direction='in')
+
     #    contour(x, y, q, levels=[1.], colors='k')
     if(xlog):
         xscale('log')
     if(ylog):
         yscale('log')
-    xlabel(xtitle) ; ylabel(ytitle)
+    xlabel(xtitle, fontsize=18) ; ylabel(ytitle, fontsize=18)
+    if inchsize is not None:
+        fig.set_size_inches(inchsize[0], inchsize[1])
     fig.tight_layout()
     savefig(name)
     close()
@@ -184,7 +192,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     xlabel(xtitle, fontsize=14) ; ylabel(ytitle, fontsize=14)
     plt.tick_params(labelsize=12, length=1, width=1., which='minor')
     plt.tick_params(labelsize=12, length=3, width=1., which='major')
-    fig.set_size_inches(6, 4)
+    fig.set_size_inches(5, 4)
     fig.tight_layout()
     savefig(name+'.png')
     close('all')
@@ -598,9 +606,9 @@ def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
         
         tf=fluxlines[:,0] # ; f=fluxlines[:,1]
         if parflux:
-            f = frontlines[1:,4]
+            f = frontlines[1:,5]
         else:
-            f = fluxlines[:,1]
+            f = fluxlines[:,-1]
         ts=frontlines[1:,0] ; s=frontlines[1:,1] ; ds=frontlines[1:,2]
         tlist.append(ts)
         if parflux:
@@ -614,13 +622,19 @@ def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
 
         if k == 0:
             eqlum = frontinfo[0] ; rs = frontinfo[1]
+    
     clf()
+    fig = figure()
     for k in arange(nf):
         plot(flist[k], slist[k], formatsequence[k])
 
     plot([minimum(flist[0].min(), flist[1].min()), maximum(flist[0].max(), flist[-1].max())], [rs, rs], 'r-')
     plot([eqlum, eqlum], [minimum(slist[0].min(), slist[-1].min()), maximum(slist[0].max(), slist[-1].max())], 'r-')
     xlabel(r'$L/L_{\rm Edd}$', fontsize=14) ; ylabel(r'$R_{\rm shock}/R_*$', fontsize=14)
+    plt.tick_params(labelsize=12, length=1, width=1., which='minor')
+    plt.tick_params(labelsize=12, length=3, width=1., which='major')
+    fig.set_size_inches(6, 6)
+    fig.tight_layout()
     savefig("manyfluxfronts.png") ;   savefig("manyfluxfronts.pdf")
     close('all')
     
