@@ -24,7 +24,7 @@ else:
 
 # MPI parameters:
 comm = MPI.COMM_WORLD
-rank = comm.Get_rank()
+crank = comm.Get_rank()
 csize = comm.Get_size()
 
 # configuration file (read by each thread):
@@ -35,7 +35,7 @@ config.read(conffile)
 ifplot = config[conf].getboolean('ifplot')
 ifhdf = config[conf].getboolean('ifhdf')
 verbose = config[conf].getboolean('verbose')
-if rank != 0:
+if crank != 0:
     verbose = False
 autostart = config[conf].getboolean('autostart')
 # initializing variables:
@@ -219,7 +219,7 @@ def tocon(prim, gnd = None):
     m=prim['rho']*gnd.across # mass per unit length
     s=m*prim['v'] # momentum per unit length
     e=(prim['u']+prim['rho']*(prim['v']**2/2.- 1./gnd.r - 0.5*(omega*gnd.r*gnd.sth)**2))*gnd.across  # total energy (thermal + mechanic) per unit length
-    return {'m': m, 's': s, 'e': e, 'N': prim['N']}
+    return {'m': m, 's': s, 'e': e}
 
 def toprim(con, gnd = None):
     '''
@@ -227,7 +227,7 @@ def toprim(con, gnd = None):
     '''
     #  m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
     if gnd is None:
-        gnd = l_g[con['N']]
+        gnd = g
     rho = con['m']/gnd.across
     v = con['s']/con['m']
     u = (con['e']-con['m']*(v**2/2.-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2))/gnd.across
@@ -237,7 +237,7 @@ def toprim(con, gnd = None):
     u, rho, press = regularize(u, rho, press)
     beta = betafun(Fbeta(rho, u, betacoeff)) # not the most efficient
     urad = u*(1.-beta)/(1.-beta/2.)
-    prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press, 'N': con['N']}
+    prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press}
     return prim
 
 def diffuse(rho, urad, v, dl, across):
@@ -375,7 +375,6 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
     rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad'] ; u = prim['u']
     beta = prim['beta']
     #    beta = betafun(Fbeta(rho, u, betacoeff))
-    nd = prim['N']
     #
     # adding ghost zones:
     if leftpack is not None:
@@ -497,7 +496,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
 
     # con1 = {'N': nd, 'm': dmt, 's': dst, 'e': det} # , 'ltot': ltot}
 
-    return {'N': nd, 'm': dmt, 's': dst, 'e': det}
+    return {'m': dmt, 's': dst, 'e': det}
 
 def updateCon(l, dl, dt):
     '''
@@ -520,16 +519,16 @@ def updateCon(l, dl, dt):
 
 ################################################################################
 
-def BCsend(leftpack_send, rightpack_send, comm, rank):
+def BCsend(leftpack_send, rightpack_send, comm):
     leftpack = None ; rightpack = None
-    left = rank-1 ; right = rank+1
-    if rank > first:
-        comm.send(leftpack_send, dest = left, tag = rank)
-    if rank < last:
-        comm.send(rightpack_send, dest = right, tag = rank)
-    if rank > first:
+    left = crank-1 ; right = crank+1
+    if crank > first:
+        comm.send(leftpack_send, dest = left, tag = crank)
+    if crank < last:
+        comm.send(rightpack_send, dest = right, tag = crank)
+    if crank > first:
         leftpack = comm.recv(source = left, tag = left)
-    if rank < last:
+    if crank < last:
         rightpack = comm.recv(source = right, tag = right)
     return leftpack, rightpack
 
@@ -541,54 +540,52 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
     '''
     con = icon.copy()
     con1 = icon.copy()
-    nd = con['N']
     
     prim = toprim(con, gnd = g) # primitive from conserved
 
     t=0. # TODO: restart requires t >0.
     nout = 0
     ltot = 0. # total luminosity of the flow (required for IRR)
-
+    timectr = 0
+    
     # basic topology:
-    left = rank - 1 ; right = rank + 1
+    left = crank - 1 ; right = crank + 1
     
     #    t = 0.
     print("nd = "+str(nd))
-    print("rank = "+str(rank)+' = '+str(nd))
+    print("rank = "+str(crank))
     print("tmax = "+str(tmax))
 
     gleftbound = geometry_local(g, 0)
     grightbound = geometry_local(g, -1)
     # topology test: tag traces the origin domain
     if ttest:
-        if rank > first:
-            comm.send({'data': 'from '+str(rank)+' to '+str(left)}, dest = left, tag = rank)
-        if rank < last:
-            comm.send({'data': 'from '+str(rank)+' to '+str(right)}, dest = right, tag = rank)
-        if rank > first:
+        if crank > first:
+            comm.send({'data': 'from '+str(crank)+' to '+str(left)}, dest = left, tag = crank)
+        if crank < last:
+            comm.send({'data': 'from '+str(crank)+' to '+str(right)}, dest = right, tag = crank)
+        if crank > first:
             leftdata = comm.recv(source = left, tag = left)
-            print("I, "+str(rank)+", received from "+str(left)+": "+leftdata['data'])
+            print("I, "+str(crank)+", received from "+str(left)+": "+leftdata['data'])
         if rang < last:
             rightdata = comm.recv(source = right, tag = right)
-            print("I, "+str(rank)+", received from "+str(right)+": "+rightdata['data'])
+            print("I, "+str(crank)+", received from "+str(right)+": "+rightdata['data'])
         print("this was topology test\n")
         tt = input("t")
 
     # exchange geometry:
-    if rank > first:
-        comm.send({'g':gleftbound}, dest = left, tag = rank)
-    if rank < last:
-        comm.send({'g':grightbound}, dest = right, tag = rank)
-    if rank > first:
+    if crank > first:
+        comm.send({'g':gleftbound}, dest = left, tag = crank)
+    if crank < last:
+        comm.send({'g':grightbound}, dest = right, tag = crank)
+    if crank > first:
         gdata = comm.recv(source = left, tag = left)
         gleftbound = gdata['g']
-    if rank < last:
+    if crank < last:
         gdata = comm.recv(source = right, tag = right)
         grightbound = gdata['g']
         
     # if there is no exchange, the leftmost geometry just reproduces the leftmost point of the actual mesh
-    print("nd = "+str(nd)+": gright = "+str(grightbound.l))
-    print("nd = "+str(nd)+": gleft = "+str(gleftbound.l))
     #    print("g size = "+str(shape(g.l)))
     # extended geometry, with left and right boundaries included
     gext = geometry_add(g, grightbound)
@@ -611,70 +608,70 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
         timer.start_comp("BC")
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
-        leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm, rank)
+        leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
         timer.stop_comp("BC")
         
         # time step: all the domains send dt to first, and then the first sends the minimum value back
         timer.start_comp("dt")
-        dt = time_step(prim, g, dl, xirad = xirad, raddiff = raddiff, eta = eta, CFL = CFL, Cdiff = Cdiff, Cth = Cth, taumin = taumin, taumax = taumax) # this is local dt
-        #        print("rank "+str(rank)+": dt_local = "+str(dt))
-        dt = comm.allreduce(dt, op=MPI.MIN) # calculates one minimal dt
-        # 
-        # print("dt = "+str(dt))
-        #        tt = input("dt")
+        if timectr == 0:
+            dt = time_step(prim, g, dl, xirad = xirad, raddiff = raddiff, eta = eta, CFL = CFL, Cdiff = Cdiff, Cth = Cth, taumin = taumin, taumax = taumax) # this is local dt
+            dt = comm.allreduce(dt, op=MPI.MIN) # calculates one minimal dt
+        timectr += 1
+        if timectr >= timeskip:
+            timectr = 0            
         timer.stop_comp("dt")
         
         timer.start_comp("RKstep")
         dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot)
+        timer.stop_comp("RKstep")
+        timer.start_comp("updateCon")
         con1 = updateCon(con, dcon1, dt/2.)
         # ultimate BC:
-        if rank == last:
+        if crank == last:
             con1['s'][-1] = -mdot
             con1['e'][-1] = 0.
-        if rank == first:
-            con1['s'][0] = 0.
-     
-        timer.stop_comp("RKstep")
+        if crank == first:
+            con1['s'][0] = 0.     
+        timer.stop_comp("updateCon")
         timer.start_comp("BC")
         prim = toprim(con1, gnd = g)
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
-        leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm, rank)
+        leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
         dcon2 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , BCfluxleft, BCfluxright)
-        con2 = updateCon(con, dcon2, dt/2.)
-     
-        if rank == last:
+        timer.stop_comp("RKstep")
+        timer.start_comp("updateCon")
+        con2 = updateCon(con, dcon2, dt/2.)     
+        if crank == last:
             con2['s'][-1] = -mdot
             con2['e'][-1] = 0.
-        if rank == first:
+        if crank == first:
             con2['s'][0] = 0.
-     
-        timer.stop_comp("RKstep")
+        timer.stop_comp("updateCon")
         timer.start_comp("BC")
         prim = toprim(con2, gnd = g)
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
-        leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm, rank)
+        leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
         dcon3 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) #, BCfluxleft, BCfluxright)
-
+        timer.stop_comp("RKstep")
+        timer.start_comp("updateCon")
         con3 = updateCon(con, dcon3, dt)
-        
-        if rank == last:
+        if crank == last:
             con3['s'][-1] = -mdot
             con3['e'][-1] = 0.
-        if rank == first:
+        if crank == first:
             con3['s'][0] = 0.
-     
-        timer.stop_comp("RKstep")
+        timer.stop_comp("updateCon")
         timer.start_comp("BC")
         prim = toprim(con3, gnd = g)
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
-        leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm, rank)
+        leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
         timer.stop_comp("BC")
         timer.start_comp("RKstep")
         dcon4 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , BCfluxleft, BCfluxright)
@@ -683,10 +680,10 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
 
         con = updateCon(con, [dcon1, dcon2, dcon3, dcon4], [dt/6., dt/3., dt/3., dt/6.])
         
-        if rank == last:
+        if crank == last:
             con['s'][-1] = -mdot
             con['e'][-1] = 0.
-        if rank == first:
+        if crank == first:
             con['s'][0] = 0.
             #        prim = toprim(con, gnd = g)
         timer.stop_comp("updateCon")
@@ -694,7 +691,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
         t += dt
         #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
         prim = toprim(con, gnd = g) # primitive from conserved
-        if rank == first:
+        if crank == first:
             timer.lap("step")
 
         if (t>=tstore):            
@@ -705,12 +702,12 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
             timer.start("io")
             # outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
             outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
-            if (rank != first):                
-                comm.send(outblock, dest = first, tag = rank)
+            if (crank != first):                
+                comm.send(outblock, dest = first, tag = crank)
             else:
                 tireouts(hfile, comm, outblock, fflux, ftot, nout = nout)
             timer.stop("io")
-            if (rank == first) & (nout%ascalias == 0):
+            if (crank == first) & (nout%ascalias == 0):
                 timer.stats("step")
                 timer.stats("io")
                 timer.comp_stats()
@@ -790,7 +787,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
 def alltire():
     global gglobal
     ######################### main thread:  #############################
-    if rank == 0: 
+    if crank == 0: 
         # if the output directory does not exist:
         if not os.path.exists(outdir):
             os.makedirs(outdir)
@@ -902,8 +899,14 @@ def alltire():
         fflux=open(outdir+'/'+'flux.dat', 'w')
         ftot=open(outdir+'/'+'totals.dat', 'w')
 
-        inds = parallelfactor
-        # TODO: variable inds
+        ifquadratic = configactual.getboolean('ifquadratic')
+        if ifquadratic:
+            aind = ceil(nx/parallelfactor**2).astype(int) # ceil(6.*nx/parallelfactor/(parallelfactor+1.)/(2.*parallelfactor+1.)).astype(int)
+            print("first partition is "+str())
+            inds = aind * (arange(parallelfactor-1, dtype = int)+1)**2
+            print(inds)
+        else:
+            inds = parallelfactor
     
         gglobal = g
         l_g = geometry_split(g, inds)
@@ -911,7 +914,7 @@ def alltire():
 
         # data splitting:
         l_m = array_split(m, inds) ; l_e = array_split(e, inds) ; l_s = array_split(s, inds)
-        l_con = [{'N': i, 'm': l_m[i], 's': l_s[i], 'e': l_e[i]} for i in range(parallelfactor)] # list of conserved quantities, each item organized as a dictionary
+        l_con = [{'m': l_m[i], 's': l_s[i], 'e': l_e[i]} for i in range(parallelfactor)] # list of conserved quantities, each item organized as a dictionary
         l_u = array_split(u, inds) ; l_rho = array_split(rho, inds) ; l_v = array_split(v, inds)
         l_umagtar = array_split(umagtar, inds)
         l_press = array_split(press, inds) ;    l_urad = array_split(urad, inds)
@@ -939,12 +942,12 @@ def alltire():
         ghalf = l_ghalf[0]
         con = l_con[0]
     else:
-        g = comm.recv(source = 0, tag = rank)
-        ghalf = comm.recv(source = 0, tag = rank+parallelfactor)
-        #    l_prim = comm.recv(source = 0, tag = rank-1+parallelfactor*2)
-        con = comm.recv(source = 0, tag = rank+parallelfactor*3)
-        print("initialization: recieved data by core "+str(rank))
-    if (rank ==0):
+        g = comm.recv(source = 0, tag = crank)
+        ghalf = comm.recv(source = 0, tag = crank+parallelfactor)
+        #    l_prim = comm.recv(source = 0, tag = crank-1+parallelfactor*2)
+        con = comm.recv(source = 0, tag = crank+parallelfactor*3)
+        print("initialization: recieved data by core "+str(crank))
+    if crank ==0:
         onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot)
     else:
         onedomain(g, ghalf, con, comm)
