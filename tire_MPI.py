@@ -6,13 +6,13 @@ from numpy.random import rand
 from numpy import *
 # import time
 import os
-import re
+# import re
 import linecache
 import os.path
-import imp
+# import imp
 import sys
-
-from mpi4py import MPI
+import configparser as cp
+import gc
 
 if(size(sys.argv)>1):
     print("launched with arguments "+str(', '.join(sys.argv)))
@@ -22,13 +22,13 @@ if(size(sys.argv)>1):
 else:
     conf='DEFAULT'
 
+from mpi4py import MPI
 # MPI parameters:
 comm = MPI.COMM_WORLD
 crank = comm.Get_rank()
 csize = comm.Get_size()
-
+    
 # configuration file (read by each thread):
-import configparser as cp
 conffile = 'globals.conf'
 config = cp.ConfigParser(inline_comment_prefixes="#")
 config.read(conffile) 
@@ -391,8 +391,6 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         press = concatenate([[pressleft], press])
         beta = concatenate([[betaleft], beta])
     else:
-        if nd>0:
-            print("topology issue, nd = "+str(nd))
         rho = concatenate([[rho[0]], rho])
         v = concatenate([[v[0]], v])
         u = concatenate([[u[0]], u])
@@ -413,8 +411,6 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         press = concatenate([press, [pressright]])
         beta = concatenate([beta, [betaright]])
     else:
-        if nd < (parallelfactor-1):
-            print("topology issue, nd = "+str(nd))
         rho = concatenate([rho, [rho[-1]]])
         v = concatenate([v, [v[-1]]])
         u = concatenate([u, [u[-1]]])
@@ -552,7 +548,6 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
     left = crank - 1 ; right = crank + 1
     
     #    t = 0.
-    print("nd = "+str(nd))
     print("rank = "+str(crank))
     print("tmax = "+str(tmax))
 
@@ -600,7 +595,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
     #    ii = input('lhfl')
     tstore = t # ; nout = 0
     timectr = 0
-    if nd == 0:
+    if crank == first:
         timer.start("total")
         print("dtout = "+str(dtout))
         
@@ -702,10 +697,14 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
             timer.start("io")
             # outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
             outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
+            del con1, con2, con3, dcon1, dcon2, dcon3, dcon4
+            del leftpack, rightpack, leftpack_send, rightpack_send
             if (crank != first):                
                 comm.send(outblock, dest = first, tag = crank)
             else:
                 tireouts(hfile, comm, outblock, fflux, ftot, nout = nout)
+            del outblock
+            gc.collect()
             timer.stop("io")
             if (crank == first) & (nout%ascalias == 0):
                 timer.stats("step")
@@ -714,7 +713,6 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
                 timer.start("step") #refresh lap counter (avoids IO profiling)
                 timer.purge_comps()
             nout += 1
-    #    dtpipe.close()
     
 ##########################################################
 def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
@@ -757,6 +755,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
     fflux.flush() ; ftot.flush()
     if hfile is not None:
         hdf.dump(hfile, nout, t, rho, v, u, qloss)
+        hfile.flush()
     if not(ifhdf) or (nout%ascalias == 0):
         if ifplot:
             plots.vplot(gglobal.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
@@ -778,6 +777,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
         nx = size(gglobal.r)
         for k in arange(nx):
             fstream.write(str(gglobal.r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
+        fstream.flush()
         fstream.close()
 
 

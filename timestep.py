@@ -21,7 +21,7 @@ def time_step(prim, g, dl, xirad = 1.5, raddiff = True, eta = 0., CFL = 0.5, Cdi
     
     if(raddiff):
         ctmp = dl**2 * 3.*prim['rho'][1:-1]
-        dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.1) # (dx^2/D)
+        dt_diff = Cdiff * min(ctmp[ctmp>0.]) # (dx^2/D)
     else:
         dt_diff = dt_CFL * 5. # effectively infinity ;)
 
@@ -44,7 +44,7 @@ def timestepdetails(g, rho, press, u, v, urad,  xirad = 1.5, raddiff = True, CFL
     dt_thermal = Cth * abs((u*g.across)[wpos]/qloss[wpos]).min()
     if(raddiff):
         ctmp = dl**2 * 3.*rho_half
-        dt_diff = Cdiff * quantile(ctmp[ctmp>0.], 0.01) # (dx^2/D)
+        dt_diff = Cdiff * min(ctmp[ctmp>0.]) # (dx^2/D)
     else:
         dt_diff = dt_CFL * 5. # effectively infinity ;)
     return minimum(dt_CFL, minimum(dt_diff, dt_thermal)), dt_CFL, dt_thermal, dt_diff
