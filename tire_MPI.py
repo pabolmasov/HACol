@@ -528,7 +528,7 @@ def BCsend(leftpack_send, rightpack_send, comm):
         rightpack = comm.recv(source = right, tag = right)
     return leftpack, rightpack
 
-def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
+def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0., nout = 0):
 #(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile, t = 0., nout = 0):
     '''
     single domain, calculated by a single core
@@ -539,8 +539,6 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
     
     prim = toprim(con, gnd = g) # primitive from conserved
 
-    t=0. # TODO: restart requires t >0.
-    nout = 0
     ltot = 0. # total luminosity of the flow (required for IRR)
     timectr = 0
     
@@ -548,13 +546,13 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
     left = crank - 1 ; right = crank + 1
     
     #    t = 0.
-    print("rank = "+str(crank))
-    print("tmax = "+str(tmax))
+    #    print("rank = "+str(crank))
+    #    print("tmax = "+str(tmax))
 
     gleftbound = geometry_local(g, 0)
     grightbound = geometry_local(g, -1)
     # topology test: tag traces the origin domain
-    if ttest:
+    if ttest and (t<dtout):
         if crank > first:
             comm.send({'data': 'from '+str(crank)+' to '+str(left)}, dest = left, tag = crank)
         if crank < last:
@@ -597,9 +595,9 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
     timectr = 0
     if crank == first:
         timer.start("total")
-        print("dtout = "+str(dtout))
+        #  print("dtout = "+str(dtout))
         
-    while(t<tmax):
+    while(t<(tstore+dtout)):
         timer.start_comp("BC")
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
@@ -689,30 +687,31 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None):
         if crank == first:
             timer.lap("step")
 
-        if (t>=tstore):            
-            #            ltot = (dcon1['ltot'] + 2.*dcon2['ltot'] + 2.*dcon3['ltot'] + dcon4['ltot'])/6.
-            tstore += dtout
-            # sending data:
-            timer.stop("step")
-            timer.start("io")
-            # outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
-            outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
-            del con1, con2, con3, dcon1, dcon2, dcon3, dcon4
-            del leftpack, rightpack, leftpack_send, rightpack_send
-            if (crank != first):                
-                comm.send(outblock, dest = first, tag = crank)
-            else:
-                tireouts(hfile, comm, outblock, fflux, ftot, nout = nout)
-            del outblock
-            gc.collect()
-            timer.stop("io")
-            if (crank == first) & (nout%ascalias == 0):
-                timer.stats("step")
-                timer.stats("io")
-                timer.comp_stats()
-                timer.start("step") #refresh lap counter (avoids IO profiling)
-                timer.purge_comps()
-            nout += 1
+
+    #            ltot = (dcon1['ltot'] + 2.*dcon2['ltot'] + 2.*dcon3['ltot'] + dcon4['ltot'])/6.
+    # sending data:
+    timer.stop("step")
+    timer.start("io")
+    # outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
+    outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
+    #    del con1, con2, con3, dcon1, dcon2, dcon3, dcon4
+    #    del leftpack, rightpack, leftpack_send, rightpack_send
+    if (crank != first):                
+        comm.send(outblock, dest = first, tag = crank)
+    else:
+        tireouts(hfile, comm, outblock, fflux, ftot, nout = nout)
+    #       del outblock
+    #      gc.collect()
+    timer.stop("io")
+    if (crank == first) & (nout%ascalias == 0):
+        timer.stats("step")
+        timer.stats("io")
+        timer.comp_stats()
+        timer.start("step") #refresh lap counter (avoids IO profiling)
+        timer.purge_comps()
+    nout += 1
+
+    return nout, t, con
     
 ##########################################################
 def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
@@ -947,9 +946,11 @@ def alltire():
         #    l_prim = comm.recv(source = 0, tag = crank-1+parallelfactor*2)
         con = comm.recv(source = 0, tag = crank+parallelfactor*3)
         print("initialization: recieved data by core "+str(crank))
-    if crank ==0:
-        onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot)
-    else:
-        onedomain(g, ghalf, con, comm)
+    t=0.  ; nout = 0
+    while (t<tmax):
+        if crank ==0:
+            nout, t, con = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot, t=t, nout = nout)
+        else:
+            nout, t, con = onedomain(g, ghalf, con, comm, t=t, nout = nout)
 
 alltire()
