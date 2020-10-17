@@ -309,7 +309,7 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
                             xlog=False, ylog = True, formatsequence = ['k.', 'b-'],
                             vertical = (r[wcomp1]+r[wcomp2])/2.)
         
-    return t, (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock
+    return t, (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock, u[0]
     #    return (r[wcomp:wcomp1]).mean(), r[wcomp:wcomp1],v[wcomp], v[wcomp1]
 # v[wcomp], v[wcomp+1]
 
@@ -351,6 +351,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     dv=arange(size(n), dtype=double)
     v2=arange(size(n), dtype=double)
     v1=arange(size(n), dtype=double)
+    u0 =arange(size(n), dtype=double)
     lc_tot = arange(size(n), dtype=double) ; lc_part = arange(size(n), dtype=double)
     compression=arange(size(n), dtype=double)
     print(size(n))
@@ -364,6 +365,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
     xs, BSbeta = bs.xis(BSgamma, BSeta, x0=xest, ifbeta = True)
+    dt_BS = tscale * rstar**1.5 * bs.dtint(BSgamma, xs)
     print("eta = "+str(BSeta))
     print("gamma = "+str(BSgamma))
     print("eta gamma^{1/4} = "+str(BSeta*BSgamma**0.25))
@@ -382,7 +384,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
         if(dat):
             stmp, dstmp, v1tmp, v2tmp = shock_dat(n[k], prefix=prefix, kleap = kleap)
         else:
-            ttmp, stmp, dstmp, v1tmp, v2tmp, ltot, lpart = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap,
+            ttmp, stmp, dstmp, v1tmp, v2tmp, ltot, lpart, u0tmp = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap,
                                                                      uvcheck = (k == (size(n)-1)), uvcheckfile = outdir+"/uvcheck")
         s[k] = stmp ; ds[k] = dstmp
         v1[k] = v1tmp   ; v2[k] =  v2tmp
@@ -390,6 +392,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
         compression[k] = v2tmp/v1tmp
         lc_tot[k] = ltot ; lc_part[k] = lpart
         t[k] = ttmp
+        u0[k] = u0tmp
 
     print("predicted shock position: xs = "+str(xs)+" (rstar)")
     print("cooling limit: rcool/rstar = "+str(rcool/rstar))
@@ -397,22 +400,24 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     ff /= 4.*pi  ; eqlum /= 4.*pi ; lc_tot /= 4.*pi ; lc_part /= 4.*pi
     t *= tscale
 
+    dt_current = tscale * rstar**1.5 * bs.dtint(BSgamma, s)
     
     if(ifplot):
         ws=where((s>1.1) & (lc_part > lc_part.min()))
         n=ws
-        plots.someplots(t[ws], [s[ws], s[ws]*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
+        plots.someplots(t[ws], [s[ws], s[ws]*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])        
         plots.someplots(lc_part[ws], [s[ws], s[ws]*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog= (lc_tot[ws].max()/lc_tot[ws].min()) > 10., ylog= (s[ws].max()/s[ws].min()> 10.), formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
         # plots.someplots(t[ws], [ff[n], lc_part[ws], ff[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False, formatsequence = ['k:', 'k-', 'r-'])
         plots.someplots(t[ws], [-v1[ws], -v2[ws], sqrt(2./s[ws]/rstar), sqrt(2./s[ws]/rstar)/7.], name = outdir+"/vleap",xtitle=r'$t$, s', ytitle=r'$ v /c$', xlog=False, formatsequence = ['k-', 'b:', 'r-', 'r-'])
+        plots.someplots(s[ws], [1./dt_current[ws], 1./(tscale * rstar**1.5 * s[ws]**3.5)], xtitle = r'$R_{\rm shock}/R_*$', xlog = True, ylog = True, formatsequence = ['ro', 'k-'], name = outdir + '/ux', ytitle = r'$f$, Hz')
 
     print("effective compression factor "+str(compression[isfinite(compression)].mean()))
     # ascii output
     fout = open(outdir+'/sfront.dat', 'w')
     #    foutflux = open(outdir+'/sflux.dat', 'w')
-    fout.write("# time -- shock position -- downstream velocity -- upstream velocity -- total flux -- partial flux \n")
+    fout.write("# time -- shock position -- downstream velocity -- upstream velocity -- total flux -- partial flux -- osc. freq.\n")
     for k in arange(size(n)):
-        fout.write(str(t[k])+" "+str(s[k])+" "+str(v1[k])+" "+str(v2[k])+" "+str(lc_tot[k])+" "+str(lc_part[k])+"\n")
+        fout.write(str(t[k])+" "+str(s[k])+" "+str(v1[k])+" "+str(v2[k])+" "+str(lc_tot[k])+" "+str(lc_part[k])+" "+str(1./dt_current[k])+"\n")
     fout.close()
     fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
     fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')

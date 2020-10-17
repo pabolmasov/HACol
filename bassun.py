@@ -3,6 +3,7 @@ from numpy.random import rand
 from numpy import *
 from scipy.optimize import fsolve
 from scipy.special import expn
+from scipy.integrate import simps
 
 def fxis(x, gamma, eta, n):
     return 1.+exp(gamma*x)*(x*expn(2,gamma)-expn(2,gamma*x)) - eta * gamma**0.25 * x**((n+0.5)/4.)
@@ -26,5 +27,26 @@ def xis(gamma, eta, n=3, x0=20., ifbeta = False):
     else:
         return x
 
+def dtint(gamma, xs, beta = None):
+    '''
+    calculates the (normalized) time for a sound wave to travel from the surface to the shock front (or back)
+    input: BS gamma, BS beta, position of the shock in rstar units
+    '''
+    nxs = size(xs)
 
+    if nxs <= 1:
+        nx = 1000
+        x = (xs-1.)*arange(nx)/double(nx-1)+1.
+
+        if beta is None:
+            beta = 1.-gamma*exp(gamma)*(expn(1,gamma)-expn(1, gamma*xs))
     
+        csq = 3. * exp(gamma * x) * (expn(2,gamma*x)/x + beta * exp(-gamma) - expn(2,gamma)) / x**3
+
+        dt = simps(1./sqrt(csq), x=x)
+    else:
+        dt = zeros(nxs)
+        for k in arange(nxs):
+            dt[k] = dtint(gamma, xs[k], beta = beta)
+        
+    return dt
