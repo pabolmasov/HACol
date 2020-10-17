@@ -164,8 +164,6 @@ from geometry import * #
 from tauexp import *
 
 from timer import Timer
-timer = Timer(["total", "step", "io"],
-              ["BC", "dt", "RKstep", "updateCon"])
 
 # beta = Pgas / Ptot: define once and globally
 from beta import *
@@ -528,7 +526,7 @@ def BCsend(leftpack_send, rightpack_send, comm):
         rightpack = comm.recv(source = right, tag = right)
     return leftpack, rightpack
 
-def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0., nout = 0):
+def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0., nout = 0, thetimer = None):
 #(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile, t = 0., nout = 0):
     '''
     single domain, calculated by a single core
@@ -593,31 +591,33 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
     #    ii = input('lhfl')
     tstore = t # ; nout = 0
     timectr = 0
-    if crank == first:
-        timer.start("total")
+    if thetimer is not None:
+        thetimer.start("total")
         #  print("dtout = "+str(dtout))
         
     while(t<(tstore+dtout)):
-        timer.start_comp("BC")
+        if thetimer is not None:
+            timer.start_comp("BC")
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
-        timer.stop_comp("BC")
-        
+        if thetimer is not None:
+            thetimer.stop_comp("BC")        
+            thetimer.start_comp("dt")
         # time step: all the domains send dt to first, and then the first sends the minimum value back
-        timer.start_comp("dt")
         if timectr == 0:
             dt = time_step(prim, g, dl, xirad = xirad, raddiff = raddiff, eta = eta, CFL = CFL, Cdiff = Cdiff, Cth = Cth, taumin = taumin, taumax = taumax) # this is local dt
             dt = comm.allreduce(dt, op=MPI.MIN) # calculates one minimal dt
         timectr += 1
         if timectr >= timeskip:
-            timectr = 0            
-        timer.stop_comp("dt")
-        
-        timer.start_comp("RKstep")
+            timectr = 0
+        if thetimer is not None:
+            thetimer.stop_comp("dt")        
+            thetimer.start_comp("RKstep")
         dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot)
-        timer.stop_comp("RKstep")
-        timer.start_comp("updateCon")
+        if thetimer is not None:
+            thetimer.stop_comp("RKstep")
+            thetimer.start_comp("updateCon")
         con1 = updateCon(con, dcon1, dt/2.)
         # ultimate BC:
         if crank == last:
@@ -625,51 +625,60 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
             con1['e'][-1] = 0.
         if crank == first:
             con1['s'][0] = 0.     
-        timer.stop_comp("updateCon")
-        timer.start_comp("BC")
+        if thetimer is not None:
+            thetimer.stop_comp("updateCon")
+            thetimer.start_comp("BC")
         prim = toprim(con1, gnd = g)
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
-        timer.stop_comp("BC")
-        timer.start_comp("RKstep")
+        if thetimer is not None:
+            thetimer.stop_comp("BC")
+            thetimer.start_comp("RKstep")
         dcon2 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , BCfluxleft, BCfluxright)
-        timer.stop_comp("RKstep")
-        timer.start_comp("updateCon")
+        if thetimer is not None:
+            thetimer.stop_comp("RKstep")
+            thetimer.start_comp("updateCon")
         con2 = updateCon(con, dcon2, dt/2.)     
         if crank == last:
             con2['s'][-1] = -mdot
             con2['e'][-1] = 0.
         if crank == first:
             con2['s'][0] = 0.
-        timer.stop_comp("updateCon")
-        timer.start_comp("BC")
+        if thetimer is not None:
+            thetimer.stop_comp("updateCon")
+            thetimer.start_comp("BC")
         prim = toprim(con2, gnd = g)
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
-        timer.stop_comp("BC")
-        timer.start_comp("RKstep")
+        if thetimer is not None:
+            thetimer.stop_comp("BC")
+            thetimer.start_comp("RKstep")
         dcon3 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) #, BCfluxleft, BCfluxright)
-        timer.stop_comp("RKstep")
-        timer.start_comp("updateCon")
+        if thetimer is not None:
+            thetimer.stop_comp("RKstep")
+            thetimer.start_comp("updateCon")
         con3 = updateCon(con, dcon3, dt)
         if crank == last:
             con3['s'][-1] = -mdot
             con3['e'][-1] = 0.
         if crank == first:
             con3['s'][0] = 0.
-        timer.stop_comp("updateCon")
-        timer.start_comp("BC")
+        if thetimer is not None:
+            thetimer.stop_comp("updateCon")
+            thetimer.start_comp("BC")
         prim = toprim(con3, gnd = g)
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
-        timer.stop_comp("BC")
-        timer.start_comp("RKstep")
+        if thetimer is not None:
+            thetimer.stop_comp("BC")
+            thetimer.start_comp("RKstep")
         dcon4 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , BCfluxleft, BCfluxright)
-        timer.stop_comp("RKstep")
-        timer.start_comp("updateCon")
+        if thetimer is not None:
+            thetimer.stop_comp("RKstep")
+            thetimer.start_comp("updateCon")
 
         con = updateCon(con, [dcon1, dcon2, dcon3, dcon4], [dt/6., dt/3., dt/3., dt/6.])
         
@@ -679,19 +688,21 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         if crank == first:
             con['s'][0] = 0.
             #        prim = toprim(con, gnd = g)
-        timer.stop_comp("updateCon")
+        if thetimer is not None:
+            thetimer.stop_comp("updateCon")
  
         t += dt
         #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
         prim = toprim(con, gnd = g) # primitive from conserved
-        if crank == first:
-            timer.lap("step")
+        if thetimer is not None:
+            thetimer.lap("step")
 
 
     #            ltot = (dcon1['ltot'] + 2.*dcon2['ltot'] + 2.*dcon3['ltot'] + dcon4['ltot'])/6.
     # sending data:
-    timer.stop("step")
-    timer.start("io")
+    if thetimer is not None:
+        thetimer.stop("step")
+        thetimer.start("io")
     # outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
     outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
     #    del con1, con2, con3, dcon1, dcon2, dcon3, dcon4
@@ -702,13 +713,14 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         tireouts(hfile, comm, outblock, fflux, ftot, nout = nout)
     #       del outblock
     #      gc.collect()
-    timer.stop("io")
-    if (crank == first) & (nout%ascalias == 0):
-        timer.stats("step")
-        timer.stats("io")
-        timer.comp_stats()
-        timer.start("step") #refresh lap counter (avoids IO profiling)
-        timer.purge_comps()
+    if thetimer is not None:
+        thetimer.stop("io")
+    if (thetimer is not None) & (nout%ascalias == 0):
+        thetimer.stats("step")
+        thetimer.stats("io")
+        thetimer.comp_stats()
+        thetimer.start("step") #refresh lap counter (avoids IO profiling)
+        thetimer.purge_comps()
     nout += 1
 
     return nout, t, con
@@ -940,6 +952,9 @@ def alltire():
         g = l_g[0]
         ghalf = l_ghalf[0]
         con = l_con[0]
+
+        timer = Timer(["total", "step", "io"],
+                      ["BC", "dt", "RKstep", "updateCon"])
     else:
         g = comm.recv(source = 0, tag = crank)
         ghalf = comm.recv(source = 0, tag = crank+parallelfactor)
@@ -949,7 +964,7 @@ def alltire():
     t=0.  ; nout = 0
     while (t<tmax):
         if crank ==0:
-            nout, t, con = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot, t=t, nout = nout)
+            nout, t, con = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot, t=t, nout = nout, thetimer = timer)
         else:
             nout, t, con = onedomain(g, ghalf, con, comm, t=t, nout = nout)
 

@@ -35,13 +35,13 @@ def dtint(gamma, xs, beta = None):
     nxs = size(xs)
 
     if nxs <= 1:
-        nx = 1000
+        nx = 10000
         x = (xs-1.)*arange(nx)/double(nx-1)+1.
 
         if beta is None:
             beta = 1.-gamma*exp(gamma)*(expn(1,gamma)-expn(1, gamma*xs))
     
-        csq = 3. * exp(gamma * x) * (expn(2,gamma*x)/x + beta * exp(-gamma) - expn(2,gamma)) / x**3
+        csq = 1./3. * exp(gamma * x) * (expn(2,gamma*x)/x + beta * exp(-gamma) - expn(2,gamma)) / x**3
 
         dt = simps(1./sqrt(csq), x=x)
     else:

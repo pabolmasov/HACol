@@ -155,15 +155,19 @@ def pds(infile='out/flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False, stnorm = False):
+def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False, stnorm = False, fosccol = None):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
+    "ncol" is the number of data column in the input file (the last one is taken by default)
+    
     '''
     lines = loadtxt(infile+".dat", comments="#", delimiter=" ", unpack=False)
     slines = shape(lines)
     if ncol >= slines[1]:
         ncol = -1
     t=lines[:,0] ; l=lines[:,ncol]
+    if fosccol is not None:
+        fosc = lines[:, fosccol]
     if iffront:
         xs = lines[:,1] # if we want to correlate the maximum with the mean front position
     else:
@@ -184,6 +188,8 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
     binfreq2=zeros([ntimes+1, nbins+1], dtype=double)
     fmax = zeros(ntimes) ;   dfmax = zeros(ntimes)
     xmean = zeros(ntimes) ; xstd = zeros(ntimes)
+    if fosccol is not None:
+        foscmean = zeros(ntimes) ; foscstd = zeros(ntimes)
     fdyns=open(infile+'_dyns.dat', 'w')
     ffreqmax = open(infile+'_fmax.dat', 'w')
     for kt in arange(ntimes):
@@ -215,6 +221,8 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
         dfmax[kt] = (-binfreq2[kt,nfmax]+binfreq2[kt+1,nfmax+1])/2. 
         ffreqmax.write(str(tcenter[kt])+" "+str(tsize[kt])+" "+str(fmax[kt])+" "+str(dfmax[kt])+"\n")
         xmean[kt] = xs[wt].mean() ; xstd[kt] = xs[wt].std()
+        if fosccol is not None:
+            foscmean[kt]=fosc[wt].mean() ; foscstd[kt]=fosc[wt].std()
     fdyns.close()
     ffreqmax.close()
     print(t2.max())
@@ -239,6 +247,9 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
             goodx = (xmean > 3.*xstd) * (tcenter> tcenter[2])
             pfit, pcov = polyfit(log(xmean[goodx]), log(fmax[goodx]), 1, cov = True)
             print("dln(f)/dln(R_s) = "+str(pfit[0])+"+/-"+str(pcov[0,0]))
+            if fosccol is not None:
+                fth = foscmean *4.*pi
+                fth[xmean > 10.] = sqrt(-1.)
             plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', yrange = frange, addline = fth, xlog=True, ylog=False)
         else:
             plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_lfmax', xtitle = r'$L/L_{\rm Edd}$', ytitle = '$f$, Hz')
@@ -400,7 +411,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     ff /= 4.*pi  ; eqlum /= 4.*pi ; lc_tot /= 4.*pi ; lc_part /= 4.*pi
     t *= tscale
 
-    dt_current = tscale * rstar**1.5 * bs.dtint(BSgamma, s)
+    dt_current = tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, s)
     
     if(ifplot):
         ws=where((s>1.1) & (lc_part > lc_part.min()))
