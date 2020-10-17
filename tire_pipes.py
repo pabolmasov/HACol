@@ -48,8 +48,6 @@ from geometry import * #
 from tauexp import *
 
 from timer import Timer
-timer = Timer(["total", "step", "io"],
-              ["BC", "dt", "RKstep", "updateCon"])
 
 # beta = Pgas / Ptot: define once and globally
 from beta import *
@@ -286,9 +284,10 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #     urad = copy(u * (1.-beta)/(1.-beta/2.))
     #    urad = (urad+abs(urad))/2.
     if cooltwosides:
-        qloss = copy(2.*urad/(xirad*taueff+1.)*(across/delta)) * taufun(taueff, taumin, taumax))  # diffusion approximation; energy lost from 4 sides
+        qloss = copy(2.*urad/(xirad*taueff+1.))*(across/delta) \
+                * taufun(taueff, taumin, taumax)  # diffusion approximation; energy lost from 4 sides
     else:
-        qloss = copy(2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)) * taufun(taueff, taumin, taumax))  # diffusion approximation; energy lost from 4 sides
+        qloss = copy(2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta)) * taufun(taueff, taumin, taumax)  # diffusion approximation; energy lost from 4 sides
     # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff, taumin, taumax) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = rho*0.-dmsqueeze # copy(rho*0.-dmsqueeze)
@@ -559,18 +558,23 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
     tstore = t # ; nout = 0
     timectr = 0
     if nd == 0:
+        timer = Timer(["total", "step", "io"],
+                      ["BC", "dt", "RKstep", "updateCon"])
         timer.start("total")
         print("dtout = "+str(dtout))
 
     while(t<tmax):
-        timer.start_comp("BC")
+        if nd == 0:
+            timer.start_comp("BC")
         leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0]] # , prim['beta'][0]]
         rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1]] #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
-        timer.stop_comp("BC")
+        if nd == 0:
+            timer.stop_comp("BC")
 
         # time step: all the domains send dt to first, and then the first sends the minimum value back
-        timer.start_comp("dt")
+        if nd == 0:
+            timer.start_comp("dt")
         if timectr == 0:
             if eta>0.:
                 dt, ltot = timestepmin(prim, g, dl, dtpipe)
@@ -583,8 +587,9 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         timectr += 1
         if timectr >= timeskip:
             timectr = 0
-        timer.stop_comp("dt")
-        timer.start_comp("RKstep")
+        if nd == 0:
+            timer.stop_comp("dt")
+            timer.start_comp("RKstep")
         dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot)
         con1 = updateCon(con, dcon1, dt/2.)
      
@@ -594,14 +599,16 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         if ghostleft is None:
             con1['s'][0] = 0.
      
-        timer.stop_comp("RKstep")
-        timer.start_comp("BC")
+        if nd == 0:
+            timer.stop_comp("RKstep")
+            timer.start_comp("BC")
         prim = toprim(con1, gnd = g)
         leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0]] # , prim['beta'][0]]
         rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1]] # , prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
-        timer.stop_comp("BC")
-        timer.start_comp("RKstep")
+        if nd == 0:
+            timer.stop_comp("BC")
+            timer.start_comp("RKstep")
         dcon2 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , BCfluxleft, BCfluxright)
         con2 = updateCon(con, dcon2, dt/2.)
      
@@ -611,14 +618,16 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         if ghostleft is None:
             con2['s'][0] = 0.
      
-        timer.stop_comp("RKstep")
-        timer.start_comp("BC")
+        if nd == 0:
+            timer.stop_comp("RKstep")
+            timer.start_comp("BC")
         prim = toprim(con2, gnd = g)
         leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0]] # , prim['beta'][0]]
         rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1]] # , prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
-        timer.stop_comp("BC")
-        timer.start_comp("RKstep")
+        if nd == 0:
+            timer.stop_comp("BC")
+            timer.start_comp("RKstep")
         dcon3 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) #, BCfluxleft, BCfluxright)
 
         con3 = updateCon(con, dcon3, dt)
@@ -629,17 +638,20 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         if ghostleft is None:
             con3['s'][0] = 0.
      
-        timer.stop_comp("RKstep")
-        timer.start_comp("BC")
+        if nd == 0:
+            timer.stop_comp("RKstep")
+            timer.start_comp("BC")
         prim = toprim(con3, gnd = g)
         leftpack_send = [prim['rho'][0], prim['v'][0], prim['u'][0]] # , prim['beta'][0]]
         rightpack_send = [prim['rho'][-1], prim['v'][-1], prim['u'][-1]] # , prim['beta'][-1]]
         leftpack, rightpack = BCsend(ghostleft, ghostright, leftpack_send, rightpack_send)
-        timer.stop_comp("BC")
-        timer.start_comp("RKstep")
+        if nd == 0:
+            timer.stop_comp("BC")
+            timer.start_comp("RKstep")
         dcon4 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , BCfluxleft, BCfluxright)
-        timer.stop_comp("RKstep")
-        timer.start_comp("updateCon")
+        if nd == 0:
+            timer.stop_comp("RKstep")
+            timer.start_comp("updateCon")
 
         con = updateCon(con, [dcon1, dcon2, dcon3, dcon4], [dt/6., dt/3., dt/3., dt/6.])
         
@@ -649,7 +661,8 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
         if ghostleft is None:
             con['s'][0] = 0.
             #        prim = toprim(con, gnd = g)
-        timer.stop_comp("updateCon")
+        if nd == 0:
+            timer.stop_comp("updateCon")
  
         t += dt
         #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
@@ -661,10 +674,12 @@ def onedomain(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile,
             #            ltot = (dcon1['ltot'] + 2.*dcon2['ltot'] + 2.*dcon3['ltot'] + dcon4['ltot'])/6.
             tstore += dtout
             # sending data:
-            timer.stop("step")
-            timer.start("io")
+            if nd == 0:
+                timer.stop("step")
+                timer.start("io")
             outpipe.send([t, g, con, prim])
-            timer.stop("io")
+            if nd == 0:
+                timer.stop("io")
             if (nd == 0) & (nout%ascalias == 0):
                 timer.stats("step")
                 timer.stats("io")

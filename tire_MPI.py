@@ -146,8 +146,6 @@ if verbose:
     print(conf+": nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
     print(conf+": nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
 
-    #    timer.start("total")
-
 # eto vs0 priskazka
     
 ttest = False # set True to output topology test (which domains are connected to which)
@@ -597,7 +595,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         
     while(t<(tstore+dtout)):
         if thetimer is not None:
-            timer.start_comp("BC")
+            thetimer.start_comp("BC")
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
