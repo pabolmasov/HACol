@@ -1033,7 +1033,16 @@ def alltire():
         #    l_prim = comm.recv(source = 0, tag = crank-1+parallelfactor*2)
         con = comm.recv(source = 0, tag = crank+parallelfactor*3)
         print("initialization: recieved data by core "+str(crank))
-    t=0.  ; nout = 0
+    if not(ifrestart):
+        t=0.  ; nout = 0
+    else:
+        # exchange nout and t
+        if crank ==0:
+            tpack = {"t": t, "nout": nout}
+        else:
+            tpack = None
+        tpack = comm.bcast(tpack, root = 0)
+        t = tpack["t"] ; nout = tpack["nout"]
     if turnoff:
         mdot *= 0.1
     while (t<tmax):
