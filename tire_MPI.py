@@ -95,6 +95,7 @@ nubulk = configactual.getfloat('nubulk')
 weinberg = configactual.getboolean('weinberg')
 eta = configactual.getfloat('eta')
 heatingeff = configactual.getfloat('heatingeff')
+turnoff = configactual.getboolean('turnoff')
 
 # derived quantities:
 r_e = configactual.getfloat('r_e_coeff') * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetosphere radius
@@ -116,7 +117,7 @@ config.set(conf,'dr_e', str(dr_e))
 config.set(conf,'umag', str(umag))
 config.set(conf,'omega', str(omega))
 config.set(conf,'vout', str(vout))
-    
+   
 # physical scales:
 tscale = configactual.getfloat('tscale') * m1
 rscale = configactual.getfloat('rscale') * m1
@@ -795,6 +796,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
 
 def alltire():
     global gglobal
+    global mdot
     ######################### main thread:  #############################
     if crank == 0: 
         # if the output directory does not exist:
@@ -868,6 +870,77 @@ def alltire():
         beta = betafun_p(Fbeta_press(rho, press, betacoeff))
         u = press * 3. * (1.-beta/2.)
         u, rho, press = regularize(u, rho, press)
+
+        # restart block:
+        # if we want to restart from a stored configuration
+        # works so far correctly ONLY if the mesh is identical!
+        if(ifrestart):
+            ifhdf_restart = configactual.getboolean('ifhdf_restart')
+            restartn = configactual.getint('restartn')
+            nout = restartn
+            if(ifhdf_restart):
+                # restarting from a HDF5 file
+                restartfile = configactual.get('restartfile')
+                entryname, t, l1, r1, sth1, rho1, u1, v1, qloss1, glosave = hdf.read(restartfile, restartn)
+                print("restarted from file "+restartfile+", entry "+entryname)
+            else:
+                # restarting from an ascii output
+                restartprefix = configactual.get('restartprefix')
+                restartdir = os.path.dirname(restartprefix)
+                ascrestartname = restartprefix + hdf.entryname(restartn, ndig=5) + ".dat"
+                lines = loadtxt(ascrestartname, comments="#")
+                r1 = lines[:,0]
+                r1, theta1, alpha1, across1, l1, delta1 = gread(restartdir+"/geo.dat")
+                r1 /= rstar
+                sth1 = sin(theta1) ; cth1 = cos(theta1)
+                umagtar1 = umag * (1.+3.*(1.-sth1**2))/4. * (1./r1)**6
+                rho1 = lines[:,1] ; v1 = lines[:,2] ; u1 = lines[:,3] * umagtar1
+                # what about t??
+                tfile = open(ascrestartname, "r") # linecache.getline(restartfile, 1)
+                tline = tfile.readline()
+                tfile.close()
+                t=double(re.search(r'\d+.\d+', tline).group()) / tscale
+                print("restarted from ascii output "+ascrestartname)
+                print("t = "+str(t))
+            if verbose:
+                print(conf+": r from "+str(r.min()/rstar)+" to "+str(r.max()/rstar))
+                print(conf+": r1 from "+str(r1.min())+" to "+str(r1.max()))
+            if(r.max()>(1.01*r1.max()*rstar)):
+                print("restarting: size does not match!")
+                return(1)
+            if ((size(r1) != nx) | (r.max() < (0.99 * r1.max()))):
+                # minimal heat and minimal mass
+                #
+                #            rhorestartfloor = 1e-5 * mdot / r**1.5 ; urestartfloor = 1e-5 * rhorestartfloor / r
+                rho1 = maximum(rho1, rhofloor) ; u1 = maximum(u1, ufloor)
+                print("interpolating from "+str(size(r1))+" to "+str(nx))
+                print("rho1 from "+str(rho1.min())+" to "+str(rho1.max()))
+                rhofun = interp1d(log(r1), log(rho1), kind='linear', bounds_error=False, fill_value = (log(rho1[0]), log(rho1[-1])))
+                vfun = interp1d(log(r1), v1, kind='linear', bounds_error=False, fill_value = (v1[0], v1[-1]))
+                ufun = interp1d(log(r1), log(u1), kind='linear', bounds_error=False, fill_value = (log(u1[0]), log(u1[-1])))
+                rho = exp(rhofun(log(r/rstar))) ; v = vfun(log(r/rstar)) ; u = exp(ufun(log(r/rstar)))
+                print("interpolated values: rho = "+str(rho.min())+" to "+str(rho.max()))
+                print("interpolated values: v = "+str(v.min())+" to "+str(v.max()))
+                print("interpolated values: u = "+str(u.min())+" to "+str(u.max()))
+                print("v[-1] = "+str(v[-1]))
+                ulast = u[-1]
+            else:
+                print("restarting with the same resolution")
+                rho = rho1 ; v = v1 ; u = u1
+                # r *= rstar
+                #        print(r)
+                #        print(r1)
+                #        ii = input('r')
+            beta = betafun(Fbeta(rho, u, betacoeff))
+            press = u / (3.*(1.-beta/2.))
+            if ifplot:
+                plots.uplot(g.r, u, rho, g.sth, v, name=outdir+'/utie_restart', umagtar = umagtar)
+                plots.vplot(g.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie_restart')
+                plots.someplots(g.r, [u/rho**(4./3.)], name=outdir+'/entropy_restart', ytitle=r'$S$', ylog=True)
+                plots.someplots(g.r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
+                                name=outdir+'/beta_restart', ytitle=r'$\beta$, $1-\beta$', ylog=True)
+        
+        ########### end restart block
         if verbose:
             print(conf+": U = "+str((u/umagtar).min())+" to "+str((u/umagtar).max()))
         m, s, e = tocon_separate(rho, vinit, u, g)
@@ -891,7 +964,8 @@ def alltire():
             # ii = input('prim')
         m0=m
 
-        t = 0. ; nout = 0 # time = 0 except when we restart
+        if not(ifrestart):
+            t = 0. ; nout = 0 # time = 0 except when we restart
         ## TODO: restart to be added!
     
         ulast = u[-1]
@@ -960,6 +1034,8 @@ def alltire():
         con = comm.recv(source = 0, tag = crank+parallelfactor*3)
         print("initialization: recieved data by core "+str(crank))
     t=0.  ; nout = 0
+    if turnoff:
+        mdot *= 0.1
     while (t<tmax):
         if crank ==0:
             nout, t, con = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot, t=t, nout = nout, thetimer = timer)

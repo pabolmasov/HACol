@@ -155,7 +155,7 @@ def pds(infile='out/flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False, stnorm = False, fosccol = None):
+def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False, stnorm = False, fosccol = None, simfreq = None):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
     "ncol" is the number of data column in the input file (the last one is taken by default)
@@ -168,6 +168,8 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
     t=lines[:,0] ; l=lines[:,ncol]
     if fosccol is not None:
         fosc = lines[:, fosccol]
+    if simfreq is not None:
+        l = l.mean() * sin(2.*pi*t*simfreq)*exp(-t)
     if iffront:
         xs = lines[:,1] # if we want to correlate the maximum with the mean front position
     else:
@@ -203,6 +205,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
         if stnorm:
             fsp /= lt.std()
         nt=size(lt)
+        print("nt ="+str(nt))
         freq = fft.rfftfreq(nt, (t[wt].max()-t[wt].min())/double(nt))
         pds=abs(fsp*freq)**2
         t2[kt,:]=tbin[kt] ; t2[kt+1,:]=tbin[kt+1] 
@@ -248,7 +251,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
             pfit, pcov = polyfit(log(xmean[goodx]), log(fmax[goodx]), 1, cov = True)
             print("dln(f)/dln(R_s) = "+str(pfit[0])+"+/-"+str(pcov[0,0]))
             if fosccol is not None:
-                fth = foscmean *4.*pi
+                fth = foscmean
                 fth[xmean > 10.] = sqrt(-1.)
             plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', yrange = frange, addline = fth, xlog=True, ylog=False)
         else:
@@ -520,7 +523,7 @@ def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False, conf='DEFAULT'
             mdot = glo['mdot'] * 4.*pi
         md2[k, :] = (rho * v * across)[:]
         t2[k, :] = t  ;     r2[k, :] = r[:]
-        tscale = config[conf].getfloat('tscale') * 4.*pi
+        tscale = config[conf].getfloat('tscale')
 
     # ascii output:
     fmap = open(prefix+"_mdot.dat", "w")
@@ -533,9 +536,9 @@ def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False, conf='DEFAULT'
         nlev=30
         mdmean = -md2.mean(axis=0)
         plots.somemap(r2, t2*tscale, -md2/mdot, name=prefix+"_mdot", levels = (3.*arange(nlev)/double(nlev-2)-1.),
-                      inchsize = [4,6], cbtitle = r'$\dot{M}/\dot{M}_{\rm out}$')
+                      inchsize = [4,6], cbtitle = r'$s/\dot{M}_{\rm out}$')
         plots.someplots(r, [mdmean/(4.*pi), mdmean*0.+mdot/(4.*pi)], name=prefix+"_mdmean",
-                        xtitle='$R/R_*$', ytitle=r"$\dot{M}c^2/L_{\rm Edd}$", formatsequence=['k.', 'r-'])
+                        xtitle='$R/R_*$', ytitle=r"$sc^2/L_{\rm Edd}$", formatsequence=['k.', 'r-'])
         
         
 def taus(n, prefix = 'out/tireout', ifhdf = True, conf = 'DEFAULT'):

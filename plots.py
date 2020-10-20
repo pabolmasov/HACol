@@ -30,7 +30,7 @@ close('all')
 ioff()
 use('Agg')
 
-formatsequence = ['k-', 'g:', 'r--', 'b-.']
+formatsequence = ['k-', 'g:', 'b--', 'r-.']
 
 def qloss_separate(rho, v, u, g, conf):
     '''
