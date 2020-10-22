@@ -943,7 +943,7 @@ def alltire():
         ########### end restart block
         if verbose:
             print(conf+": U = "+str((u/umagtar).min())+" to "+str((u/umagtar).max()))
-        m, s, e = tocon_separate(rho, vinit, u, g)
+        m, s, e = tocon_separate(rho, v, u, g)
         ulast = u[-1] #
         rholast = rho[-1]
         if verbose:
