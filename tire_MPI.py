@@ -49,9 +49,6 @@ nx0 = configactual.getint('nx0factor') * nx
 parallelfactor = configactual.getint('parallelfactor')
 last = parallelfactor-1 ; first = 0
 
-if (parallelfactor != csize):
-    print("wrong number of processes, "+str(parallelfactor)+" != "+str(csize))
-    exit(1)
 logmesh = configactual.getboolean('logmesh')
 rbasefactor = configactual.getfloat('rbasefactor')
 
@@ -129,7 +126,7 @@ tr = afac * dr_e/r_e / xifac * r_e**2.5 / rstar # replenishment time scale of th
 if verbose:
     print("r_e = "+str(r_e))
     print(conf+": replenishment time "+str(tr*tscale))
-    # ii =input("R")
+    #   ii =input("R")
 tmax = tr * configactual.getfloat('tmax')
 dtout = tr * configactual.getfloat('dtout')                   # tr * configactual.getfloat('dtout')
 ifplot = configactual.getboolean('ifplot')
@@ -468,8 +465,10 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         duls_half, dule_half = diffuse(rho, urad, v, gnd.l[1:]-gnd.l[:-1], gnd.across)
         # radial diffusion suppressed, if transverse optical depth is small:
         delta = (gnd.delta[1:]+gnd.delta[:-1])/2.
-        duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
-        dule_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
+        duls_half *= taufun(delta  * (rho[1:]+rho[:-1])/2., taumin, taumax) 
+        dule_half *= taufun(delta  * (rho[1:]+rho[:-1])/2., taumin, taumax) 
+        # duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
+        #  dule_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         fs_half += duls_half ; fe_half += dule_half         
     #  sinks and sources:
     if(squeezemode):
@@ -561,7 +560,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
             rightdata = comm.recv(source = right, tag = right)
             print("I, "+str(crank)+", received from "+str(right)+": "+rightdata['data'])
         print("this was topology test\n")
-        tt = input("t")
+        # tt = input("t")
 
     # exchange geometry:
     if crank > first:
@@ -797,6 +796,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
 def alltire():
     global gglobal
     global mdot
+    global tmax
     ######################### main thread:  #############################
     if crank == 0: 
         # if the output directory does not exist:
@@ -1043,6 +1043,7 @@ def alltire():
             tpack = None
         tpack = comm.bcast(tpack, root = 0)
         t = tpack["t"] ; nout = tpack["nout"]
+        tmax += t
     if turnoff:
         mdot *= 0.1
     while (t<tmax):
@@ -1050,5 +1051,9 @@ def alltire():
             nout, t, con = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot, t=t, nout = nout, thetimer = timer)
         else:
             nout, t, con = onedomain(g, ghalf, con, comm, t=t, nout = nout)
+
+if (parallelfactor != csize):
+    print("wrong number of processes, "+str(parallelfactor)+" != "+str(csize))
+    exit(1)
 
 alltire()

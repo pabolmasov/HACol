@@ -246,12 +246,12 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
             tth = tscale * mdot *  7.* sqrt(rstar * xmean) * delta_s**2/across_s * (1.+2.*across_s/delta_s**2)
             fth = 1./tth
             # 0.0227364 / xirad / sqrt(rstar*xmean)/rstar / mdot * (1./delta_s+2.*delta_s / across_s)**2 * 2.03e5/m1 # Hz
-            print(fth)
             goodx = (xmean > 3.*xstd) * (tcenter> tcenter[2])
             pfit, pcov = polyfit(log(xmean[goodx]), log(fmax[goodx]), 1, cov = True)
             print("dln(f)/dln(R_s) = "+str(pfit[0])+"+/-"+str(pcov[0,0]))
             if fosccol is not None:
-                fth = foscmean
+                print(foscmean)
+                fth = foscmean*2.
                 fth[xmean > 10.] = sqrt(-1.)
             plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', yrange = frange, addline = fth, xlog=True, ylog=False)
         else:
@@ -374,12 +374,14 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     geometry = loadtxt(outdir+"/geo.dat", comments="#", delimiter=" ", unpack=False)
     tf=fluxlines[:,0] ;
     ff=fluxlines[:,1]
+    th = geometry[:,1] ; r = geometry[:,0]
+    cthfun = interp1d(r/r[0], cos(th)) # we need a function allowing to calculate cos\theta (x)
     across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
     BSgamma = (across0/delta0**2)/mdot*rstar / (realxirad/1.5)
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
     xs, BSbeta = bs.xis(BSgamma, BSeta, x0=xest, ifbeta = True)
-    dt_BS = tscale * rstar**1.5 * bs.dtint(BSgamma, xs)
+    dt_BS = tscale * rstar**1.5 * bs.dtint(BSgamma, xs, cthfun)
     print("eta = "+str(BSeta))
     print("gamma = "+str(BSgamma))
     print("eta gamma^{1/4} = "+str(BSeta*BSgamma**0.25))
@@ -414,7 +416,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     ff /= 4.*pi  ; eqlum /= 4.*pi ; lc_tot /= 4.*pi ; lc_part /= 4.*pi
     t *= tscale
 
-    dt_current = tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, s)
+    dt_current = tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, s, cthfun)
     
     if(ifplot):
         ws=where((s>1.1) & (lc_part > lc_part.min()))
@@ -480,10 +482,10 @@ def tailfit(prefix = 'out/flux', trange = None, ifexp = False, ncol = -1):
         par, pcov = curve_fit(tailfitfun, t1, f1, p0=[-2.,5., 0., f1.min()])
     if ifplot:
         if ifexp:
-            plots.someplots(t, [f, tailexpfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'])
+            plots.someplots(t, [f, tailexpfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'], yrange=[f[f>0.].min(), f.max()])
             plots.someplots(t, [f-par[3], tailexpfun(t, par[0], par[1], par[2], 0.)], name = prefix+"_dfit", xtitle=r'$t$, s', ytitle=r'$\Delta L$', formatsequence=['k.', 'r-'], ylog = True, xlog = False)
         else:
-            plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'])
+            plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'], yrange=[f[f>0.].min(), f.max()])
             plots.someplots(t, [f-par[3], tailfitfun(t, par[0], par[1], par[2], 0.)], name = prefix+"_dfit", xtitle=r'$t$, s', ytitle=r'$\Delta L$', formatsequence=['k.', 'r-'], ylog = True, xlog = False)
     
     if ifexp:

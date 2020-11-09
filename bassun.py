@@ -27,7 +27,7 @@ def xis(gamma, eta, n=3, x0=20., ifbeta = False):
     else:
         return x
 
-def dtint(gamma, xs, beta = None):
+def dtint(gamma, xs, cthfun, beta = None):
     '''
     calculates the (normalized) time for a sound wave to travel from the surface to the shock front (or back)
     input: BS gamma, BS beta, position of the shock in rstar units
@@ -41,12 +41,13 @@ def dtint(gamma, xs, beta = None):
         if beta is None:
             beta = 1.-gamma*exp(gamma)*(expn(1,gamma)-expn(1, gamma*xs))
     
-        csq = 1./3. * exp(gamma * x) * (expn(2,gamma*x)/x + beta * exp(-gamma) - expn(2,gamma)) / x**3
-
-        dt = simps(1./sqrt(csq), x=x)
+        csq = 1./3. * exp(gamma * x) * (expn(2,gamma*x)/x + beta * exp(-gamma) - expn(2,gamma)) # / x**3
+        cth = cthfun(x)
+        #        print("mean cos = "+str(cth.mean()))
+        dt = simps(sqrt((3.*cth**2+1.)/ csq)/cth, x=x)/2.
     else:
         dt = zeros(nxs)
         for k in arange(nxs):
-            dt[k] = dtint(gamma, xs[k], beta = beta)
+            dt[k] = dtint(gamma, xs[k], cthfun, beta = beta)
         
     return dt

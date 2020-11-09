@@ -121,7 +121,7 @@ def splot(x, y, name='outplot', fmt='-k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     savefig(name+'.png')
     close('all')
 
-def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle=r'$R/R_*$', ytitle='$t$, s', levels = None, inchsize = None, cbtitle = None):
+def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle=r'$R/R_*$', ytitle='$t$, s', levels = None, inchsize = None, cbtitle = None, addcontour = None):
     '''
     plots a 2dmap
     '''
@@ -138,7 +138,8 @@ def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle=r'$R/R_*$', ytitl
     tick_params(labelsize=14, length=3, width=1., which='minor', direction='in')
     tick_params(labelsize=14, length=6, width=1., which='major', direction='in')
 
-    #    contour(x, y, q, levels=[1.], colors='k')
+    if addcontour is not None:
+        contour(x, y, addcontour, levels=[1.], colors='k')
     if(xlog):
         xscale('log')
     if(ylog):
@@ -147,7 +148,8 @@ def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle=r'$R/R_*$', ytitl
     if inchsize is not None:
         fig.set_size_inches(inchsize[0], inchsize[1])
     fig.tight_layout()
-    savefig(name)
+    savefig(name+'.png')
+    savefig(name+'.eps')
     close()
     
 def plot_somemap(fname):
@@ -157,10 +159,10 @@ def plot_somemap(fname):
     nx = size(xun) ; ny = size(yun)
     x=reshape(x, [ny,nx]) ; y=reshape(y, [ny,nx]) ; q=reshape(q, [ny,nx])
     #    x = transpose(x) ; y=transpose(y) ; q=transpose(q)
-    somemap(x, y, -q/mdot, name=fname+".png", levels=arange(50)/30.,
+    somemap(x, y, -q/mdot, name=fname, levels=arange(50)/30.,
             xlog=False, xtitle='$r/R_*$')
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, multix = False):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, multix = False, yrange = None):
     '''
     plots a series of curves  
     if multix is off, we assume that the independent variable is the same for all the data 
@@ -189,6 +191,8 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         xscale('log')
     if(ylog):
         yscale('log')
+    if yrange is not None:
+        ylim(yrange[0], yrange[1])
     xlabel(xtitle, fontsize=14) ; ylabel(ytitle, fontsize=14)
     plt.tick_params(labelsize=12, length=1, width=1., which='minor')
     plt.tick_params(labelsize=12, length=3, width=1., which='major')
@@ -350,18 +354,8 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     varmean = var.mean(axis=0)
     varstd = var.std(axis=0)
     # velocity
-    clf()
-    fig=figure()
-    contourf(rnew, tar*tscale, var, vlev, cmap='hot')
-    #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
-    colorbar()
-#    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
-    fig.set_size_inches(4, 6)
-    fig.tight_layout()
-    savefig(outdir+'/q2d_v.png')
-    savefig(outdir+'/q2d_v.eps')
-    close('all')
+    somemap(rnew, tar*tscale, var, name=outdir+'/q2d_v', levels = vlev,
+            inchsize = [4,6], cbtitle = r'$v/c$')
     clf()
     fig=figure()
     plot(rnew, -sqrt(1./rstar/rnew), ':k')
@@ -387,18 +381,13 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     umax = round(lurel[uar>0.].max(),2)
     lulev = linspace(umin, umax, nv, endpoint=True)
     print(lulev)
-    clf()
-    fig=figure()
-    contourf(rnew, tar*tscale, lurel, cmap='hot', levels=lulev)
-    colorbar()
-    contour(rnew, tar*tscale, par/umagtar, levels=[0.9], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
-    fig.set_size_inches(4, 6)
-    fig.tight_layout()
-    savefig(outdir+'/q2d_u.png')
-    savefig(outdir+'/q2d_u.eps')
-    close('all')
+    somemap(rnew, tar*tscale, var, name=outdir+'/q2d_u', levels = vlev, \
+            inchsize = [4,6], cbtitle = r'$\log_{10}u/u_{\rm mag}$', \
+            addcontour = par/umagtar/0.9)
     # Q-:
+    somemap(rnew, tar*tscale, log10(qar), name=outdir+'/q2d_q', \
+            inchsize = [4,6], cbtitle = r'$\log_{10}Q$')
+    '''
     clf()
     fig=figure()
     contourf(rnew, tar*tscale, log10(qar), cmap='hot')
@@ -411,7 +400,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     savefig(outdir+'/q2d_q.png')
     savefig(outdir+'/q2d_q.eps')
     close('all')
-    
+    '''
 
 def postplot(hname, nentry, ifdat = True):
     '''
