@@ -30,7 +30,7 @@ close('all')
 ioff()
 use('Agg')
 
-formatsequence = ['k-', 'g:', 'r--', 'b-.']
+formatsequence = ['k-', 'g:', 'b--', 'r-.']
 
 def qloss_separate(rho, v, u, g, conf):
     '''
@@ -121,7 +121,7 @@ def splot(x, y, name='outplot', fmt='-k', xtitle=r'$r$', ytitle=r'$S(R)$'):
     savefig(name+'.png')
     close('all')
 
-def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle='$r$, $GM/c^2$ units', ytitle='$t$, s', levels = None):
+def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle=r'$R/R_*$', ytitle='$t$, s', levels = None, inchsize = None, cbtitle = None, addcontour = None):
     '''
     plots a 2dmap
     '''
@@ -131,15 +131,30 @@ def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle='$r$, $GM/c^2$ un
         pcolormesh(x, y, q, cmap='hot', vmin = levels.min(), vmax=levels.max())
     else:
         pcolormesh(x, y, q, cmap='hot')
-    colorbar()
-    #    contour(x, y, q, levels=[1.], colors='k')
+    cb = colorbar()
+    if cbtitle is not None:
+        cb.set_label(r' '+cbtitle, fontsize=14)
+    cb.ax.tick_params(labelsize=12, length=3, width=1., which='major', direction ='in')
+    tick_params(labelsize=14, length=3, width=1., which='minor', direction='in')
+    tick_params(labelsize=14, length=6, width=1., which='major', direction='in')
+
+    if addcontour is not None:
+        ld = size(shape(addcontour)) # equal to 2 if there is a single contour
+        if ld == 2:
+            contour(x, y, addcontour, levels=[1.], colors='k')
+        else:
+            for kd in arange(ld):
+                contour(x, y, addcontour[kd], levels=[1.], colors='k')
     if(xlog):
         xscale('log')
     if(ylog):
         yscale('log')
-    xlabel(xtitle) ; ylabel(ytitle)
+    xlabel(xtitle, fontsize=18) ; ylabel(ytitle, fontsize=18)
+    if inchsize is not None:
+        fig.set_size_inches(inchsize[0], inchsize[1])
     fig.tight_layout()
-    savefig(name)
+    savefig(name+'.png')
+    savefig(name+'.eps')
     close()
     
 def plot_somemap(fname):
@@ -149,10 +164,10 @@ def plot_somemap(fname):
     nx = size(xun) ; ny = size(yun)
     x=reshape(x, [ny,nx]) ; y=reshape(y, [ny,nx]) ; q=reshape(q, [ny,nx])
     #    x = transpose(x) ; y=transpose(y) ; q=transpose(q)
-    somemap(x, y, -q/mdot, name=fname+".png", levels=arange(50)/30.,
+    somemap(x, y, -q/mdot, name=fname, levels=arange(50)/30.,
             xlog=False, xtitle='$r/R_*$')
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, multix = False):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None):
     '''
     plots a series of curves  
     if multix is off, we assume that the independent variable is the same for all the data 
@@ -172,7 +187,14 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     fig = figure()
     for k in arange(ny):
         if vertical is not None:
-            plot([vertical, vertical], [ys[k].min(), ys[k].max()], 'r-')
+            if verticalformatsequence is None:
+                verticalformatsequence = formatsequence[-1]
+            nv = size(vertical)
+            if nv <= 1:
+                plot([vertical, vertical], [ys[k].min(), ys[k].max()], verticalformatsequence)
+            else:
+                for kv in arange(nv):
+                    plot([vertical[kv], vertical[kv]], [ys[k].min(), ys[k].max()], verticalformatsequence)
         if multix:
             plot(x[k], ys[k], formatsequence[k])
         else:
@@ -181,10 +203,12 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         xscale('log')
     if(ylog):
         yscale('log')
+    if yrange is not None:
+        ylim(yrange[0], yrange[1])
     xlabel(xtitle, fontsize=14) ; ylabel(ytitle, fontsize=14)
     plt.tick_params(labelsize=12, length=1, width=1., which='minor')
     plt.tick_params(labelsize=12, length=3, width=1., which='major')
-    fig.set_size_inches(6, 4)
+    fig.set_size_inches(5, 4)
     fig.tight_layout()
     savefig(name+'.png')
     close('all')
@@ -279,7 +303,7 @@ def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     return [fmin, fmax] # outputting the frequency range
 
 #############################################
-def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
+def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1):
     '''
     makes quasi-2D Rt plots
     '''
@@ -287,7 +311,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     
     betafun = betafun_define() # defines the interpolated function for beta
 
-    nt=n2-n1
+    nt=int(floor((n2-n1)/step))
     # first frame
     entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, n1)
 
@@ -319,8 +343,8 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     lurel = zeros([nt, nrnew], dtype=double)
     tar = zeros(nt, dtype=double)
     #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
-    for k in arange(n2-n1):
-        entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, n1+k)
+    for k in arange(nt):
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, k*step+n1)
         vfun = interp1d(r, v, kind = 'linear')
         var[k, :] = vfun(rnew)
         qfun = interp1d(r, qloss, kind = 'linear')
@@ -341,19 +365,10 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     print(var.max())
     varmean = var.mean(axis=0)
     varstd = var.std(axis=0)
+
     # velocity
-    clf()
-    fig=figure()
-    contourf(rnew, tar*tscale, var, vlev, cmap='hot')
-    #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
-    colorbar()
-#    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
-    fig.set_size_inches(4, 6)
-    fig.tight_layout()
-    savefig(outdir+'/q2d_v.png')
-    savefig(outdir+'/q2d_v.eps')
-    close('all')
+    somemap(rnew, tar*tscale, var, name=outdir+'/q2d_v', levels = vlev,
+            inchsize = [4,6], cbtitle = r'$v/c$')
     clf()
     fig=figure()
     plot(rnew, -sqrt(1./rstar/rnew), ':k')
@@ -379,18 +394,13 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     umax = round(lurel[uar>0.].max(),2)
     lulev = linspace(umin, umax, nv, endpoint=True)
     print(lulev)
-    clf()
-    fig=figure()
-    contourf(rnew, tar*tscale, lurel, cmap='hot', levels=lulev)
-    colorbar()
-    contour(rnew, tar*tscale, par/umagtar, levels=[0.9], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
-    fig.set_size_inches(4, 6)
-    fig.tight_layout()
-    savefig(outdir+'/q2d_u.png')
-    savefig(outdir+'/q2d_u.eps')
-    close('all')
+    somemap(rnew, tar*tscale, var, name=outdir+'/q2d_u', levels = vlev, \
+            inchsize = [4,6], cbtitle = r'$\log_{10}u/u_{\rm mag}$', \
+            addcontour = [par/umagtar/1., par/umagtar/0.9, par/umagtar/0.8])
     # Q-:
+    somemap(rnew, tar*tscale, log10(qar), name=outdir+'/q2d_q', \
+            inchsize = [4,6], cbtitle = r'$\log_{10}Q$')
+    '''
     clf()
     fig=figure()
     contourf(rnew, tar*tscale, log10(qar), cmap='hot')
@@ -403,7 +413,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     savefig(outdir+'/q2d_q.png')
     savefig(outdir+'/q2d_q.eps')
     close('all')
-    
+    '''
 
 def postplot(hname, nentry, ifdat = True):
     '''
@@ -421,8 +431,8 @@ def postplot(hname, nentry, ifdat = True):
         r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3]
     else:
         entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, nentry)
-    #    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
-    #    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
+    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
+    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
     someplots(r, [-v*rho*across, v*rho*across], name=hname+entryname+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])
     someplots(r, [-u*v*(r/r.min())**4], name=hname+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm *}\right)^4$", ylog=True)
     
@@ -465,6 +475,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
 
     kctr = 0
     vmin=0. ; vmax=0.
+    nt = int(floor((n2-n1)/step)) ; nr = size(r)
     
     clf()
     fig = figure()
@@ -480,7 +491,6 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         if(v.max()>vmax):
             vmax = v.max()
         if plot2d & (kctr==0):
-            nt = int(floor((n2-n1)/step)) ; nr = size(r)
             tar = zeros(nt, dtype=double)
             v2 = zeros([nt, nr], dtype=double)
         if(plot2d):
@@ -598,9 +608,9 @@ def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
         
         tf=fluxlines[:,0] # ; f=fluxlines[:,1]
         if parflux:
-            f = frontlines[1:,4]
+            f = frontlines[1:,5]
         else:
-            f = fluxlines[:,1]
+            f = fluxlines[:,-1]
         ts=frontlines[1:,0] ; s=frontlines[1:,1] ; ds=frontlines[1:,2]
         tlist.append(ts)
         if parflux:
@@ -614,13 +624,19 @@ def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
 
         if k == 0:
             eqlum = frontinfo[0] ; rs = frontinfo[1]
+    
     clf()
+    fig = figure()
     for k in arange(nf):
         plot(flist[k], slist[k], formatsequence[k])
 
     plot([minimum(flist[0].min(), flist[1].min()), maximum(flist[0].max(), flist[-1].max())], [rs, rs], 'r-')
     plot([eqlum, eqlum], [minimum(slist[0].min(), slist[-1].min()), maximum(slist[0].max(), slist[-1].max())], 'r-')
     xlabel(r'$L/L_{\rm Edd}$', fontsize=14) ; ylabel(r'$R_{\rm shock}/R_*$', fontsize=14)
+    plt.tick_params(labelsize=12, length=1, width=1., which='minor')
+    plt.tick_params(labelsize=12, length=3, width=1., which='major')
+    fig.set_size_inches(6, 6)
+    fig.tight_layout()
     savefig("manyfluxfronts.png") ;   savefig("manyfluxfronts.pdf")
     close('all')
     
