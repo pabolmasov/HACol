@@ -18,6 +18,14 @@ where <CONF> stands for the name of the configuration.
 
 If you are running the code on a machine that does not support matplotlib, make sure that graphic output is off (ifplot=False in globals.py). 
 
+PARALLEL SUPPORT
+
+Currently, parallelization may be done either using multiprocessing and pipes (tire_pipes.py) or using pyMPI (tire_MPI.py).  The number of cores involved should equal the parallelfactor parameter in globals.conf. Pipes-based code is started directly as 
+> python tire_pipes <CONF>
+To run with MPI, make sure you have mpi4py, and then the code may be started with <N> cores as 
+> mpirun -np <N> python tire_MPI <CONF>
+
+
 OUTPUTS
 
 So far, if "ifhdf" flag is False in globals.py, it produces multiple structure snapshots "tireout*.dat" containing density, velocity, energy density etc. as functions of length along the field line. All this information is written to a single HDF file if the flag is on. Also, total luminosity is always written in "flux.dat" as a function of time. Geometry (including radius, polar angle, and the geometrical cross-section of the flow) is written to a special file "geo.dat" in the output directory. 
