@@ -294,9 +294,9 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #    tau = rho * delta # tau in transverse direction
     #    tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
     if cooltwosides:
-        taueff = rho *delta
+        taueff = rho *delta /2.
     else:
-        taueff = rho / (1./delta + 2. * delta /  across)
+        taueff = rho / (1./delta + 2. * delta /  across)  /2.
     # copy(1./(1./tau + 1./tauphi))
     #    taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     #    taufac = 1. 

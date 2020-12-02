@@ -139,7 +139,12 @@ def somemap(x, y, q, name='map', xlog=True, ylog=False, xtitle=r'$R/R_*$', ytitl
     tick_params(labelsize=14, length=6, width=1., which='major', direction='in')
 
     if addcontour is not None:
-        contour(x, y, addcontour, levels=[1.], colors='k')
+        ld = size(shape(addcontour)) # equal to 2 if there is a single contour
+        if ld == 2:
+            contour(x, y, addcontour, levels=[1.], colors='k')
+        else:
+            for kd in arange(ld):
+                contour(x, y, addcontour[kd], levels=[1.], colors='k')
     if(xlog):
         xscale('log')
     if(ylog):
@@ -162,7 +167,7 @@ def plot_somemap(fname):
     somemap(x, y, -q/mdot, name=fname, levels=arange(50)/30.,
             xlog=False, xtitle='$r/R_*$')
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, multix = False, yrange = None):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None):
     '''
     plots a series of curves  
     if multix is off, we assume that the independent variable is the same for all the data 
@@ -182,7 +187,14 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     fig = figure()
     for k in arange(ny):
         if vertical is not None:
-            plot([vertical, vertical], [ys[k].min(), ys[k].max()], 'r-')
+            if verticalformatsequence is None:
+                verticalformatsequence = formatsequence[-1]
+            nv = size(vertical)
+            if nv <= 1:
+                plot([vertical, vertical], [ys[k].min(), ys[k].max()], verticalformatsequence)
+            else:
+                for kv in arange(nv):
+                    plot([vertical[kv], vertical[kv]], [ys[k].min(), ys[k].max()], verticalformatsequence)
         if multix:
             plot(x[k], ys[k], formatsequence[k])
         else:
@@ -291,7 +303,7 @@ def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     return [fmin, fmax] # outputting the frequency range
 
 #############################################
-def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
+def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1):
     '''
     makes quasi-2D Rt plots
     '''
@@ -299,7 +311,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     
     betafun = betafun_define() # defines the interpolated function for beta
 
-    nt=n2-n1
+    nt=int(floor((n2-n1)/step))
     # first frame
     entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, n1)
 
@@ -331,8 +343,8 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     lurel = zeros([nt, nrnew], dtype=double)
     tar = zeros(nt, dtype=double)
     #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
-    for k in arange(n2-n1):
-        entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, n1+k)
+    for k in arange(nt):
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, k*step+n1)
         vfun = interp1d(r, v, kind = 'linear')
         var[k, :] = vfun(rnew)
         qfun = interp1d(r, qloss, kind = 'linear')
@@ -353,6 +365,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     print(var.max())
     varmean = var.mean(axis=0)
     varstd = var.std(axis=0)
+
     # velocity
     somemap(rnew, tar*tscale, var, name=outdir+'/q2d_v', levels = vlev,
             inchsize = [4,6], cbtitle = r'$v/c$')
@@ -383,7 +396,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT'):
     print(lulev)
     somemap(rnew, tar*tscale, var, name=outdir+'/q2d_u', levels = vlev, \
             inchsize = [4,6], cbtitle = r'$\log_{10}u/u_{\rm mag}$', \
-            addcontour = par/umagtar/0.9)
+            addcontour = [par/umagtar/1., par/umagtar/0.9, par/umagtar/0.8])
     # Q-:
     somemap(rnew, tar*tscale, log10(qar), name=outdir+'/q2d_q', \
             inchsize = [4,6], cbtitle = r'$\log_{10}Q$')
@@ -418,8 +431,8 @@ def postplot(hname, nentry, ifdat = True):
         r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3]
     else:
         entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, nentry)
-    #    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
-    #    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
+    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
+    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
     someplots(r, [-v*rho*across, v*rho*across], name=hname+entryname+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])
     someplots(r, [-u*v*(r/r.min())**4], name=hname+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm *}\right)^4$", ylog=True)
     
@@ -462,6 +475,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
 
     kctr = 0
     vmin=0. ; vmax=0.
+    nt = int(floor((n2-n1)/step)) ; nr = size(r)
     
     clf()
     fig = figure()
@@ -477,7 +491,6 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         if(v.max()>vmax):
             vmax = v.max()
         if plot2d & (kctr==0):
-            nt = int(floor((n2-n1)/step)) ; nr = size(r)
             tar = zeros(nt, dtype=double)
             v2 = zeros([nt, nr], dtype=double)
         if(plot2d):
