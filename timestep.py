@@ -10,7 +10,7 @@ def time_step(prim, g, dl, xirad = 1.5, raddiff = True, eta = 0., CFL = 0.5, Cdi
     # also outputs total luminosity of the fraction of the flow, if global eta>0.
     csqest = 4./3.*prim['press']/prim['rho']
     dt_CFL = CFL * (dl / (sqrt(csqest)+abs(prim['v']))[1:-1]).min()
-    taueff = prim['rho']/(1./g.delta + 2.*g.delta/g.across)
+    taueff = prim['rho']/(1./g.delta + 2.*g.delta/g.across)/0.5
     qloss = 2.*prim['urad']/(1.+xirad*taueff)* (g.across/g.delta + 2.*g.delta) # * taufun(taueff, taumin, taumax) # here, we ignore the exponential factor 1-e^-tau: it is important for radiative losses but computationally heavy and unnecessary to estimate the time scale
     #    qloss = 2.*prim['urad']/prim['rho'] / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
     # approximate qloss
