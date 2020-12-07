@@ -294,9 +294,9 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #    tau = rho * delta # tau in transverse direction
     #    tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
     if cooltwosides:
-        taueff = rho *delta /2.
+        taueff = rho *delta 
     else:
-        taueff = rho / (1./delta + 2. * delta /  across)  /2.
+        taueff = rho / (1./delta + 2. * delta /  across) 
     # copy(1./(1./tau + 1./tauphi))
     #    taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     #    taufac = 1. 
@@ -331,7 +331,7 @@ def qloss_separate(rho, v, u, g):
     '''
     tau = rho * g.delta
     tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
-    taueff = copy(0.5/(1./tau + 1./tauphi))
+    taueff = copy(1./(1./tau + 1./tauphi))
     taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))

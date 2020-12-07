@@ -59,7 +59,7 @@ def time_step(prim, g, dl):
     # also outputs total luminosity of the fraction of the flow, if global eta>0.
     csqest = 4./3.*prim['press']/prim['rho']
     dt_CFL = CFL * (dl / (sqrt(csqest)+abs(prim['v']))[1:-1]).min()
-    taueff = prim['rho']/(1./g.delta + 2.*g.delta/g.across)/2.
+    taueff = prim['rho']/(1./g.delta + 2.*g.delta/g.across)
     qloss = 2.*prim['urad']/(1.+xirad*taueff)* (g.across/g.delta + 2.*g.delta) # * taufun(taueff, taumin, taumax) # here, we ignore the exponential factor 1-e^-tau: it is important for radiative losses but computationally heavy and unnecessary to estimate the time scale
     #    qloss = 2.*prim['urad']/prim['rho'] / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
     # approximate qloss
@@ -86,7 +86,7 @@ def timestepdetails(g, rho, press, u, v, urad):
     rho_half = (rho[1:]+rho[:-1])/2. ; press_half = (press[1:]+press[:-1])/2. ; u_half = (u[1:]+u[:-1])/2. ; v_half = (v[1:]+v[:-1])/2. ; urad_half = (urad[1:]+urad[:-1])/2.
     csqest = 4./3.*press_half/rho_half
     dt_CFL = CFL * (dl / (sqrt(csqest)+abs(v_half))).min()
-    taueff = rho/(1./g.delta + 2.*g.delta/g.across)/2.
+    taueff = rho/(1./g.delta + 2.*g.delta/g.across)
     qloss = 2.*urad/(1.+xirad*taueff)* (g.across/g.delta + 2.*g.delta) * taufun(taueff, taumin, taumax)
     #    qloss = 2.*urad/rho / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
     wpos = ((qloss) > 0.) & (rho > 0.)
@@ -265,9 +265,9 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #    tau = rho * delta # tau in transverse direction
     #    tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
     if cooltwosides:
-        taueff = rho *delta / 2.
+        taueff = rho *delta 
     else:
-        taueff = rho / (1./delta + 2. * delta /  across) / 2.
+        taueff = rho / (1./delta + 2. * delta /  across) 
     # copy(1./(1./tau + 1./tauphi))
     #    taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     #    taufac = 1. 
@@ -303,7 +303,7 @@ def qloss_separate(rho, v, u, g):
     '''
     tau = rho * g.delta
     tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
-    taueff = copy(0.5/(1./tau + 1./tauphi))
+    taueff = copy(1./(1./tau + 1./tauphi))
     taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
