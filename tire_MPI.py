@@ -821,6 +821,17 @@ def alltire():
         g.l -= rbase ; luni -= rbase
         rfun=interp1d(g.l, g.r, kind='linear', bounds_error = False, fill_value=(g.r[0], g.r[-1])) # interpolation function mapping l to r
         rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
+
+        iftail = configactual.getboolean('iftail')
+        # if we want to make the radial mesh even more non-linear:
+        if (iftail):
+            print(luni)
+            rtail = configactual.getfloat('rtailfactor') * rmax
+            lend = luni.max()
+            luni *= sqrt((1.+exp((rnew/rtail)**2))/2.)
+            luni *= lend / luni.max()    
+            print(luni)
+ 
         luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
         g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
         if verbose:

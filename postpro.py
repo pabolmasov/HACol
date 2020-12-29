@@ -46,16 +46,16 @@ def galjaread(infile):
     '''
     lines = loadtxt(infile+'.dat', comments="#", delimiter="\t", unpack=False)
     
-    x = squeeze(lines[:,0]) ; u = 3.*squeeze(lines[:,2]) ; v = squeeze(lines[:,3])
-    prat =  squeeze(lines[:,6])
+    x = squeeze(lines[:,0]) ; u = 3.*squeeze(lines[:,2]) ; v = squeeze(lines[:,3]) 
+    rho = squeeze(lines[:,4]) ; prat =  squeeze(lines[:,6])
 
     #    plots.someplots(x, [v], name=infile+'_u', ylog=True, formatsequence=['k-'])
     
-    return x, u, v, prat
+    return x, u, v, rho, prat
 
 def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf = 'DEFAULT', vone = None):
 
-    xg, ug, vg, pratg = galjaread(ingalja)
+    xg, ug, vg, rhog, pratg = galjaread(ingalja)
     if vone is not None:
         vg *= vone
     
@@ -65,6 +65,8 @@ def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf 
     mdot = config[conf].getfloat('mdot') * 4.*pi
     afac = config[conf].getfloat('afac')
     mass1 = config[conf].getfloat('m1')
+    tscale = config[conf].getfloat('tscale') * mass1
+    rhoscale = config[conf].getfloat('rhoscale') / mass1
     realxirad = config[conf].getfloat('xirad')
     mow = config[conf].getfloat('mow')
     b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
@@ -75,30 +77,76 @@ def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf 
         vg *= vnorm 
 
     if ifhdf:
-        entry, t, l, xp, sth, rho, up, vp, qloss, glo  = read(inhdf, nentry)
+        inhdf = inpasha + '.hdf5'
+        sintry = size(nentry)
+        if sintry <= 1:
+            entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry)
+            dv = 0.*vp 
+        else:
+            entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry[0])
+            nentries = nentry[1]-nentry[0]
+            dv = copy(vp) * 0.
+            for k in arange(nentries-1)+nentry[0]+1:
+                entry1, t, l, xp, sth, rho1, up1, vp1, qloss1, glo1  = hdf.read(inhdf, k)
+                rhop += rho1 ; up += up1 ; vp += vp1 ; qloss += qloss1
+                dv += vp1**2
+                if k == nentry[0]+1:
+                    tstart = t
+                if k == nentry[1]-1:
+                    tend = t
+            rhop /= double(nentries)
+            up /= double(nentries)
+            vp /= double(nentries)
+            qloss /= double(nentries)
+            dv = sqrt(dv/double(nentries) - vp**2)
+            print("time range = "+str(tstart*tscale)+".."+str(tend*tscale)+"s")
     else:
+        sintry=0
         xp, qp = readtireout(inpasha, ncol = [3, 2, 1])
         up, vp, rhop = qp
     geofile = os.path.dirname(inpasha)+"/geo.dat"
     r, theta, alpha, across, l, delta = geo.gread(geofile)
    
     umagtar = umag * (1.+3.*cos(theta)**2)/4. * xp**(-6.)
+    if ifhdf:
+        up /= umagtar
     
     betap = beta.Fbeta(rhop, up * umagtar, betacoeff)
     pratp = betap / (1.-betap)
+    pressp = up / 3. / (1.-betap/2.)
 
     # internal temperatures:
     tempp = (up * umagtar / mass1)**(0.25) * 3.35523 # keV
     umagtar_g = umag * (1.+3.*(1.-xg/xp.max()))/4. * xg**(-6.)
     tempg = (ug * umagtar_g / mass1)**(0.25) * 3.35523 # keV
+
+    uscale = rhoscale*0.898755
+    print("umagscale = "+str(rhoscale*0.898755)+"x10^{21}erg/c^3")
+    print("physical energy density on the pole and on the column foot:")
+    print(str(umag * uscale*3.)+"; "+str(umagtar[0]*uscale*3.)+"x10^{21}erg/cm^3")
+    print("compare to 4.774648")
+    
+    # let us estimate post-factum beta:
+    virialbetaP =  (up+pressp) * umagtar / rhop * rstar
+    print("measured in situ (Pasha) betaBS = "+str(virialbetaP[0:5]))
+    rstarg = rstar
+    virialbetaG = (8.+5.*pratg)/(6.+3.*pratg) * ug * umagtar_g / (rhog/rhoscale) * rstarg
+    print("measured in situ (Galja) betaBS = "+str(virialbetaG[0:5]))
+    print("pratg = "+str(pratg[0:5]))
     
     if ifplot:
         outdir = os.path.dirname(ingalja)+'/'
+        print('writing to '+outdir)
         plots.someplots([xg, xp], [ug, up], name=outdir+'BScompare_u', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
-        plots.someplots([xp, xg, xp, xp], [-vp, -vg, 1./sqrt(rstar*xp), 1./sqrt(rstar*xp)/7.], name=outdir+'BScompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
+        if sintry >= 1:
+            plots.someplots([xp, xg, xp, xp, xp, xp], [-vp, -vg, 1./sqrt(rstar*xp), 1./sqrt(rstar*xp)/7., -vp+dv, -vp-dv], name=outdir+'BScompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
+        else:
+            plots.someplots([xp, xg, xp, xp], [-vp, -vg, 1./sqrt(rstar*xp), 1./sqrt(rstar*xp)/7.], name=outdir+'BScompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
         plots.someplots([xg, xp], [pratg, pratp], name=outdir+'BScompare_p', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$P_{\rm gas} / P_{\rm rad}$', multix = True)
         plots.someplots([xg, xp], [tempg, tempp], name=outdir+'BScompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True)
-# comparer('galia_F/BS_solution_F', 'titania_fidu/tireout01000', vnorm = -0.000173023, conf = 'FIDU')
+        plots.someplots([xg, xp], [rhog/rhoscale, rhop], name=outdir+'BScompare_rho', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True)
+        plots.someplots([xg, xp], [virialbetaG, virialbetaP], name=outdir+'BScompare_virbeta', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta_{\rm BS}$', multix = True)
+# comparer('galia_F/BS_solution_F', 'titania_nod/tireout', vnorm = -0.000173023, conf = 'FIDU', nentry = [8000,9000])
 
     
 def rcoolfun(geometry, mdot):
@@ -155,12 +203,19 @@ def pds(infile='out/flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False, stnorm = False, fosccol = None, simfreq = None):
+def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False, stnorm = False, fosccol = None, simfreq = None, conf = 'DEFAULT'):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
     "ncol" is the number of data column in the input file (the last one is taken by default)
     
     '''
+    rstar = config[conf].getfloat('rstar')
+    m1 = config[conf].getfloat('m1')
+    tscale = config[conf].getfloat('tscale') * m1
+    mdot = config[conf].getfloat('mdot')
+    mu30 = config[conf].getfloat('mu30')
+    realxirad = config[conf].getfloat('xirad')
+
     lines = loadtxt(infile+".dat", comments="#", delimiter=" ", unpack=False)
     slines = shape(lines)
     if ncol >= slines[1]:
@@ -237,13 +292,23 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
             outdir = os.path.dirname(infile)
             geometry = loadtxt(outdir+"/geo.dat", comments="#", delimiter=" ", unpack=False)
             geo_r = geometry[:,0]  ; across = geometry[:,3]  ;   delta = geometry[:,5]
-            deltafun = interp1d(geo_r, delta)
-            delta_s = deltafun(xmean)
-            acrossfun = interp1d(geo_r, across)
-            across_s = acrossfun(xmean)
+            th = geometry[:,1]
+            cthfun = interp1d(geo_r/geo_r[0], cos(th))
+            across0 = across[0] ; delta0 = delta[0]
+            #         deltafun = interp1d(geo_r, delta)
+            #  delta_s = deltafun(xmean)
+            # acrossfun = interp1d(geo_r, across)
+            # across_s = acrossfun(xmean)
             # TODO: read from the conf. file
-            rstar = 4.86 ; xirad = 1.5 ; m1 =1.4 ; mdot = 10. ; tscale = 4.92594e-06 * m1
-            tth = tscale * mdot *  7.* sqrt(rstar * xmean) * delta_s**2/across_s * (1.+2.*across_s/delta_s**2)
+            # rstar = 4.86 ; xirad = 1.5 ; m1 =1.4 ; mdot = 10. ; tscale = 4.92594e-06 * m1
+            BSgamma = (across0/delta0**2)/mdot*rstar / (realxirad/1.5)
+            # umag is magnetic pressure
+            b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+            umag = b12**2*2.29e6*m1
+            BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
+            xs, BSbeta = bs.xis(BSgamma, BSeta, x0=4., ifbeta = True)
+            tth = tscale * rstar**1.5 * bs.dtint(BSgamma, xmean, cthfun)
+            # * mdot *  7.* sqrt(rstar * xmean) * delta_s**2/across_s * (1.+2.*across_s/delta_s**2)
             fth = 1./tth
             # 0.0227364 / xirad / sqrt(rstar*xmean)/rstar / mdot * (1./delta_s+2.*delta_s / across_s)**2 * 2.03e5/m1 # Hz
             goodx = (xmean > 3.*xstd) * (tcenter> tcenter[2])
@@ -253,7 +318,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
                 print(foscmean)
                 fth = foscmean*2.
                 fth[xmean > 10.] = sqrt(-1.)
-            plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', yrange = frange, addline = fth, xlog=True, ylog=False)
+            plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', yrange = frange, xrange = [maximum(quantile(xmean-xstd, 0.2), 1.), minimum(xmean[xmean<xmean.max()].max(), geo_r.max()/rstar)], addline = fth, xlog=True, ylog=False, lticks = [4, 5, 6, 8, 10])
         else:
             plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_lfmax', xtitle = r'$L/L_{\rm Edd}$', ytitle = '$f$, Hz')
             
@@ -349,8 +414,8 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     if conf is None:
         conf = 'DEFAULT'
     rstar = config[conf].getfloat('rstar')
-    tscale = config[conf].getfloat('tscale') * config[conf].getfloat('m1')
     m1 = config[conf].getfloat('m1')
+    tscale = config[conf].getfloat('tscale') * m1
     mu30 = config[conf].getfloat('mu30')
     mdot = config[conf].getfloat('mdot') * 4.*pi
     afac = config[conf].getfloat('afac')
@@ -401,7 +466,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
             stmp, dstmp, v1tmp, v2tmp = shock_dat(n[k], prefix=prefix, kleap = kleap)
         else:
             ttmp, stmp, dstmp, v1tmp, v2tmp, ltot, lpart, u0tmp = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap,
-                                                                     uvcheck = (k == (size(n)-1)), uvcheckfile = outdir+"/uvcheck")
+                                                                            uvcheck = (k == (size(n)-1)), uvcheckfile = outdir+"/uvcheck")
         s[k] = stmp ; ds[k] = dstmp
         v1[k] = v1tmp   ; v2[k] =  v2tmp
         dv[k] = v1tmp - v2tmp
@@ -493,56 +558,7 @@ def tailfit(prefix = 'out/flux', trange = None, ifexp = False, ncol = -1):
     else:
         print("slope ="+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
     print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))
-
-##################################################################
-def mdotmap(n1, n2, step,  prefix = "out/tireout", ifdat = False, conf='DEFAULT'):
-    # reconstructs the mass flow
-    # reading geometry:
-    geofile = os.path.dirname(prefix)+"/geo.dat"
-    #    fluxfile = os.path.dirname(prefix)+"/flux.dat"
-    #    fluxlines = loadtxt(fluxfile, comments="#")
-    #    tar=fluxlines[:,0]
-    print(geofile)
-    r, theta, alpha, across, l, delta = geo.gread(geofile) 
-    nr = size(r) 
-    indices = arange(n1, n2, step)
-    nind = size(indices)
-    md2 = zeros([nind, nr], dtype=double)
-    t2 = zeros([nind, nr], dtype=double)
-    r2 = zeros([nind, nr], dtype=double)   
-    
-    for k in arange(nind): # arange(n1, n2, step):
-        hname = prefix + ".hdf5"
-        if(ifdat):
-            fname = prefix + hdf.entryname(indices[k], ndig=5) + ".dat"
-            print(fname)
-            lines = loadtxt(fname, comments="#")
-            r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2]
-            t=tar[indices[k]]
-            mdot = config[conf].getfloat('mdot') * 4.*pi
-        else:
-            entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, indices[k])
-            mdot = glo['mdot'] * 4.*pi
-        md2[k, :] = (rho * v * across)[:]
-        t2[k, :] = t  ;     r2[k, :] = r[:]
-        tscale = config[conf].getfloat('tscale')
-
-    # ascii output:
-    fmap = open(prefix+"_mdot.dat", "w")
-    for k in arange(k):
-        for kr in arange(nr):
-            fmap.write(str(t2[k, kr])+" "+str(r2[k, kr])+" "+str(md2[k, kr])+"\n")
-    fmap.close()
-    if(ifplot):
-        # graphic output
-        nlev=30
-        mdmean = -md2.mean(axis=0)
-        plots.somemap(r2, t2*tscale, -md2/mdot, name=prefix+"_mdot", levels = (3.*arange(nlev)/double(nlev-2)-1.),
-                      inchsize = [4,6], cbtitle = r'$s/\dot{M}_{\rm out}$')
-        plots.someplots(r, [mdmean/(4.*pi), mdmean*0.+mdot/(4.*pi)], name=prefix+"_mdmean",
-                        xtitle='$R/R_*$', ytitle=r"$sc^2/L_{\rm Edd}$", formatsequence=['k.', 'r-'])
-        
-        
+       
 def taus(n, prefix = 'out/tireout', ifhdf = True, conf = 'DEFAULT'):
     '''
     calculates the optical depths along and across the flow
@@ -651,32 +667,6 @@ def filteredflux(hfile, n1, n2, rfraction = 0.9, conf = 'DEFAULT'):
     fmean = ltot[w].mean()
     fstd = ltot[w].std()
     print("Fmean = "+str(fmean)+"+/-"+str(fstd)+" ("+str(fmean-ffilteredmean)+")")
-    
-    
-def massplot(prefix = "out/tireout"):
-    geofile = os.path.dirname(prefix)+"/geo.dat"
-    tscale = config['DEFAULT'].getfloat('tscale')
-    massscale = config['DEFAULT'].getfloat('massscale')
-    print(geofile)
-    r, theta, alpha, across, l, delta = geo.gread(geofile) 
-    totfile = os.path.dirname(prefix)+"/totals"
-    lines = loadtxt(totfile+".dat", comments="#", delimiter=" ", unpack=False)
-    tene = lines[:,0] ;  mass = lines[:,1]
-
-    print(umag)
-    mcol = across[0] * umag * rstar**2 * 2.
-
-    tfilter = tene < 0.05
-    tene = tene[tfilter]
-    mass = mass[tfilter]
-
-    mass *= massscale/1e16
-    mcol *= massscale/1e16
-
-    if ifplot:
-        plots.someplots(tene, [mass, mdot * tene/tscale * massscale/1e16+mass[0], mass*0. + mcol], formatsequence = ['k-', 'r:', 'g--'], name = os.path.dirname(prefix)+"/masstest", xtitle='t, s', ytitle=r'$M$, $10^{16}$g', xlog = False, ylog = False)
-
-
         
 def lplot():
 
