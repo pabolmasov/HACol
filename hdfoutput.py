@@ -68,7 +68,7 @@ def read(hname, nentry):
     read a single entry from an HDF5
     '''
     glosave = dict()
-    hfile = h5py.File(hname, "r", libver='latest')
+    hfile = h5py.File(hname, 'r', libver='latest')
     geom=hfile["geometry"]
     glo=hfile["globals"]
     glosave["rstar"] = glo.attrs["rstar"]
@@ -146,6 +146,8 @@ def liststitch(hnamelist):
                 grp.create_dataset("u", data=ufun(geom["l"]))
                 grp.create_dataset("qloss", data=qfun(geom["l"]))
             hnew.flush()
+        hfile1.close()
+        #  ii = input('file')
     hnew.close()
         
     

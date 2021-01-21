@@ -299,8 +299,6 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
             #  delta_s = deltafun(xmean)
             # acrossfun = interp1d(geo_r, across)
             # across_s = acrossfun(xmean)
-            # TODO: read from the conf. file
-            # rstar = 4.86 ; xirad = 1.5 ; m1 =1.4 ; mdot = 10. ; tscale = 4.92594e-06 * m1
             BSgamma = (across0/delta0**2)/mdot*rstar / (realxirad/1.5)
             # umag is magnetic pressure
             b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
@@ -354,7 +352,7 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
     entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(infile, n)
     n=size(r)
     #    v=medfilt(v, kernel_size=3)
-    v1=savgol_filter(copy(v), 2*kleap+1, 1) # Savitzky-Golay filter
+    # v1=savgol_filter(copy(v), 2*kleap+1, 1) # Savitzky-Golay filter
     #find maximal compression:
     dvdl = (v[kleap:]-v[:-kleap])/(l[kleap:]-l[:-kleap])
     wcomp = (dvdl).argmin()
@@ -369,9 +367,9 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
             plots.someplots(r[1:], [v[1:], v1[1:], dvdl], name = "shocknan", xtitle=r'$r$', ytitle=r'$v$', xlog=False, formatsequence = ['k.', 'r-', 'b'])
         ii=input('r')
 
-    ltot = simps(qloss, x=l)
+    ltot = trapz(qloss[1:], x=l[1:])
     if wcomp1 > 2:
-        lbelowshock = simps(qloss[0:wcomp1], x = l[0:wcomp1])
+        lbelowshock = trapz(qloss[1:wcomp1], x = l[1:wcomp1])
     else:
         lbelowshock = 0.
 
@@ -388,9 +386,8 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
                             xlog=False, ylog = True, formatsequence = ['k.', 'b-'],
                             vertical = (r[wcomp1]+r[wcomp2])/2.)
         
-    return t, (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock, u[0]
-    #    return (r[wcomp:wcomp1]).mean(), r[wcomp:wcomp1],v[wcomp], v[wcomp1]
-# v[wcomp], v[wcomp+1]
+    return t, (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock, -((u*4./3.+v**2/2.)*v)[-1]
+  
 
 def shock_dat(n, prefix = "out/tireout", kleap = 1):
     '''
@@ -405,7 +402,7 @@ def shock_dat(n, prefix = "out/tireout", kleap = 1):
     dvdl = (v[1:]-v[:-1])/(r[1:]-r[:-1])
     wcomp = (dvdl).argmin()
     #    print("maximal compression found at r="+str(r[wcomp])+".. "+str(r[wcomp+1])+"rstar")
-    return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.,v[maximum(wcomp-kleap,00)], v[minimum(wcomp+1+kleap, size(r)-1)]
+    return (r[wcomp]+r[wcomp+1])/2., (r[wcomp+1]-r[wcomp])/2.,v[maximum(wcomp-kleap,00)], v[minimum(wcomp+1+kleap, size(r)-1)], 
     
 def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kleap = 5, xest = 4.):
     '''
@@ -419,6 +416,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     mu30 = config[conf].getfloat('mu30')
     mdot = config[conf].getfloat('mdot') * 4.*pi
     afac = config[conf].getfloat('afac')
+    drrat = config[conf].getfloat('drrat')
     realxirad = config[conf].getfloat('xirad')
     b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
     umag = b12**2*2.29e6*m1
@@ -430,7 +428,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     dv=arange(size(n), dtype=double)
     v2=arange(size(n), dtype=double)
     v1=arange(size(n), dtype=double)
-    u0 =arange(size(n), dtype=double)
+    lc_out =arange(size(n), dtype=double) # heat advected from the outer edge
     lc_tot = arange(size(n), dtype=double) ; lc_part = arange(size(n), dtype=double)
     compression=arange(size(n), dtype=double)
     print(size(n))
@@ -442,6 +440,8 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     th = geometry[:,1] ; r = geometry[:,0]
     cthfun = interp1d(r/r[0], cos(th)) # we need a function allowing to calculate cos\theta (x)
     across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
+    acrosslast =  geometry[-1,3]
+    #   acrosslast = pi*4.*afac*drrat * geometry[-1,0]**2 
     BSgamma = (across0/delta0**2)/mdot*rstar / (realxirad/1.5)
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
@@ -465,7 +465,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
         if(dat):
             stmp, dstmp, v1tmp, v2tmp = shock_dat(n[k], prefix=prefix, kleap = kleap)
         else:
-            ttmp, stmp, dstmp, v1tmp, v2tmp, ltot, lpart, u0tmp = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap,
+            ttmp, stmp, dstmp, v1tmp, v2tmp, ltot, lpart, uvtmp = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap,
                                                                             uvcheck = (k == (size(n)-1)), uvcheckfile = outdir+"/uvcheck")
         s[k] = stmp ; ds[k] = dstmp
         v1[k] = v1tmp   ; v2[k] =  v2tmp
@@ -473,21 +473,22 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
         compression[k] = v2tmp/v1tmp
         lc_tot[k] = ltot ; lc_part[k] = lpart
         t[k] = ttmp
-        u0[k] = u0tmp
+        lc_out[k] = uvtmp * acrosslast
 
     print("predicted shock position: xs = "+str(xs)+" (rstar)")
-    print("cooling limit: rcool/rstar = "+str(rcool/rstar))
+    #    print("cooling limit: rcool/rstar = "+str(rcool/rstar))
     print("flux array size "+str(size(lc_tot)))
-    ff /= 4.*pi  ; eqlum /= 4.*pi ; lc_tot /= 4.*pi ; lc_part /= 4.*pi
+    ff /= 4.*pi  ; eqlum /= 4.*pi ; lc_tot /= 4.*pi ; lc_part /= 4.*pi  ; lc_out /= 4.*pi
     t *= tscale
 
     dt_current = tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, s, cthfun)
     
     if(ifplot):
-        ws=where((s>1.1) & (lc_part > lc_part.min()))
+        ws=where((s>1.0) & (lc_part > lc_part.min()))
         n=ws
-        plots.someplots(t[ws], [s[ws], s[ws]*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b:'], vertical = t.max()*0.9, verticalformatsequence = 'b:')        
-        plots.someplots(lc_part[ws], [s[ws], s[ws]*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog= (lc_tot[ws].max()/lc_tot[ws].min()) > 10., ylog= (s[ws].max()/s[ws].min()> 10.), formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum, verticalformatsequence = 'r-')
+        plots.someplots(t[ws], [lc_tot[ws], lc_part[ws], lc_out[ws], lc_tot[ws]-lc_part[ws], t[ws]*0.+mdot/rstar/4./pi, t[ws]*0.+mdot/rstar/s[ws]/4./pi], name = outdir+"/lumshocks", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', formatsequence = ['k-', 'r-', 'b:', 'g-.', 'k:', 'k--'], inchsize = [5,4], ylog = True)
+        plots.someplots(t[ws], [s[ws], s[ws]*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b:'], vertical = t.max()*0.9, verticalformatsequence = 'b:', inchsize = [5,4])        
+        plots.someplots(lc_part[ws], [s[ws], s[ws]*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog= (lc_tot[ws].max()/median(lc_tot[ws])) > 10., ylog= (s[ws].max()/s[ws].min()> 10.), formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum, verticalformatsequence = 'r-', inchsize = [5,4])
         # plots.someplots(t[ws], [ff[n], lc_part[ws], ff[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False, formatsequence = ['k:', 'k-', 'r-'])
         plots.someplots(t[ws], [-v1[ws], -v2[ws], sqrt(2./s[ws]/rstar), sqrt(2./s[ws]/rstar)/7.], name = outdir+"/vleap",xtitle=r'$t$, s', ytitle=r'$ v /c$', xlog=False, formatsequence = ['k-', 'b:', 'r-', 'r-'])
         plots.someplots(s[ws], [1./dt_current[ws], 1./(tscale * rstar**1.5 * s[ws]**3.5)], xtitle = r'$R_{\rm shock}/R_*$', xlog = True, ylog = True, formatsequence = ['ro', 'k-'], name = outdir + '/ux', ytitle = r'$f$, Hz')
@@ -516,7 +517,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     fmean = ff[wlate].mean() ; frms = ff[wlate].std()
     print("flux = "+str(fmean)+"+/-"+str(frms)+"\n")
     print("OR flux = "+str(lc_tot[wlaten].mean())+".."+str(lc_part[wlaten].mean())+"\n")
-    
+    print("lc_out = "+str(lc_out[wlaten].mean())+"\n")
         
 ###############################
 
@@ -587,43 +588,7 @@ def taus(n, prefix = 'out/tireout', ifhdf = True, conf = 'DEFAULT'):
     taualong = (rho[1:]+rho[:-1])/2. * dr
     taucrossfun = interp1d(r, taucross, kind = 'linear')
     if(ifplot):
-        plots.someplots(rc/rstar, [taucrossfun(rc), taualong], name = prefix+"_tau", xtitle=r'$r/R_{\rm NS}$', ytitle=r'$\tau$', xlog=True, ylog=True, formatsequence=['k-', 'r-'])
-
-def virialratio(n, prefix = 'out/tireout', ifhdf = True):
-    '''
-    checks the virial relations in the flow
-    '''
-    geofile = os.path.dirname(prefix)+"/geo.dat"
-    print(geofile)
-    r, theta, alpha, across, l, delta = geo.gread(geofile) 
-    if(ifhdf):
-        hname = prefix + ".hdf5"
-        entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, n)
-    else:
-        entryname = hdf.entryname(n, ndig=5)
-        fname = prefix + entryname + ".dat"
-        lines = loadtxt(fname, comments="#")
-        rho = lines[:,1]
-    egrav = trapz(rho * across / r, x = l)
-    ethermal = trapz(u * across, x = l)
-    ebulk = trapz(rho * across * v**2/2., x = l)
-
-    return t, egrav, ethermal, ebulk, (ethermal+ebulk)/egrav
-
-def virialtest(n1, n2, prefix = 'out/tireout'):
-    '''
-    tests virial relations as a function of time
-    '''
-    nar = arange(n2-n1)+n1
-
-    virar = zeros(n2-n1) ; tar = zeros(n2-n1)
-    
-    for k in arange(n2-n1):
-        t, egrav, ethermal, ebulk, viratio = virialratio(nar[k], prefix = prefix)
-        virar[k] = viratio ; tar[k] = t
-
-    if(ifplot):
-        plots.someplots(tar, [virar], name = prefix+"_vire", xtitle=r'$t$', ytitle=r'$E_{\rm k} / E_{\rm g}$', xlog=False, ylog=False, formatsequence=['k-'])
+        plots.someplots(rc-1., [taucrossfun(rc), taualong], name = prefix+"_tau", xtitle=r'$r/R_{\rm NS}-1$', ytitle=r'$\tau$', xlog=True, ylog=True, formatsequence=['k-', 'r-'])
 
 def filteredflux(hfile, n1, n2, rfraction = 0.9, conf = 'DEFAULT'):
     '''

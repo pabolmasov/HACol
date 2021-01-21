@@ -22,7 +22,7 @@ def taufun(tau, taumin, taumax):
 
 def tratfac(x, taumin, taumax):
     '''
-    an accurate smooth version of (1-e^{-x})/x
+    a smooth and accurate smooth version of (1-e^{-x})/x
     '''
     xmin = taumin ; xmax = taumax # limits the same as for optical depth
     nx = size(x)

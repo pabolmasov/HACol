@@ -80,6 +80,7 @@ squeezeothersides = configactual.getboolean('squeezeothersides')
 cooltwosides = configactual.getboolean('cooltwosides')
 
 # radiation transfer:
+ifthin = configactual.getboolean('ifthin')
 raddiff = configactual.getboolean('raddiff')
 xirad = configactual.getfloat('xirad')
 taumin = configactual.getfloat('taumin')
@@ -312,10 +313,14 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #    urad = prim['urad']
     #     urad = copy(u * (1.-beta)/(1.-beta/2.))
     #    urad = (urad+abs(urad))/2.
-    if cooltwosides:
-        qloss = copy(2.*urad/(xirad*taueff+1.)*(across/delta) * taufun(taueff, taumin, taumax))  # diffusion approximation; energy lost from 4 sides
+    if ifthin:
+        taufactor = tratfac(taueff, taumin, taumax) / xirad
     else:
-        qloss = copy(2.*urad/(xirad*taueff+1.)*(across/delta+2.*delta) * taufun(taueff, taumin, taumax))  # diffusion approximation; energy lost from 4 sides
+        taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
+    if cooltwosides:
+        qloss = copy(2.*urad*(across/delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+    else:
+        qloss = copy(2.*urad*(across/delta+2.*delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
     # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff, taumin, taumax) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = rho*0.-dmsqueeze # copy(rho*0.-dmsqueeze)
@@ -336,10 +341,15 @@ def qloss_separate(rho, v, u, g):
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.    
-    if cooltwosides:
-        qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta)* taufac)  # diffusion approximation; energy lost from 4 sides
+    if ifthin:
+        taufactor = tratfac(taueff, taumin, taumax) / xirad
     else:
-        qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
+        taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
+    if cooltwosides:
+        qloss = copy(2.*urad*(g.across/g.delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+    else:
+        qloss = copy(2.*urad*(g.across/g.delta+2.*g.delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+
     return qloss
 
 def derivo(l_half, m, s, e, s_half, p_half, fe_half, dm, ds, de):
@@ -773,7 +783,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
                             name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
             plots.someplots(gglobal.r, [qloss*gglobal.r],
                             name=outdir+'/qloss{:05d}'.format(nout),
-                            ytitle=r'$\frac{d^2 E}{d\ln l dt}$', ylog=False,
+                            ytitle=r'$\frac{{\rm d}^2 E}{{\rm d}l {\rm d}\ln dt}$', ylog=False,
                             formatsequence = ['k-', 'r-'])
         # ascii output:
         # print(nout)
@@ -831,7 +841,7 @@ def alltire():
             luni *= sqrt((1.+exp((rnew/rtail)**2))/2.)
             luni *= lend / luni.max()    
             print(luni-luni_store)
-            ii = input('r')
+            #     ii = input('r')
 
         rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
         luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
