@@ -176,7 +176,6 @@ def regularize(u, rho, press):
     #    u1=u-ufloor ; rho1=rho-rhofloor ; press1 = press-ufloor
     return (u+ufloor+fabs(u-ufloor))/2., (rho+rhofloor+fabs(rho-rhofloor))/2., (press+ufloor +fabs(press-ufloor))/2.    
 
-
 ##############################################################################
 
 # conversion between conserved and primitive variables for separate arrays and for a single domain
@@ -218,7 +217,7 @@ def tocon(prim, gnd = None):
 
 def toprim(con, gnd = None):
     '''
-    convert conserved quantities to primitives
+    convert conserved quantities to primitives for one domain
     '''
     #  m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
     if gnd is None:
@@ -241,13 +240,7 @@ def diffuse(rho, urad, v, dl, across):
     calculates energy flux contribution already at the cell boundary
     across should be set at half-steps
     '''
-    #    rho_half = (rho[1:]+rho[:-1])/2. # ; v_half = (v[1:]+v[:-1])/2.  ; u_half = (u[1:]+u[:-1])/2.
-    # rtau_right = rho[1:] * dl / 2.# optical depths along the field line, to the right of the cell boundaries
-    # rtau_left = rho[:-1] * dl / 2. # -- " -- to the left -- " --
-    # rtau = dl * (rho[1:]+rho[:-1])/2.
-    # rtau_left + rtau_right
     rtau_exp = tratfac(dl * (rho[1:]+rho[:-1])/2., taumin, taumax)
-    # across_half = (across[1:]+across[:-1])/2.
     
     duls_half =  nubulk  * (( urad * v)[1:] - ( urad * v)[:-1])\
                  *(across[1:]+across[:-1]) / 6. * rtau_exp #  / (rtau_left + rtau_right)
@@ -318,15 +311,15 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     else:
         taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
     if cooltwosides:
-        qloss = copy(2.*urad*(across/delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+        qloss = copy(2.*urad*(across/delta) * taufactor)  # diffusion approximation; energy lost from 2 sides
     else:
         qloss = copy(2.*urad*(across/delta+2.*delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
     # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff, taumin, taumax) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
-    dm = rho*0.-dmsqueeze # copy(rho*0.-dmsqueeze)
-    dudt = v*force-qloss # +irradheating # copy
-    ds = force - dmsqueeze * v # lost mass carries away momentum
-    de = dudt - desqueeze # lost matter carries away energy (or enthalpy??)
+    dm = copy(rho*0.-dmsqueeze) # copy(rho*0.-dmsqueeze)
+    #  dudt = copy(v*force-qloss) # +irradheating # copy
+    ds = copy(force - dmsqueeze * v) # lost mass carries away momentum
+    de = copy(v*force - qloss - desqueeze) # lost matter carries away energy (or enthalpy??)
     #    return dm, force, dudt, qloss, ueq
     return dm, ds, de, qloss
 
@@ -334,10 +327,14 @@ def qloss_separate(rho, v, u, g):
     '''
     standalone estimate for flux distribution
     '''
-    tau = rho * g.delta
-    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
-    taueff = copy(1./(1./tau + 1./tauphi))
-    taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
+    #    tau = rho * g.delta
+    #    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
+    #   taueff = copy(1./(1./tau + 1./tauphi))
+    if cooltwosides:
+        taueff = rho * g.delta 
+    else:
+        taueff = rho / (1. / g.delta + 2. * g.delta /  g.across) 
+    # taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.    
@@ -353,8 +350,8 @@ def qloss_separate(rho, v, u, g):
     return qloss
 
 def derivo(l_half, m, s, e, s_half, p_half, fe_half, dm, ds, de):
-           #, dlleft, dlright,
-           #sleft, sright, pleft, pright, feleft, feright):
+    #, dlleft, dlright,
+    #sleft, sright, pleft, pright, feleft, feright):
     '''
     main advance step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
@@ -433,13 +430,6 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         #        fe[-1] = fe[-2]
         # gnd = geometry_add(gnd, geometry_local(gnd,0))
     g1 = Gamma1(5./3., beta)
-    '''
-    csq=g1*press/rho
-    if(csq.min()<csqmin):
-        wneg = (csq<=csqmin)
-        csq[wneg] = csqmin
-    #    cs = sqrt(csq)
-    '''
     vl, vm, vr =sigvel_mean(v, sqrt(g1*press/rho))
     # sigvel_linearized(v, cs, g1, rho, press)
     # sigvel_isentropic(v, cs, g1, csqmin=csqmin)
@@ -475,8 +465,13 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         duls_half, dule_half = diffuse(rho, urad, v, gnd.l[1:]-gnd.l[:-1], gnd.across)
         # radial diffusion suppressed, if transverse optical depth is small:
         delta = (gnd.delta[1:]+gnd.delta[:-1])/2.
-        duls_half *= taufun(delta  * (rho[1:]+rho[:-1])/2., taumin, taumax) 
-        dule_half *= taufun(delta  * (rho[1:]+rho[:-1])/2., taumin, taumax) 
+        across = (gnd.across[1:]+gnd.across[:-1])/2.
+        if cooltwosides:
+            taueff = delta  * (rho[1:]+rho[:-1])/2.
+        else:
+            taueff = (rho[1:]+rho[:-1])/2. / (1./delta + 2. * delta /  across) 
+        duls_half *= taufun(taueff, taumin, taumax) 
+        dule_half *= taufun(taueff, taumin, taumax) 
         # duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         #  dule_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         fs_half += duls_half ; fe_half += dule_half         
@@ -736,7 +731,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
 ##########################################################
 def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
     '''
-    single-core output (does it slow the calculation down?)
+    single-core output 
     '''        
     t = outblock['t'] ; g = outblock['g'] ; con = outblock['con'] ; prim = outblock['prim']
     m = con['m'] ; e = con['e'] ; umagtar = con['umagtar']
@@ -795,7 +790,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
         fstream.write('# format: r/rstar -- rho -- v -- u/umag\n')
         nx = size(gglobal.r)
         for k in arange(nx):
-            fstream.write(str(gglobal.r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+'\n')
+            fstream.write(str(gglobal.r[k]/rstar)+' '+str(rho[k])+' '+str(v[k])+' '+str(u[k]/umagtar[k])+' '+str(qloss[k])+'\n')
         fstream.flush()
         fstream.close()
 

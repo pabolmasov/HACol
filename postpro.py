@@ -370,8 +370,11 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
     ltot = trapz(qloss[1:], x=l[1:])
     if wcomp1 > 2:
         lbelowshock = trapz(qloss[1:wcomp1], x = l[1:wcomp1])
+        #    wnearshock = maximum(wcomp1-10,1):minimum(wcomp1+10, n-1)
+        lonshock = trapz(qloss[maximum(wcomp1-10,1):minimum(wcomp1+10, n-1)], x = l[maximum(wcomp1-10,1):minimum(wcomp1+10, n-1)])
     else:
         lbelowshock = 0.
+        lonshock = 0.
 
     if uvcheck:
         # let us check BS's equation (31):
@@ -385,8 +388,11 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
                             xtitle=r'$r$', ytitle=r'$uv$',
                             xlog=False, ylog = True, formatsequence = ['k.', 'b-'],
                             vertical = (r[wcomp1]+r[wcomp2])/2.)
-        
-    return t, (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock, -((u*4./3.+v**2/2.)*v)[-1]
+
+    # temporary!!!
+    #    ltot /= 2. ; lbelowshock /= 2. ; lonshock /= 2. 
+            
+    return t, (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock, lonshock,  -((u*4./3.+v**2/2.)*v)[-1]
   
 
 def shock_dat(n, prefix = "out/tireout", kleap = 1):
@@ -430,6 +436,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     v1=arange(size(n), dtype=double)
     lc_out =arange(size(n), dtype=double) # heat advected from the outer edge
     lc_tot = arange(size(n), dtype=double) ; lc_part = arange(size(n), dtype=double)
+    lc_nearshock = arange(size(n), dtype=double)
     compression=arange(size(n), dtype=double)
     print(size(n))
     outdir = os.path.dirname(prefix)
@@ -465,20 +472,20 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
         if(dat):
             stmp, dstmp, v1tmp, v2tmp = shock_dat(n[k], prefix=prefix, kleap = kleap)
         else:
-            ttmp, stmp, dstmp, v1tmp, v2tmp, ltot, lpart, uvtmp = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap,
+            ttmp, stmp, dstmp, v1tmp, v2tmp, ltot, lpart, lshock, uvtmp = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap,
                                                                             uvcheck = (k == (size(n)-1)), uvcheckfile = outdir+"/uvcheck")
         s[k] = stmp ; ds[k] = dstmp
         v1[k] = v1tmp   ; v2[k] =  v2tmp
         dv[k] = v1tmp - v2tmp
         compression[k] = v2tmp/v1tmp
-        lc_tot[k] = ltot ; lc_part[k] = lpart
+        lc_tot[k] = ltot ; lc_part[k] = lpart ; lc_nearshock[k] = lshock
         t[k] = ttmp
         lc_out[k] = uvtmp * acrosslast
 
     print("predicted shock position: xs = "+str(xs)+" (rstar)")
     #    print("cooling limit: rcool/rstar = "+str(rcool/rstar))
     print("flux array size "+str(size(lc_tot)))
-    ff /= 4.*pi  ; eqlum /= 4.*pi ; lc_tot /= 4.*pi ; lc_part /= 4.*pi  ; lc_out /= 4.*pi
+    ff /= 4.*pi  ; eqlum /= 4.*pi ; lc_tot /= 4.*pi ; lc_part /= 4.*pi  ; lc_out /= 4.*pi ; lc_nearshock /= 4.*pi
     t *= tscale
 
     dt_current = tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, s, cthfun)
@@ -486,7 +493,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     if(ifplot):
         ws=where((s>1.0) & (lc_part > lc_part.min()))
         n=ws
-        plots.someplots(t[ws], [lc_tot[ws], lc_part[ws], lc_out[ws], lc_tot[ws]-lc_part[ws], t[ws]*0.+mdot/rstar/4./pi, t[ws]*0.+mdot/rstar/s[ws]/4./pi], name = outdir+"/lumshocks", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', formatsequence = ['k-', 'r-', 'b:', 'g-.', 'k:', 'k--'], inchsize = [5,4], ylog = True)
+        plots.someplots(t[ws], [lc_tot[ws], lc_part[ws], lc_out[ws], lc_tot[ws]-lc_part[ws], t[ws]*0.+mdot/rstar/4./pi*(1.-0.19315666), t[ws]*0.+mdot/rstar/s[ws]/4./pi, lc_tot[ws]-mdot/rstar/4./pi*(1.-BSbeta)], name = outdir+"/lumshocks", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', formatsequence = ['k-', 'r-', 'b:', 'g-.', 'k:', 'k--', 'm-'], inchsize = [5, 4], ylog = True)
         plots.someplots(t[ws], [s[ws], s[ws]*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b:'], vertical = t.max()*0.9, verticalformatsequence = 'b:', inchsize = [5,4])        
         plots.someplots(lc_part[ws], [s[ws], s[ws]*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog= (lc_tot[ws].max()/median(lc_tot[ws])) > 10., ylog= (s[ws].max()/s[ws].min()> 10.), formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum, verticalformatsequence = 'r-', inchsize = [5,4])
         # plots.someplots(t[ws], [ff[n], lc_part[ws], ff[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False, formatsequence = ['k:', 'k-', 'r-'])
@@ -675,3 +682,39 @@ def lplot():
 
     plots.errorplot(1./gammas, gammas*0., lrad/ltot, dlrad/ltot, outfile = 'bsfig2',
                     xtitle = r'$\gamma^{-1}$', ytitle = r'$L_{\rm s}/L_{\rm tot}$', addline  = 1.-betas, xlog = True, pointlabels = confs)
+
+
+def energytest(infile, n1, n2, dn, conf = 'DEFAULT'):
+    '''
+    tracks the evolution of different types of energy
+    '''
+
+    n = arange(n1, n2, dn)
+    nt = size(n)
+    
+    etot = zeros(nt) ;    ekin = zeros(nt) ;    epot = zeros(nt)
+    eheat = zeros(nt) ; tar = zeros(nt) ; ltot = zeros(nt)
+    
+    for k in arange(nt):
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(infile, n[k])
+        ekin[k] = trapz(rho * v**2/2., x = l)
+        epot[k] = -trapz(rho / r, x = l)
+        eheat[k] = trapz(u, x = l)
+        etot[k] = ekin[k] + epot[k] + eheat[k]
+        tar[k] = t
+        ltot[k] = trapz(qloss, x=l)
+
+    m1 = config[conf].getfloat('m1')
+    tscale = config[conf].getfloat('tscale') * m1
+    tar *= tscale
+    plots.someplots(tar, [etot, ekin, epot, eheat], 
+                    name = os.path.dirname(infile)+'/energytest',
+                    formatsequence = ['k-', 'b--', 'r:', 'g-.'],
+                    xtitle = r'$t$, s', ytitle = r'$E$')
+
+    dedt = (etot[1:]-etot[:-1])/(tar[1:]-tar[:-1]) * tscale
+    dedt_p = (epot[1:]-epot[:-1])/(tar[1:]-tar[:-1]) * tscale
+
+    plots.someplots(tar[1:], [-dedt, ltot[1:], dedt_p], formatsequence = ['k-', 'b:', 'k:'], 
+                    name = os.path.dirname(infile)+'/energytest_d', xlog = False, 
+                    xtitle = r'$t$, s', ytitle = r'$dE/dt$', yrange = [-ltot.max(), ltot.max()*2.])

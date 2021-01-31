@@ -41,15 +41,28 @@ def qloss_separate(rho, v, u, g, conf):
 
     betacoeff = conf.getfloat('betacoeff')
     xirad = conf.getfloat('xirad')
+    ifthin = conf.getboolean('ifthin')
+    cooltwosides = conf.getboolean('cooltwosides')
     betafun = betafun_define()
-    tau = rho * g.delta
-    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
-    taueff = copy(1./(1./tau + 1./tauphi))
-    taufac =  1.-exp(-tau)
+    #  tau = rho * g.delta
+    #  tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
+    #     taueff = copy(1./(1./tau + 1./tauphi))
+    if cooltwosides:
+        taueff = rho * g.delta 
+    else:
+        taueff = rho / (1. / g.delta + 2. * g.delta /  g.across) 
+    #    taufac =  1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.    
-    qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
+    if ifthin:
+        taufactor = tratfac(taueff, taumin, taumax) / xirad
+    else:
+        taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
+    if cooltwosides:
+        qloss = copy(2.*urad*(across/delta) * taufactor)  # diffusion approximation; energy lost from 2 sides
+    else:
+        qloss = copy(2.*urad*(across/delta+2.*delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
 

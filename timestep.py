@@ -20,7 +20,7 @@ def time_step(prim, g, dl, xirad = 1.5, raddiff = True, eta = 0., CFL = 0.5, Cdi
     dt_thermal = Cth * abs((prim['u']*g.across)/qloss).min()
     
     if(raddiff):
-        ctmp = dl**2 * 3.*prim['rho'][1:-1]
+        ctmp = 3.*(prim['rho'][1:-1] * dl +1.) * dl
         dt_diff = Cdiff * min(ctmp[ctmp>0.]*(taueff[1:-1] > .1)) # (dx^2/D)
         # if the optical depth is small, diffusion works wrong anyway
     else:
