@@ -15,9 +15,9 @@ def time_step(prim, g, dl, xirad = 1.5, raddiff = True, eta = 0., CFL = 0.5, Cdi
     #    qloss = 2.*prim['urad']/prim['rho'] / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
     # approximate qloss
 
-    wpos = ((qloss) > 0.) & (prim['rho'] > 0.)
-    wpos = wpos[1:-1]
-    dt_thermal = Cth * abs((prim['u']*g.across)/qloss).min()
+    #    wpos = ((qloss) > 0.) & (prim['rho'] > 0.)
+    #    wpos = wpos[1:-1]
+    dt_thermal = Cth * abs(((prim['u']*g.across)/qloss)).min()
     
     if(raddiff):
         ctmp = 3.*(prim['rho'][1:-1] * dl +1.) * dl

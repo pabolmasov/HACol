@@ -60,6 +60,7 @@ timeskip = configactual.getint('timeskip')
 ufloor = configactual.getfloat('ufloor')
 rhofloor = configactual.getfloat('rhofloor')
 csqmin = configactual.getfloat('csqmin')
+cslimit = configactual.getboolean('cslimit')
 
 # physics:
 mu30 = configactual.getfloat('mu30')
@@ -93,7 +94,11 @@ nubulk = configactual.getfloat('nubulk')
 weinberg = configactual.getboolean('weinberg')
 eta = configactual.getfloat('eta')
 heatingeff = configactual.getfloat('heatingeff')
-turnoff = configactual.getboolean('turnoff')
+ifturnoff = configactual.getboolean('ifturnoff')
+if ifturnoff:
+    turnofffactor = configactual.getfloat('turnofffactor')
+else:
+    turnofffactor =  1. # no mdot reduction
 
 # derived quantities:
 r_e = configactual.getfloat('r_e_coeff') * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetosphere radius
@@ -195,7 +200,7 @@ def toprim_separate(m, s, e, g):
 def tocon_separate(rho, v, u, g):
     
     m=rho*g.across # mass per unit length
-    s=m*v # momentum per unit length
+    s=m*v          # momentum per unit length
     e=(u+rho*(v**2/2.- 1./g.r - 0.5*(omega*g.r*g.sth)**2))*g.across  # total energy (thermal + mechanic) per unit length
     return m, s, e
 
@@ -266,8 +271,47 @@ def fluxes(g, rho, v, u, press):
     # across = g.across ; r = g.r  ; sth = g.sth 
     s = rho * v * g.across # mass flux (identical to momentum per unit length -- can we use it?)
     p = g.across * (rho*v**2 + press) # momentum flux
-    fe = g.across * v * (u + press + (v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion
+    fe = g.across * v * (u + press + (v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion    
     return s, p, fe
+
+def qloss_separate(rho, v, u, g, gin = False):
+    '''
+    standalone estimate for flux distribution
+    '''
+    #    tau = rho * g.delta
+    #    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
+    taueff = copy(rho)*0.
+    #   print("size rho = "+str(size(rho)))
+    #   print("size g = "+str(size(g.delta)))
+    if gin:
+        delta = g.delta[1:-1]
+        across = g.across[1:-1]
+        r = g.r[1:-1]
+    else:
+        delta = g.delta
+        across = g.across
+        r = g.r
+    if cooltwosides:
+        taueff = rho * delta 
+    else:
+        taueff = rho / (1. / delta + 2. * delta /  across) 
+    # taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
+    beta = betafun(Fbeta(rho, u, betacoeff))
+    urad = copy(u * (1.-beta)/(1.-beta/2.))
+    urad = (urad+fabs(urad))/2.    
+    if ifthin:
+        taufactor = tratfac(taueff, taumin, taumax) / xirad
+    else:
+        taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
+    if cooltwosides:
+        qloss = copy(2.*urad*(across/delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+    else:
+        qloss = copy(2.*urad*(across/delta+2.*delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+
+    if cslimit:
+        qloss *= (1.-exp(-u/rho/csqmin*r))
+        
+    return qloss
 
 def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., desqueeze = 0.):
         # prim, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
@@ -287,67 +331,32 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     delta = g.delta[1:-1] ;  across = g.across[1:-1] ; r = g.r[1:-1] ; cth = g.cth[1:-1] ; sth = g.sth[1:-1] ; cosa = g.cosa[1:-1] ; sina = g.sina[1:-1]
     #    tau = rho * delta # tau in transverse direction
     #    tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
+    taueff = copy(rho)*0.
     if cooltwosides:
-        taueff = rho *delta 
+        taueff[:] = rho *delta 
     else:
-        taueff = rho / (1./delta + 2. * delta /  across) 
+        taueff[:] = rho / (1./delta + 2. * delta /  across) 
     # copy(1./(1./tau + 1./tauphi))
     #    taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     #    taufac = 1. 
     #    gamefac = tratfac(tau, taumin, taumax)
     #    gamedd = eta * ltot * gamefac
-    sinsum = (sina*cth+cosa*sth) # sin(theta+alpha)
-    force = ((-sinsum/r**2*(1.-eta * ltot * tratfac(rho*delta, taumin, taumax))
-              +omega**2*r*sth*cosa)*rho*across) # *taufac
+    sinsum = 2.*cth / sqrt(3.*cth**2+1.)  # = sina*cth+cosa*sth = sin(theta+alpha)
+    force = copy((-sinsum/r**2*(1.-eta * ltot * tratfac(rho*delta, taumin, taumax))
+                  +omega**2*r*sth*cosa)*rho*across) # *taufac
+    gammaforce = sinsum/r**2 * eta * ltot * tratfac(rho*delta, taumin, taumax)
     if(forcecheck):
         network = simps(force/(rho*across), x=g.l)
         return network, (1./r[0]-1./r[-1])
-    #    beta = prim['beta'] # betafun(Fbeta(rho, u, betacoeff))
-    #    urad = prim['urad']
-    #     urad = copy(u * (1.-beta)/(1.-beta/2.))
-    #    urad = (urad+abs(urad))/2.
-    if ifthin:
-        taufactor = tratfac(taueff, taumin, taumax) / xirad
-    else:
-        taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
-    if cooltwosides:
-        qloss = copy(2.*urad*(across/delta) * taufactor)  # diffusion approximation; energy lost from 2 sides
-    else:
-        qloss = copy(2.*urad*(across/delta+2.*delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+    qloss = qloss_separate(rho, v, u, g, gin = True)    
     # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff, taumin, taumax) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = copy(rho*0.-dmsqueeze) # copy(rho*0.-dmsqueeze)
     #  dudt = copy(v*force-qloss) # +irradheating # copy
     ds = copy(force - dmsqueeze * v) # lost mass carries away momentum
-    de = copy(v*force - qloss - desqueeze) # lost matter carries away energy (or enthalpy??)
+    de = copy( gammaforce * v - qloss - desqueeze) # lost matter carries away energy (or enthalpy??)
     #    return dm, force, dudt, qloss, ueq
-    return dm, ds, de, qloss
-
-def qloss_separate(rho, v, u, g):
-    '''
-    standalone estimate for flux distribution
-    '''
-    #    tau = rho * g.delta
-    #    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
-    #   taueff = copy(1./(1./tau + 1./tauphi))
-    if cooltwosides:
-        taueff = rho * g.delta 
-    else:
-        taueff = rho / (1. / g.delta + 2. * g.delta /  g.across) 
-    # taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
-    beta = betafun(Fbeta(rho, u, betacoeff))
-    urad = copy(u * (1.-beta)/(1.-beta/2.))
-    urad = (urad+abs(urad))/2.    
-    if ifthin:
-        taufactor = tratfac(taueff, taumin, taumax) / xirad
-    else:
-        taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
-    if cooltwosides:
-        qloss = copy(2.*urad*(g.across/g.delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
-    else:
-        qloss = copy(2.*urad*(g.across/g.delta+2.*g.delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
-
-    return qloss
+    return dm, ds, de
 
 def derivo(l_half, m, s, e, s_half, p_half, fe_half, dm, ds, de):
     #, dlleft, dlright,
@@ -419,16 +428,8 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         press = concatenate([press, [press[-1]]])
         beta = concatenate([beta, [beta[-1]]])        
     fm, fs, fe = fluxes(gnd, rho, v, u, press)
-    if leftpack is None:
-        fm[0] = 0.
-        #        fs[0] = fs[1]
-        fe[0] = 0.
-        # gnd = geometry_add(geometry_local(gnd,0), gnd)       
     if rightpack is None:
-        fm[-1] = -mdot
-        #        fs[-1] = fs[-2]
-        #        fe[-1] = fe[-2]
-        # gnd = geometry_add(gnd, geometry_local(gnd,0))
+        fm[-1] = -mdot * turnofffactor
     g1 = Gamma1(5./3., beta)
     vl, vm, vr =sigvel_mean(v, sqrt(g1*press/rho))
     # sigvel_linearized(v, cs, g1, rho, press)
@@ -444,24 +445,15 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         print("R = "+str((gnd.r[1:])[wwrong]))
         print("signal velocities crashed")
         ii=input("cs")
+    if crank == first:
+        fm[0] = 0.
+        #        fs[0] = fs[1]
+        fe[0] = 0.
     m, s, e = tocon_separate(rho, v, u, gnd) # extended conserved quantities
-    #    print("size(m) = "+str(size(m)))
-    # print("size(s) = "+str(size(s)))
-    #    print("size(vl) = "+str(size(vl)))
-    # print("size(e) = "+str(size(e)))
-    #  print("size(fe) = "+str(size(fe))+" ( nd = "+str(nd)+" leftpack = "+str(leftpack)+") ")
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
         #        dl = gnd.l[1:]-gnd.l[:-1]
         #  across = gnd.across
-        '''
-        print("flux size = "+str(size(fe_half)))
-        print("rho size = "+str(size(rho)))
-        print("v size = "+str(size(v)))
-        print("urad size = "+str(size(urad)))
-        print("dl size = "+str(size(dl)))
-        print("across size = "+str(size(across)))
-        '''
         duls_half, dule_half = diffuse(rho, urad, v, gnd.l[1:]-gnd.l[:-1], gnd.across)
         # radial diffusion suppressed, if transverse optical depth is small:
         delta = (gnd.delta[1:]+gnd.delta[:-1])/2.
@@ -482,11 +474,11 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         dmsqueeze = 2. * m[1:-1] * sqrt(g1[1:-1]*maximum((press[1:-1]-umagtar)/rho[1:-1], 0.))/gnd.delta[1:-1]
         if squeezeothersides:
             dmsqueeze += 4. * m[1:-1] * sqrt(g1[1:-1]*maximum((press[1:-1]-umagtar)/rho[1:-1], 0.))/ (gnd.across[1:-1] / gnd.delta[1:-1])
-        desqueeze = dmsqueeze * (e[1:-1]+press[1:-1]* gnd.across[1:-1]) / m[1:-1] # (e-u*g.across)/m
+        desqueeze = dmsqueeze * (e[1:-1] + press[1:-1] * gnd.across[1:-1]) / m[1:-1] # (e-u*g.across)/m
     else:
         dmsqueeze = 0.
         desqueeze = 0.
-    dm, ds, de, flux = sources(gnd, rho[1:-1], v[1:-1], u[1:-1], urad[1:-1], ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze)
+    dm, ds, de = sources(gnd, rho[1:-1], v[1:-1], u[1:-1], urad[1:-1], ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze)
     #    ltot=trapz(flux, x=gnd.l[1:-1]) 
 
     dmt, dst, det = derivo(lhalf, m, s, e, fm_half, fs_half, fe_half, dm, ds, de)
@@ -624,7 +616,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         con1 = updateCon(con, dcon1, dt/2.)
         # ultimate BC:
         if crank == last:
-            con1['s'][-1] = -mdot
+            con1['s'][-1] = -mdot * turnofffactor
             con1['e'][-1] = 0.
         if crank == first:
             con1['s'][0] = 0.     
@@ -644,7 +636,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
             thetimer.start_comp("updateCon")
         con2 = updateCon(con, dcon2, dt/2.)     
         if crank == last:
-            con2['s'][-1] = -mdot
+            con2['s'][-1] = -mdot * turnofffactor
             con2['e'][-1] = 0.
         if crank == first:
             con2['s'][0] = 0.
@@ -664,7 +656,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
             thetimer.start_comp("updateCon")
         con3 = updateCon(con, dcon3, dt)
         if crank == last:
-            con3['s'][-1] = -mdot
+            con3['s'][-1] = -mdot * turnofffactor 
             con3['e'][-1] = 0.
         if crank == first:
             con3['s'][0] = 0.
@@ -686,7 +678,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         con = updateCon(con, [dcon1, dcon2, dcon3, dcon4], [dt/6., dt/3., dt/3., dt/6.])
         
         if crank == last:
-            con['s'][-1] = -mdot
+            con['s'][-1] = -mdot * turnofffactor 
             con['e'][-1] = 0.
         if crank == first:
             con['s'][0] = 0.
@@ -699,9 +691,6 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         prim = toprim(con, gnd = g) # primitive from conserved
         if thetimer is not None:
             thetimer.lap("step")
-
-
-    #            ltot = (dcon1['ltot'] + 2.*dcon2['ltot'] + 2.*dcon3['ltot'] + dcon4['ltot'])/6.
     # sending data:
     if thetimer is not None:
         thetimer.stop("step")
@@ -737,25 +726,26 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
     m = con['m'] ; e = con['e'] ; umagtar = con['umagtar']
     rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; urad = prim['urad'] ; beta = prim['beta'] ; press = prim['press']
     r = g.r
-    
-    for k in arange(csize-1)+1:
-        outblock = comm.recv(source = k, tag = k)
-        t = outblock['t'] ; g = outblock['g'] ; con = outblock['con'] ; prim = outblock['prim']
-        r = concatenate([r, g.r])
-        m = concatenate([m, con['m']])
-        e = concatenate([e, con['e']])
-        rho = concatenate([rho, prim['rho']])
-        press = concatenate([press, prim['press']])
-        v = concatenate([v, prim['v']])
-        u = concatenate([u, prim['u']])
-        urad = concatenate([urad, prim['urad']])
-        beta = concatenate([beta, prim['beta']])
-        umagtar = concatenate([umagtar, con['umagtar']])
+
+    if csize > 1:
+        for k in arange(csize-1)+1:
+            outblock = comm.recv(source = k, tag = k)
+            t = outblock['t'] ; g = outblock['g'] ; con = outblock['con'] ; prim = outblock['prim']
+            r = concatenate([r, g.r])
+            m = concatenate([m, con['m']])
+            e = concatenate([e, con['e']])
+            rho = concatenate([rho, prim['rho']])
+            press = concatenate([press, prim['press']])
+            v = concatenate([v, prim['v']])
+            u = concatenate([u, prim['u']])
+            urad = concatenate([urad, prim['urad']])
+            beta = concatenate([beta, prim['beta']])
+            umagtar = concatenate([umagtar, con['umagtar']])
     # wsort = argsort(r) # restoring the proper order of inputs
     #    r = r[wsort] ;  m = m[wsort] ;  e = e[wsort]
     # rho = rho[wsort] ; v = v[wsort] ; u = u[wsort] ; urad = urad[wsort] ; beta = beta[wsort] ; umagtar = umagtar[wsort]
     qloss = qloss_separate(rho, v, u, gglobal)
-    ltot = trapz(qloss, x = gglobal.l)
+    ltot = trapz(qloss, x = gglobal.l) 
     mtot = trapz(m, x = gglobal.l)
     etot = trapz(e, x = gglobal.l)
     fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
@@ -778,7 +768,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
                             name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
             plots.someplots(gglobal.r, [qloss*gglobal.r],
                             name=outdir+'/qloss{:05d}'.format(nout),
-                            ytitle=r'$\frac{{\rm d}^2 E}{{\rm d}l {\rm d}\ln dt}$', ylog=False,
+                            ytitle=r'$\frac{r{\rm d} E}{{\rm d}l {\rm d} t}$', ylog=False,
                             formatsequence = ['k-', 'r-'])
         # ascii output:
         # print(nout)
@@ -870,19 +860,20 @@ def alltire():
     
         ##### initial conditions: ####
         m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-        vinit=vout *sqrt(rmax/rnew) # initial velocity
+        vinit=vout *sqrt(rmax/g.r) # initial velocity
         
         # setting the initial distributions of the primitive variables:
         rho = copy(abs(mdot) / (abs(vout)+abs(vinit)) / g.across*0.5)
+        #   rho *= 1. + (g.r/rstar)**2
         # total mass
         mass = trapz(rho*g.across, x=g.l)
         meq = (g.across*umag*rstar**2)[0]
         print('meq = '+str(meq)+"\n")
         # ii = input('M')
         rho *= meq/mass * minitfactor # normalizing to the initial mass
-        vinit = vout * sqrt(rmax/rnew * (rnew-rstar)/(rmax-rstar)) # to fit the v=0 condition at the surface of the star
+        vinit = vout * sqrt(rmax/g.r) * (g.r-rstar)/(rmax-rstar) # to fit the v=0 condition at the surface of the star
         v = copy(vinit)
-        press = umagout * (g.r/r_e) * (rho/rho[-1]+1.)/2.
+        press = umagout * (r_e/rnew)**2 * (rho/rho[-1]+1.)/2.
         rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
         rho *= (rhonoise+1.)
         beta = betafun_p(Fbeta_press(rho, press, betacoeff))
@@ -1062,11 +1053,10 @@ def alltire():
         tpack = comm.bcast(tpack, root = 0)
         t = tpack["t"] ; nout = tpack["nout"]
         tmax += t
-    if turnoff:
-        mdot *= 0.1
     while (t<tmax):
         if crank ==0:
-            nout, t, con = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot, t=t, nout = nout, thetimer = timer)
+            nout, t, con = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot,
+                                     t=t, nout = nout, thetimer = timer)
         else:
             nout, t, con = onedomain(g, ghalf, con, comm, t=t, nout = nout)
 

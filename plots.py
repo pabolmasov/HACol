@@ -23,6 +23,7 @@ matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"]
 from hdfoutput import read, entryname
 import geometry as geo
 from beta import *
+from tauexp import *
 import configparser as cp
 conffile = 'globals.conf'
 config = cp.ConfigParser(inline_comment_prefixes="#")
@@ -47,6 +48,8 @@ def qloss_separate(rho, v, u, g, conf):
     #  tau = rho * g.delta
     #  tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
     #     taueff = copy(1./(1./tau + 1./tauphi))
+    taumin = conf.getfloat('taumin')
+    taumax = conf.getfloat('taumax')
     if cooltwosides:
         taueff = rho * g.delta 
     else:
@@ -60,9 +63,9 @@ def qloss_separate(rho, v, u, g, conf):
     else:
         taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
     if cooltwosides:
-        qloss = copy(2.*urad*(across/delta) * taufactor)  # diffusion approximation; energy lost from 2 sides
+        qloss = copy(2.*urad*(g.across/g.delta) * taufactor)  # diffusion approximation; energy lost from 2 sides
     else:
-        qloss = copy(2.*urad*(across/delta+2.*delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+        qloss = copy(2.*urad*(g.across/g.delta+2.*g.delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
 
@@ -519,7 +522,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
     print("using magnetic energy, betaBS = "+str(betaeff_m.mean()))
     print("gas-to-total pressure ratio at the surface is "+str(betar[tar>0.9*tar.max(),0].mean()))    
     
-def postplot(hname, nentry, ifdat = True, conf = 'DEFAULT'):
+def postplot(hname, nentry, ifdat = False, conf = 'DEFAULT'):
     '''
     reading and plotting a single snapshot number "nentry" 
     taken from the HDF output "hname"
@@ -549,20 +552,27 @@ def postplot(hname, nentry, ifdat = True, conf = 'DEFAULT'):
     umag = b12**2*2.29e6*m1
     #        umag = configactual.getfloat('umag')
     omega = configactual.getfloat('omegafactor')*r_e**(-1.5)
-    umagtar = umag*(1./r)**6 * (1.+3.*(1.-sth**2))/4.
-
+    umagtar = umag*(1./r)**6 * (1.+3.*(1.-sth**2))/4.  
+    
     uplot(r*rstar, u*umagtar, rho, sth, v, name=hname+entry+'_u', umagtar = umagtar, unorm = True)
     vplot(r*rstar, v, sqrt(4./3.*u*umagtar/rho), name=hname+entry+'_v')
     
     g = geo.geometry_initialize(r, r.max(), r.max(), writeout=None, afac = 1.)
     g.r = r ; g.theta = theta ; g.alpha = alpha ; g.across = across ; g.l = l ; g.delta = delta # temporary: need a proper way to restore geometry from the output
     
-    someplots(r, [-v*rho*across, v*rho*across], name=hname+entry+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])
+    someplots(r, [-v*rho*across/4./pi, v*0.+mdot/4./pi], name=hname+entry+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', 'r-'])
     someplots(r, [-u*v*(r/r.min())**4], name=hname+entry+"_g", ytitle=r"$uv \left( R/R_{\rm *}\right)^4$", ylog=True)
-    q = qloss_separate(rho, v, u, g, config[conf])
-    someplots(r, [q*r], name=hname+entry+"_q",
-              ytitle=r'$\frac{{\rm d}^2 E}{{\rm d}l {\rm d}\ln dt}$', ylog=True,
+    if ifdat:
+        q = qloss_separate(rho, v, u*umagtar, g, config[conf])
+    else:
+        q = qloss_separate(rho, v, u, g, config[conf])
+    perimeter = 2.*(delta*2.+across/delta)
+    someplots(r, [q, -rho*v*across/(r*rstar)**2], name=hname+entry+"_q",
+              ytitle=r'$\frac{{\rm d}^2 E}{{\rm d}l {\rm d} t}$', ylog=True, xlog = True,
               formatsequence = ['k-', 'r-'])
+    print("ltot = "+str(trapz(q, x=l)/4./pi))
+    print("energy release = "+str(mdot /4./pi/ rstar))
+    print("heat from outside = "+str((-u * v * across)[-1] /4./pi))
     
     
 def multiplots(hname, n1, n2):

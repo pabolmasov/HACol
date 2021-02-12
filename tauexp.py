@@ -48,5 +48,5 @@ def tratfac(x, taumin, taumax):
             if x>=xmax:
                 return 1./x
             else:
-                return (1.-exp(x))/x
+                return (1.-exp(-x))/x
             
