@@ -59,7 +59,7 @@ def time_step(prim, g, dl):
     # also outputs total luminosity of the fraction of the flow, if global eta>0.
     csqest = 4./3.*prim['press']/prim['rho']
     dt_CFL = CFL * (dl / (sqrt(csqest)+abs(prim['v']))[1:-1]).min()
-    taueff = prim['rho']/(1./g.delta + 2.*g.delta/g.across)/2.
+    taueff = prim['rho']/(1./g.delta + 2.*g.delta/g.across)
     qloss = 2.*prim['urad']/(1.+xirad*taueff)* (g.across/g.delta + 2.*g.delta) # * taufun(taueff, taumin, taumax) # here, we ignore the exponential factor 1-e^-tau: it is important for radiative losses but computationally heavy and unnecessary to estimate the time scale
     #    qloss = 2.*prim['urad']/prim['rho'] / xirad * (g.across/g.delta + 2.*g.delta)**2/g.across
     # approximate qloss
@@ -265,9 +265,9 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #    tau = rho * delta # tau in transverse direction
     #    tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
     if cooltwosides:
-        taueff = rho *delta
+        taueff = rho *delta 
     else:
-        taueff = rho / (1./delta + 2. * delta /  across)
+        taueff = rho / (1./delta + 2. * delta /  across) 
     # copy(1./(1./tau + 1./tauphi))
     #    taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     #    taufac = 1. 

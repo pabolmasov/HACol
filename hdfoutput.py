@@ -2,6 +2,7 @@
 import h5py
 import os.path
 from numpy import arange, size
+from scipy.interpolate import interp1d
 
 def entryname(n, ndig = 6):
     entry = str(n).rjust(ndig, '0') # allows for 6 positions (hundreds of thousand of entries)
@@ -67,7 +68,7 @@ def read(hname, nentry):
     read a single entry from an HDF5
     '''
     glosave = dict()
-    hfile = h5py.File(hname, "r", libver='latest')
+    hfile = h5py.File(hname, 'r', libver='latest')
     geom=hfile["geometry"]
     glo=hfile["globals"]
     glosave["rstar"] = glo.attrs["rstar"]
@@ -84,6 +85,72 @@ def read(hname, nentry):
     hfile.close()
     return entry, t, l, r/rstar, sth, rho, u, v, qloss, glosave
 
+def liststitch(hnamelist):
+    '''
+    reads HDF5 outputs from the list and stitches them together
+    '''
+
+    nfiles = size(hnamelist)
+    # globals are taken from the first file:
+    hfile0 = h5py.File(hnamelist[0], "r")
+    glo0=hfile0["globals"] 
+    geom0=hfile0["geometry"]
+    print(os.path.dirname(hnamelist[0])+'/tire_lcombine.hdf5')
+    hnew = h5py.File(os.path.dirname(hnamelist[0])+'/tire_lcombine.hdf5', "w")
+    
+    glo = hnew.create_group("globals")
+    geom = hnew.create_group("geometry")
+    globalkeys = glo0.attrs.keys()
+    for k in globalkeys:
+        glo.attrs[k] = glo0.attrs[k]
+        print(k)
+    geokeys = geom0.keys()
+    for k in geokeys:
+        geom.create_dataset(k, data=geom0[k])
+        print(k)
+    print(glo.attrs["rstar"])
+    nx0 = size(geom["l"])
+
+    keys0 = list(hfile0.keys())[:-2]
+
+    keys = []
+    
+    for q in arange(nfiles):
+        print("reading file "+str(hnamelist[q]))
+        hfile1 = h5py.File(hnamelist[q], "r")
+        glo1=hfile1["globals"] 
+        geom1=hfile1["geometry"]
+        nx1 = size(geom1["l"])
+        keys1 = list(hfile1.keys())[:-2]       
+        keys11 = [i for i in keys1 if i not in keys]
+        keys = keys + keys11
+        for k in arange(size(keys11)):
+            entry = keys11[k]
+            print("From "+hnamelist[q]+", entry "+entry+"\n", flush=True)
+            grp = hnew.create_group(entry)
+            data = hfile1[entry]
+            grp.attrs["t"] = data.attrs["t"]
+            if nx1 == nx0:
+                grp.create_dataset("rho", data=data["rho"][:])
+                grp.create_dataset("v", data=data["v"][:])
+                grp.create_dataset("u", data=data["u"][:])
+                grp.create_dataset("qloss", data=data["qloss"][:])
+            else:
+                print("interpolating from a "+str(nx1)+" to a "+str(nx0)+" grid")
+                rhofun = interp1d(geom1["l"], data["rho"][:])
+                vfun = interp1d(geom1["l"], data["v"][:])
+                ufun = interp1d(geom1["l"], data["u"][:])
+                qfun = interp1d(geom1["l"], data["qloss"][:])
+                grp.create_dataset("rho", data=rhofun(geom["l"]))
+                grp.create_dataset("v", data=vfun(geom["l"]))
+                grp.create_dataset("u", data=ufun(geom["l"]))
+                grp.create_dataset("qloss", data=qfun(geom["l"]))
+            hnew.flush()
+        hfile1.close()
+        #  ii = input('file')
+    hnew.close()
+        
+    
 def stitch(hname1, hname2):
     '''
     reads to HDF outputs and stitches them together

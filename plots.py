@@ -2,7 +2,9 @@ import matplotlib
 from matplotlib import rc
 from matplotlib import axes
 from matplotlib import interactive, use
+from matplotlib import ticker
 from numpy import *
+import numpy.ma as ma
 from pylab import *
 from scipy.integrate import cumtrapz
 from scipy.interpolate import interp1d
@@ -21,6 +23,7 @@ matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"]
 from hdfoutput import read, entryname
 import geometry as geo
 from beta import *
+from tauexp import *
 import configparser as cp
 conffile = 'globals.conf'
 config = cp.ConfigParser(inline_comment_prefixes="#")
@@ -39,47 +42,77 @@ def qloss_separate(rho, v, u, g, conf):
 
     betacoeff = conf.getfloat('betacoeff')
     xirad = conf.getfloat('xirad')
+    ifthin = conf.getboolean('ifthin')
+    cooltwosides = conf.getboolean('cooltwosides')
     betafun = betafun_define()
-    tau = rho * g.delta
-    tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
-    taueff = copy(1./(1./tau + 1./tauphi))
-    taufac =  1.-exp(-tau)
+    #  tau = rho * g.delta
+    #  tauphi = rho * g.across / g.delta / 2. # optical depth in azimuthal direction
+    #     taueff = copy(1./(1./tau + 1./tauphi))
+    taumin = conf.getfloat('taumin')
+    taumax = conf.getfloat('taumax')
+    if cooltwosides:
+        taueff = rho * g.delta 
+    else:
+        taueff = rho / (1. / g.delta + 2. * g.delta /  g.across) 
+    #    taufac =  1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
     urad = (urad+abs(urad))/2.    
-    qloss = copy(2.*urad/(xirad*taueff+1.)*(g.across/g.delta+2.*g.delta)*taufac)  # diffusion approximation; energy lost from 4 sides
+    if ifthin:
+        taufactor = tratfac(taueff, taumin, taumax) / xirad
+    else:
+        taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
+    if cooltwosides:
+        qloss = copy(2.*urad*(g.across/g.delta) * taufactor)  # diffusion approximation; energy lost from 2 sides
+    else:
+        qloss = copy(2.*urad*(g.across/g.delta+2.*g.delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
     return qloss
 
 
 #############################################################
 # Plotting block 
-def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None, configactual = None):
+def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None, configactual = None, unorm = True):
     '''
     energy u supplemented by rest-mass energy rho c^2
     '''
     if configactual is None:
         umag = 1. # no normalization
         omega = 0.
+        rstar = r.min()
     else:
-        umag = configactual.getfloat('umag')
-        omega = configactual.getfloat('omega')
+        xifac = configactual.getfloat('xifac')
+        m1 = configactual.getfloat('m1')
+        rstar = configactual.getfloat('rstar')
+        mu30 = configactual.getfloat('mu30')
+        b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+        mdot = configactual.getfloat('mdot') * 4. *pi # internal units
+        r_e = configactual.getfloat('r_e_coeff') * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetosphere radius
+        umag = b12**2*2.29e6*m1
+        #        umag = configactual.getfloat('umag')
+        omega = configactual.getfloat('omegafactor')*r_e**(-1.5)
+        # omega = configactual.getfloat('omega')
+        #        print("umagtar = "+str(umagtar))
     if umagtar is None:
-        umagtar = umag*(rstar/r)**6
+        umagtar = umag*(rstar/r)**6 * (1.+3.*(1.-sth**2))/4.
+    if unorm:
+        unormfactor = umagtar
+    else:
+        unormfactor = r*0.+1.
     ioff()
     clf()
     fig=figure()
-    plot(r, u/umagtar, 'k', label='$u$',linewidth=2)
+    plot(r, u/unormfactor, 'k', label='$u$',linewidth=2)
     if(ueq is not None):
-        plot(r, ueq/umagtar, 'k', label=r'$u_{\rm eq}$',linewidth=2, linestyle = 'dotted')
+        plot(r, ueq/unormfactor, 'k', label=r'$u_{\rm eq}$',linewidth=2, linestyle = 'dotted')
     plot(r, rho/umagtar, 'r', label=r'$\rho c^2$')
     plot(r, rho*v**2/2./umagtar, 'm', label=r'$\frac{1}{2}\rho v^2$')
     plot(r, rho/r /umagtar, 'r', label=r'$\rho/r$', linestyle='dotted')
     plot(r, rho*0.5*(r*omega*sth)**2/umagtar, 'r', label=r'$\frac{1}{2}\rho (\Omega R \sin\theta)^2$', linestyle='dashed')
-    plot(r, umagtar/umagtar, 'b', label=r'$u_{\rm mag}$')
-    B=u*4./3.+rho*(-1./r-0.5*(r*omega*sth)**2+v**2/2.)
-    plot(r, B/umagtar, 'g', label='$B$', linestyle='dotted')
-    plot(r, -B/umagtar, 'g', label='$-B$')
-    ylim(((u/umagtar)[u>0.]).min(), maximum((u/umagtar).max(), 3.))
+    plot(r, r*0.+1., 'b', label=r'$u_{\rm mag}$')
+    B=u*4./3./unormfactor+rho*(-1./r-0.5*(r*omega*sth)**2+v**2/2.)/umagtar
+    plot(r, B, 'g', label='$B$', linestyle='dotted')
+    plot(r, -B, 'g', label='$-B$')
+    ylim(((u/unormfactor)[u>0.]).min(), maximum((u/unormfactor).max(), 3.))
     xlabel('$r$, $GM/c^2$ units')
     ylabel(r'$U/U_{\rm mag}$')
     yscale('log')
@@ -167,7 +200,7 @@ def plot_somemap(fname):
     somemap(x, y, -q/mdot, name=fname, levels=arange(50)/30.,
             xlog=False, xtitle='$r/R_*$')
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None, inchsize = None, dys = None, linewidthsequence = None):
     '''
     plots a series of curves  
     if multix is off, we assume that the independent variable is the same for all the data 
@@ -182,7 +215,9 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
 
     if formatsequence is None:
         formatsequence = ["." for x in range(ny)]
-
+    if linewidthsequence is None:
+        linewidthsequence = [1 for x in range(ny)]
+        
     clf()
     fig = figure()
     for k in arange(ny):
@@ -196,9 +231,14 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
                 for kv in arange(nv):
                     plot([vertical[kv], vertical[kv]], [ys[k].min(), ys[k].max()], verticalformatsequence)
         if multix:
-            plot(x[k], ys[k], formatsequence[k])
+            plot(x[k], ys[k], formatsequence[k], linewidth = linewidthsequence[k])
         else:
-            plot(x, ys[k], formatsequence[k])
+            plot(x, ys[k], formatsequence[k], linewidth = linewidthsequence[k])
+    if dys is not None:
+        if multix:
+            errorbar(x[0], ys[0], fmt = formatsequence[0], yerr = dys)
+        else:
+            errorbar(x, ys[0], fmt = formatsequence[0], yerr = dys)
     if(xlog):
         xscale('log')
     if(ylog):
@@ -208,9 +248,13 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     xlabel(xtitle, fontsize=14) ; ylabel(ytitle, fontsize=14)
     plt.tick_params(labelsize=12, length=1, width=1., which='minor')
     plt.tick_params(labelsize=12, length=3, width=1., which='major')
-    fig.set_size_inches(5, 4)
+    if inchsize is not None:
+        fig.set_size_inches(inchsize[0], inchsize[1])
+    else:
+        fig.set_size_inches(5, 4)
     fig.tight_layout()
     savefig(name+'.png')
+    savefig(name+'.pdf')
     close('all')
     
 #########################################################################
@@ -239,33 +283,38 @@ def binplot_short(freq, dfreq, pds, dpds, outfile='binnedpds'):
     close()
 
 def errorplot(x, dx, y, dy, outfile = 'errorplot', xtitle = None, ytitle = None, fit = None,
-              yrange = None, addline = None, xlog = False, ylog = False, pointlabels = None):
+              xrange = None, yrange = None, addline = None, xlog = False, ylog = False, pointlabels = None, lticks = None):
 
     clf()
-    fig = figure()
-    errorbar(x, y, xerr=dx, yerr=dy, fmt='.k')
+    fig, ax = subplots()
+    ax.errorbar(x, y, xerr=dx, yerr=dy, fmt='.k')
     if addline is not None:
-        plot(x, addline, 'r:')
+        ax.plot(x, addline, 'r:')
     if fit is not None:
         xtmp = linspace(x.min(), x.max(), 100)
-        plot(xtmp, exp(log(xtmp)*fit[0]+fit[1]), 'r-')
-        plot(xtmp, 1e3/(xtmp/5.5)**3.5, 'b:')
-        ylim((y-dy).min(), (y+dy).max())
+        ax.plot(xtmp, exp(log(xtmp)*fit[0]+fit[1]), 'r-')
+        ax.plot(xtmp, 1e3/(xtmp/5.5)**3.5, 'b:')
+        ax.set_ylim((y-dy).min(), (y+dy).max())
     if pointlabels:
         for k in arange(size(x)):
-            text(x[k], y[k], pointlabels[k])
+            ax.text(x[k], y[k], pointlabels[k])
     if xtitle is not None:
-        xlabel(xtitle, fontsize=16)
+        ax.set_xlabel(xtitle, fontsize=16)
     if ytitle is not None:
-        ylabel(ytitle, fontsize=16)
+        ax.set_ylabel(ytitle, fontsize=16)
     if yrange is not None:
-        ylim(yrange[0], yrange[1])
+        ax.set_ylim(yrange[0], yrange[1])
+    if xrange is not None:
+        ax.set_xlim(xrange[0], xrange[1])
     if xlog:
-        xscale('log')
+        ax.set_xscale('log')
     if ylog:
-        yscale('log')
-    plt.tick_params(labelsize=14, length=1, width=1., which='minor', direction = "in")
-    plt.tick_params(labelsize=14, length=3, width=1., which='major', direction = "in")
+        ax.set_yscale('log')
+    ax.tick_params(labelsize=14, length=1, width=1., which='minor', direction = "in")
+    ax.tick_params(labelsize=14, length=3, width=1., which='major', direction = "in")
+    if lticks is not None:
+        ax.set_xticks(lticks)
+        ax.get_xaxis().set_major_formatter(ticker.ScalarFormatter())
     fig.set_size_inches(4., 6.)
     fig.tight_layout()
     savefig(outfile+'.png')
@@ -303,7 +352,7 @@ def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     return [fmin, fmax] # outputting the frequency range
 
 #############################################
-def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1):
+def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
     '''
     makes quasi-2D Rt plots
     '''
@@ -312,15 +361,19 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1):
     betafun = betafun_define() # defines the interpolated function for beta
 
     nt=int(floor((n2-n1)/step))
+    # geometry:
+    geofile = outdir+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile) 
     # first frame
     entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, n1)
 
     rstar = glo['rstar']
     umag = glo['umag']
     
-    tscale = config[conf].getfloat('tscale')
-    rstar = config[conf].getfloat('rstar')
     m1 = config[conf].getfloat('m1')
+    tscale = config[conf].getfloat('tscale')*m1
+    rstar = config[conf].getfloat('rstar')
     mu30 = config[conf].getfloat('mu30')
     mdot = config[conf].getfloat('mdot') * 4.*pi
     afac = config[conf].getfloat('afac')
@@ -332,16 +385,27 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1):
     betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
     
     nr=size(r)
-    nrnew = 500 # radial mesh interpolated to nrnew
+    nrnew = 300 # radial mesh interpolated to nrnew
     rnew = (r.max()/r.min())**(arange(nrnew)/double(nrnew-1))*r.min()
     sthfun = interp1d(r, sth)
     sthnew = sthfun(rnew)
+    umagtar = umag * (1.+3.*(1.-sth**2))/4. / (r)**6 # r is already in rstar units
+    umagtarnew = umag * (1.+3.*(1.-sthnew**2))/4. / (rnew)**6 # r is already in rstar units
     var = zeros([nt, nrnew], dtype=double)
     uar = zeros([nt, nrnew], dtype=double)
     par = zeros([nt, nrnew], dtype=double)
+    betar = zeros([nt, nrnew], dtype = double) # this is pgas/ptot
     qar = zeros([nt, nrnew], dtype=double)
     lurel = zeros([nt, nrnew], dtype=double)
+    mdar = zeros([nt, nrnew], dtype=double)
     tar = zeros(nt, dtype=double)
+    rvent = zeros(nt, dtype=double)
+    maxprat = zeros(nt, dtype=double)
+    drvent = zeros(nt, dtype=double)
+    rshock = zeros(nt, dtype=double)
+    betavent = zeros(nt, dtype = double) # this one is BS's beta
+    betaeff = zeros(nt, dtype = double) # and this one, too
+    betaeff_m = zeros(nt, dtype = double) # this, too
     #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
     for k in arange(nt):
         entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, k*step+n1)
@@ -355,6 +419,30 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1):
         press = u/3./(1.-beta/2.)
         pfun = interp1d(r, press, kind = 'linear')
         par[k, :] = pfun(rnew)
+        betar[k, :] = 2.*(1.-uar[k,:]/par[k,:]/3.)
+        mfun = interp1d(r, -rho * v * across, kind = 'linear')
+        wloss = (press>(0.8*umagtar))
+        shock = ((v)[kleap:]-(v)[:-kleap]).argmin()
+        rshock[k] = r[shock+kleap] #+r[minimum(shock+kleap+1, nt-1)])/2.
+        if wloss.sum()> 3:        
+            # imfun = interp1d((-rho * v * across)[wloss], r[wloss], kind = 'linear', bounds_error=False, fill_value=NaN)
+            # rvent[k] = imfun(mdot/2.)
+            wvent = (press/umagtar)[(r>r.min())&(r<rshock[k])].argmax()
+            if wvent >= (nr-1):
+                print(nr)
+                wvent -= 1
+            rvent[k] = r[wvent]
+            drvent[k] = r[wvent+1]-r[wvent]
+            maxprat[k] = (press/umagtar)[(r>r.min())&(r<rshock[k])].max()
+            betavent[k] = ((u+press)/rho)[wvent] * rstar
+            #          print("rvent = "+str(rvent[k])+" = "+str(r[wvent]))
+            #            print("drvent = "+str(drvent[k]))
+            #            print("maxprat = "+str(maxprat[k]))
+        # effective BS's beta:
+        betaeff[k] = ((u+press)/rho)[0:1].mean() * rstar
+        betaeff_m[k] = (umagtar/rho)[0:1].mean() * rstar * 4.
+        #  print(rstar)
+        mdar[k, :] = mfun(rnew)
         tar[k] = t
     nv=30
     vmin = round(var.min(),2)
@@ -384,57 +472,108 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1):
     savefig(outdir+'/q2d_vmean.png')
     savefig(outdir+'/q2d_vmean.eps')
     close('all')
-    
-    # internal energy density
-    umagtar = umag * (1.+3.*(1.-sthnew**2))/4. / (rnew)**6 # r is already in rstar units
+
+    # internal energy
     #    print(umag)
     for k in arange(nrnew):
-        lurel[:,k] = log10(uar[:,k]/umagtar[k])
+        lurel[:,k] = log10(uar[:,k]/umagtarnew[k])
     umin = round(lurel[uar>0.].min(),2)
     umax = round(lurel[uar>0.].max(),2)
     lulev = linspace(umin, umax, nv, endpoint=True)
     print(lulev)
-    somemap(rnew, tar*tscale, var, name=outdir+'/q2d_u', levels = vlev, \
+    somemap(rnew, tar*tscale, lurel, name=outdir+'/q2d_u', levels = lulev, \
             inchsize = [4,6], cbtitle = r'$\log_{10}u/u_{\rm mag}$', \
-            addcontour = [par/umagtar/1., par/umagtar/0.9, par/umagtar/0.8])
+            addcontour = [par/umagtarnew/1., par/umagtarnew/0.9, par/umagtarnew/0.8])
+    somemap(rnew, tar*tscale, log10(betar), name=outdir+'/q2d_b',
+            inchsize = [4,6], cbtitle = r'$\log_{10}\beta$')
     # Q-:
     somemap(rnew, tar*tscale, log10(qar), name=outdir+'/q2d_q', \
             inchsize = [4,6], cbtitle = r'$\log_{10}Q$')
-    '''
-    clf()
-    fig=figure()
-    contourf(rnew, tar*tscale, log10(qar), cmap='hot')
-    #    pcolormesh(rnew, tar*tscale, var, vmin=vmin, vmax=vmax,cmap='hot')
-    colorbar()
-#    contour(rnew, tar*tscale, var, levels=[0.], colors='k')
-    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14) ; ylabel(r'$t$, s', fontsize=14)
-    fig.set_size_inches(4, 6)
-    fig.tight_layout()
-    savefig(outdir+'/q2d_q.png')
-    savefig(outdir+'/q2d_q.eps')
-    close('all')
-    '''
+    # mdot:
+    mdlev = 3.*arange(nv)/double(nv-2)-1.
+    somemap(rnew, tar*tscale, mdar/mdot, name=outdir+'/q2d_m', \
+            inchsize = [4,6], cbtitle = r'$s c^2/L_{\rm Edd}$', levels = mdlev)
 
-def postplot(hname, nentry, ifdat = True):
+    # mean mdar:
+    tslice1  = 0.02
+    tslice2  = 0.05
+    tslice3  = 0.08
+    
+    t1 = ((tar*tscale - tslice1)**2).argmin()
+    t2 = ((tar*tscale - tslice2)**2).argmin()
+    t3 = ((tar*tscale - tslice3)**2).argmin()
+    mdmean1 = mdar[t1,:] #.mean(axis = 0)
+    mdmean2 = mdar[t2,:] #.mean(axis = 0)
+    mdmean3 = mdar[t3,:] #.mean(axis = 0)
+    maskedvent = ma.masked_array(rvent, mask = (rvent>rshock))
+    maskedvent1 = ma.masked_array(rvent, mask = ((rvent>rshock)|(maxprat < 0.99)|(rvent > 10.)|(rvent<=1.))) # masked works incorrectly? 
+    someplots(tar*tscale, [rshock, rvent, maskedvent, maskedvent1], name=outdir+"/mdvent",
+              xtitle='$t$, s', ytitle=r"$R/R_*$", \
+              formatsequence=['k.', 'r:', 'r-', 'bo'], ylog = False, xlog = False, inchsize = [4,6])
+    mamax = maskedvent1.argmax()
+    print("mass loss starts at "+str(tar[mamax]*tscale)+"+/-"+\
+          str((tar[mamax+1]-tar[mamax-1])*tscale/2.))
+    print(" at radius "+str(rvent[mamax])+"+/-"+str(drvent[mamax]))
+    someplots(rnew, [mdmean1, mdmean2, mdmean3, mdmean1*0.+mdot], xtitle=r'$R/R_*$', ytitle=r'$sc^2/L_{\rm Edd}$', \
+              formatsequence=['k.', 'gx', 'b+', 'r-'], ylog = False, xlog = True, name=outdir+"/mdmean")
+    someplots(tar*tscale, [betaeff, betaeff_m, betavent], xtitle=r'$t$, s', ytitle=r'$\frac{u+P}{\rho}\frac{R_*}{GM_*}$', \
+              formatsequence=['k.', 'r-', 'b:'], ylog = False, xlog = False, name=outdir+"/betaeff", yrange = [0., betaeff.max()*1.1])
+    print("mean effective betaBS = "+str(betaeff.mean()))
+    print("using magnetic energy, betaBS = "+str(betaeff_m.mean()))
+    print("gas-to-total pressure ratio at the surface is "+str(betar[tar>0.9*tar.max(),0].mean()))    
+    
+def postplot(hname, nentry, ifdat = False, conf = 'DEFAULT'):
     '''
     reading and plotting a single snapshot number "nentry" 
     taken from the HDF output "hname"
     '''
-    geofile = os.path.dirname(hname)+"/geo.dat"
+    outdir = os.path.dirname(hname)
+    geofile = outdir+"/geo.dat"
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile) 
     if(ifdat):
         fname = hname + entryname(nentry, ndig=5) + ".dat"
-        entryname = entryname(nentry, ndig=5)
+        entry = entryname(nentry, ndig=5)
         print(fname)
         lines = loadtxt(fname, comments="#")
         r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2] ; u = lines[:,3]
+        sth = sin(theta)
     else:
-        entryname, t, l, r, sth, rho, u, v, qloss, glo = read(hname, nentry)
-    uplot(r, u, rho, sth, v, name=hname+"_"+entryname+'_u')
-    vplot(r, v, sqrt(4./3.*u/rho), name=hname+"_"+entryname+'_v')
-    someplots(r, [-v*rho*across, v*rho*across], name=hname+entryname+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', '.r'])
-    someplots(r, [-u*v*(r/r.min())**4], name=hname+entryname+"_g", ytitle=r"$uv \left( R/R_{\rm *}\right)^4$", ylog=True)
+        entry, t, l, r, sth, rho, u, v, qloss, glo = read(hname, nentry)
+    # reading configure
+    configactual = config[conf]
+    m1 = configactual.getfloat('m1')
+    rstar = configactual.getfloat('rstar')
+    mu30 = configactual.getfloat('mu30')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    xifac = configactual.getfloat('xifac')
+    mdot = configactual.getfloat('mdot') * 4. *pi # internal units
+    r_e = configactual.getfloat('r_e_coeff') * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetosphere radius
+    umag = b12**2*2.29e6*m1
+    #        umag = configactual.getfloat('umag')
+    omega = configactual.getfloat('omegafactor')*r_e**(-1.5)
+    umagtar = umag*(1./r)**6 * (1.+3.*(1.-sth**2))/4.  
+    
+    uplot(r*rstar, u*umagtar, rho, sth, v, name=hname+entry+'_u', umagtar = umagtar, unorm = True)
+    vplot(r*rstar, v, sqrt(4./3.*u*umagtar/rho), name=hname+entry+'_v')
+    
+    g = geo.geometry_initialize(r, r.max(), r.max(), writeout=None, afac = 1.)
+    g.r = r ; g.theta = theta ; g.alpha = alpha ; g.across = across ; g.l = l ; g.delta = delta # temporary: need a proper way to restore geometry from the output
+    
+    someplots(r, [-v*rho*across/4./pi, v*0.+mdot/4./pi], name=hname+entry+"_mdot", ytitle="$\dot{m}$", ylog=True, formatsequence = ['.k', 'r-'])
+    someplots(r, [-u*v*(r/r.min())**4], name=hname+entry+"_g", ytitle=r"$uv \left( R/R_{\rm *}\right)^4$", ylog=True)
+    if ifdat:
+        q = qloss_separate(rho, v, u*umagtar, g, config[conf])
+    else:
+        q = qloss_separate(rho, v, u, g, config[conf])
+    perimeter = 2.*(delta*2.+across/delta)
+    someplots(r, [q, -rho*v*across/(r*rstar)**2], name=hname+entry+"_q",
+              ytitle=r'$\frac{{\rm d}^2 E}{{\rm d}l {\rm d} t}$', ylog=True, xlog = True,
+              formatsequence = ['k-', 'r-'])
+    print("ltot = "+str(trapz(q, x=l)/4./pi))
+    print("energy release = "+str(mdot /4./pi/ rstar))
+    print("heat from outside = "+str((-u * v * across)[-1] /4./pi))
+    
     
 def multiplots(hname, n1, n2):
     '''
@@ -526,29 +665,6 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         savefig("Vcurvestack_2d.png")
     close('all')
         
-
-#########################################
-def energytest(fluxfile='out/flux', totfile='out/totals'):
-    lines = loadtxt(fluxfile+".dat", comments="#", delimiter=" ", unpack=False)
-    tflux = lines[:,0]/tscale ; flu=lines[:,1]
-    lines = loadtxt(totfile+".dat", comments="#", delimiter=" ", unpack=False)
-    tene = lines[:,0]/tscale ; ene=lines[:,2] ; mass=lines[:,1]
-    enlost = cumtrapz(flu, x=tflux, initial=0.)
-    Neff=1./rstar
-    print(Neff)
-    enlostfun = interp1d(tflux, enlost, kind = 'linear')
-    clf()
-    #    plot(tflux*tscale, enlost, color='k', label="radiated")
-    plot(tene*tscale, ene-ene[0]+enlostfun(tene)/2., color='k', label="budget")    
-    plot(tene*tscale, -ene+ene[0], color='r', label="gain")
-    plot(tene*tscale, (mass-mass[0])*Neff, color='g', label="gravitational")
-    plot(tene*tscale, (tene-tene[0])*mdot*Neff, color='g', linestyle='dotted', label="gravitational, est.")
-    legend()
-    #    ylim(((mass-mass[0])*Neff).min(), ((mass-mass[0])*Neff).max())
-    xlabel('t') 
-    ylabel('energy')
-    savefig('energytest.png')
-    close()
 
 ###########################
 def binplot(xe, f, df, fname = "binplot", fit = 0):
