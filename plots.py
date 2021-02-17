@@ -614,7 +614,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
 
     kctr = 0
     vmin=0. ; vmax=0.
-    nt = int(floor((n2-n1)/step)) ; nr = size(r)
+    nt = int(floor((n2-n1)/step)) # ; nr = size(r)
     
     clf()
     fig = figure()
@@ -624,6 +624,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         lines = loadtxt(fname, comments="#")
         print(shape(lines))
         r = lines[:,0] ; v = lines[:,2]
+        nr = size(r)
         plot(r, v, label = str(k))
         if(v.min()<vmin):
             vmin = v.min()

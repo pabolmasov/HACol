@@ -389,8 +389,6 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
                             xlog=False, ylog = True, formatsequence = ['k.', 'b-'],
                             vertical = (r[wcomp1]+r[wcomp2])/2.)
 
-    # temporary!!!
-    #    ltot /= 2. ; lbelowshock /= 2. ; lonshock /= 2. 
             
     return t, (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock, lonshock,  -((u*4./3.+v**2/2.)*v)[-1]
   

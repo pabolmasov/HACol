@@ -186,9 +186,13 @@ def regularize(u, rho, press):
 # conversion between conserved and primitive variables for separate arrays and for a single domain
 
 def toprim_separate(m, s, e, g):
+    '''
+    conversion to primitives, given mass (m), momentum (s), and energy (e) densities as arrays; g is geometry structure
+    outputs: density, velocity, internal energy density, urad (radiation internal energy density), beta (=pgas/p), pressure
+    '''
     rho=m/g.across
     v=s/m
-    u=(e-m*(v**2/2.-1./g.r-0.5*(g.r*g.sth*omega)**2))/g.across
+    u=(e-m*v**2/2.)/g.across
     #    umin = u.min()
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
@@ -198,10 +202,12 @@ def toprim_separate(m, s, e, g):
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
 def tocon_separate(rho, v, u, g):
-    
+    '''
+    conversion from primitivies (density rho, velcity v, internal energy u) to conserved quantities m, s, e; g is geometry (structure)
+    '''
     m=rho*g.across # mass per unit length
     s=m*v          # momentum per unit length
-    e=(u+rho*(v**2/2.- 1./g.r - 0.5*(omega*g.r*g.sth)**2))*g.across  # total energy (thermal + mechanic) per unit length
+    e=(u+rho*v**2/2.)*g.across  # total energy (thermal + mechanic) per unit length
     return m, s, e
 
 # conversion between conserved and primitive variables using dictionaries and multiple domains
@@ -217,7 +223,7 @@ def tocon(prim, gnd = None):
     
     m=prim['rho']*gnd.across # mass per unit length
     s=m*prim['v'] # momentum per unit length
-    e=(prim['u']+prim['rho']*(prim['v']**2/2.- 1./gnd.r - 0.5*(omega*gnd.r*gnd.sth)**2))*gnd.across  # total energy (thermal + mechanic) per unit length
+    e=(prim['u']+prim['rho']*prim['v']**2/2.)*gnd.across  # total energy (thermal + mechanic) per unit length
     return {'m': m, 's': s, 'e': e}
 
 def toprim(con, gnd = None):
@@ -229,7 +235,7 @@ def toprim(con, gnd = None):
         gnd = g
     rho = con['m']/gnd.across
     v = con['s']/con['m']
-    u = (con['e']-con['m']*(v**2/2.-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2))/gnd.across
+    u = (con['e']-con['m']*v**2/2.)/gnd.across
     #    umin = u.min()
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
@@ -271,7 +277,7 @@ def fluxes(g, rho, v, u, press):
     # across = g.across ; r = g.r  ; sth = g.sth 
     s = rho * v * g.across # mass flux (identical to momentum per unit length -- can we use it?)
     p = g.across * (rho*v**2 + press) # momentum flux
-    fe = g.across * v * (u + press + (v**2/2.-1./g.r-0.5*(omega*g.r*g.sth)**2)*rho) # energy flux without diffusion    
+    fe = g.across * v * (u + press + v**2/2.*rho) # energy flux without diffusion    
     return s, p, fe
 
 def qloss_separate(rho, v, u, g, gin = False):
@@ -309,7 +315,9 @@ def qloss_separate(rho, v, u, g, gin = False):
         qloss = copy(2.*urad*(across/delta+2.*delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
 
     if cslimit:
-        qloss *= (1.-exp(-u/rho/csqmin*r))
+        # if u/rho \sim cs^2 << 1/r, 1-exp(...) decreases, and cooling stops
+        qloss *= taufun((u/rho)/(csqmin/r), taumin, taumax) 
+        #        (1.-exp(-(u+ufloor)/(rho+rhofloor))/(csqmin/r))) 
         
     return qloss
 
@@ -354,7 +362,7 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     dm = copy(rho*0.-dmsqueeze) # copy(rho*0.-dmsqueeze)
     #  dudt = copy(v*force-qloss) # +irradheating # copy
     ds = copy(force - dmsqueeze * v) # lost mass carries away momentum
-    de = copy( gammaforce * v - qloss - desqueeze) # lost matter carries away energy (or enthalpy??)
+    de = copy(force * v - qloss - desqueeze) # lost matter carries away energy (or enthalpy??)
     #    return dm, force, dudt, qloss, ueq
     return dm, ds, de
 
@@ -617,7 +625,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         # ultimate BC:
         if crank == last:
             con1['s'][-1] = -mdot * turnofffactor
-            con1['e'][-1] = 0.
+            con1['e'][-1] = (con1['m'] / 2. /g.r)[-1]
         if crank == first:
             con1['s'][0] = 0.     
         if thetimer is not None:
@@ -637,7 +645,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         con2 = updateCon(con, dcon2, dt/2.)     
         if crank == last:
             con2['s'][-1] = -mdot * turnofffactor
-            con2['e'][-1] = 0.
+            con2['e'][-1] = (con2['m'] / 2. /g.r)[-1]
         if crank == first:
             con2['s'][0] = 0.
         if thetimer is not None:
@@ -657,7 +665,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         con3 = updateCon(con, dcon3, dt)
         if crank == last:
             con3['s'][-1] = -mdot * turnofffactor 
-            con3['e'][-1] = 0.
+            con3['e'][-1] = (con3['m'] / 2. /g.r)[-1]
         if crank == first:
             con3['s'][0] = 0.
         if thetimer is not None:
@@ -679,7 +687,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         
         if crank == last:
             con['s'][-1] = -mdot * turnofffactor 
-            con['e'][-1] = 0.
+            con['e'][-1] = (con['m'] / 2. /g.r)[-1]
         if crank == first:
             con['s'][0] = 0.
             #        prim = toprim(con, gnd = g)
@@ -873,7 +881,7 @@ def alltire():
         rho *= meq/mass * minitfactor # normalizing to the initial mass
         vinit = vout * sqrt(rmax/g.r) * (g.r-rstar)/(rmax-rstar) # to fit the v=0 condition at the surface of the star
         v = copy(vinit)
-        press = umagout * (r_e/rnew)**2 * (rho/rho[-1]+1.)/2.
+        press = 0.5 * umagout * (g.r[-1]/g.r)**2 * (rho/rho[-1]+1.)/2.
         rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
         rho *= (rhonoise+1.)
         beta = betafun_p(Fbeta_press(rho, press, betacoeff))
