@@ -106,7 +106,9 @@ def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf 
         up, vp, rhop = qp
     geofile = os.path.dirname(inpasha)+"/geo.dat"
     r, theta, alpha, across, l, delta = geo.gread(geofile)
-   
+    # lfun = interp1d(r,l)
+    # xl = lfun(xp*rstar)/rstar
+    
     umagtar = umag * (1.+3.*cos(theta)**2)/4. * xp**(-6.)
     if ifhdf:
         up /= umagtar
@@ -388,10 +390,8 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
                             xtitle=r'$r$', ytitle=r'$uv$',
                             xlog=False, ylog = True, formatsequence = ['k.', 'b-'],
                             vertical = (r[wcomp1]+r[wcomp2])/2.)
-
-            
-    return t, (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock, lonshock,  -((u*4./3.+v**2/2.)*v)[-1]
-  
+           
+    return t, (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock, lonshock,  -((u*4./3.+v**2/2.)*v)[-1]  
 
 def shock_dat(n, prefix = "out/tireout", kleap = 1):
     '''
@@ -440,8 +440,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     outdir = os.path.dirname(prefix)
     fluxlines = loadtxt(outdir+"/flux.dat", comments="#", delimiter=" ", unpack=False)
     geometry = loadtxt(outdir+"/geo.dat", comments="#", delimiter=" ", unpack=False)
-    tf=fluxlines[:,0] ;
-    ff=fluxlines[:,1]
+    tf=fluxlines[:,0] ;  ff=fluxlines[:,1]
     th = geometry[:,1] ; r = geometry[:,0]
     cthfun = interp1d(r/r[0], cos(th)) # we need a function allowing to calculate cos\theta (x)
     across0 = geometry[0,3]  ;   delta0 = geometry[0,5]
@@ -679,7 +678,8 @@ def lplot():
         print(ltot[k])
 
     plots.errorplot(1./gammas, gammas*0., lrad/ltot, dlrad/ltot, outfile = 'bsfig2',
-                    xtitle = r'$\gamma^{-1}$', ytitle = r'$L_{\rm s}/L_{\rm tot}$', addline  = 1.-betas, xlog = True, pointlabels = confs)
+                    xtitle = r'$\gamma^{-1}$', ytitle = r'$L_{\rm s}/L_{\rm tot}$',
+                    addline  = 1.-betas, xlog = True, pointlabels = confs)
 
 
 def energytest(infile, n1, n2, dn, conf = 'DEFAULT'):

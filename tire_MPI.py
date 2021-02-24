@@ -97,6 +97,7 @@ heatingeff = configactual.getfloat('heatingeff')
 ifturnoff = configactual.getboolean('ifturnoff')
 if ifturnoff:
     turnofffactor = configactual.getfloat('turnofffactor')
+    print("TURNOFF: mass accretion rate decreased by "+str(turnofffactor))
 else:
     turnofffactor =  1. # no mdot reduction
 
@@ -352,7 +353,7 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     sinsum = 2.*cth / sqrt(3.*cth**2+1.)  # = sina*cth+cosa*sth = sin(theta+alpha)
     force = copy((-sinsum/r**2*(1.-eta * ltot * tratfac(rho*delta, taumin, taumax))
                   +omega**2*r*sth*cosa)*rho*across) # *taufac
-    gammaforce = sinsum/r**2 * eta * ltot * tratfac(rho*delta, taumin, taumax)
+    # gammaforce = sinsum/r**2 * eta * ltot * tratfac(rho*delta, taumin, taumax)
     if(forcecheck):
         network = simps(force/(rho*across), x=g.l)
         return network, (1./r[0]-1./r[-1])
@@ -594,9 +595,18 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
     #    ii = input('lhfl')
     tstore = t # ; nout = 0
     timectr = 0
+    # initial conditions 
     if thetimer is not None:
         thetimer.start("total")
-        #  print("dtout = "+str(dtout))
+        thetimer.start("io")
+    outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
+    if (crank != first):                
+        comm.send(outblock, dest = first, tag = crank)
+    else:
+        tireouts(hfile, comm, outblock, fflux, ftot, nout = nout)
+    nout += 1
+    if thetimer is not None:
+        thetimer.stop("io")
         
     while(t<(tstore+dtout)):
         if thetimer is not None:
@@ -625,7 +635,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         # ultimate BC:
         if crank == last:
             con1['s'][-1] = -mdot * turnofffactor
-            con1['e'][-1] = (con1['m'] / 2. /g.r)[-1]
+            con1['e'][-1] = umagout*g.across[-1]-vout*mdot/2. # (con1['m'] / 2. /g.r)[-1]
         if crank == first:
             con1['s'][0] = 0.     
         if thetimer is not None:
@@ -645,7 +655,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         con2 = updateCon(con, dcon2, dt/2.)     
         if crank == last:
             con2['s'][-1] = -mdot * turnofffactor
-            con2['e'][-1] = (con2['m'] / 2. /g.r)[-1]
+            con2['e'][-1] =  umagout*g.across[-1]-vout*mdot/2. # (con2['m'] / 2. /g.r)[-1]
         if crank == first:
             con2['s'][0] = 0.
         if thetimer is not None:
@@ -665,7 +675,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         con3 = updateCon(con, dcon3, dt)
         if crank == last:
             con3['s'][-1] = -mdot * turnofffactor 
-            con3['e'][-1] = (con3['m'] / 2. /g.r)[-1]
+            con3['e'][-1] =  umagout*g.across[-1]-vout*mdot/2. #(con3['m'] / 2. /g.r)[-1]
         if crank == first:
             con3['s'][0] = 0.
         if thetimer is not None:
@@ -687,7 +697,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         
         if crank == last:
             con['s'][-1] = -mdot * turnofffactor 
-            con['e'][-1] = (con['m'] / 2. /g.r)[-1]
+            con['e'][-1] =  umagout*g.across[-1]-vout*mdot/2. # (con['m'] / 2. /g.r)[-1]
         if crank == first:
             con['s'][0] = 0.
             #        prim = toprim(con, gnd = g)
@@ -703,19 +713,14 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
     if thetimer is not None:
         thetimer.stop("step")
         thetimer.start("io")
-    # outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
     outblock = {'nout': nout, 't': t, 'g': g, 'con': con, 'prim': prim}
-    #    del con1, con2, con3, dcon1, dcon2, dcon3, dcon4
-    #    del leftpack, rightpack, leftpack_send, rightpack_send
     if (crank != first):                
         comm.send(outblock, dest = first, tag = crank)
     else:
         tireouts(hfile, comm, outblock, fflux, ftot, nout = nout)
-    #       del outblock
-    #      gc.collect()
     if thetimer is not None:
         thetimer.stop("io")
-    if (thetimer is not None) & (nout%ascalias == 0):
+    if (thetimer is not None) & (nout%ascalias == 1):
         thetimer.stats("step")
         thetimer.stats("io")
         thetimer.comp_stats()
@@ -881,7 +886,9 @@ def alltire():
         rho *= meq/mass * minitfactor # normalizing to the initial mass
         vinit = vout * sqrt(rmax/g.r) * (g.r-rstar)/(rmax-rstar) # to fit the v=0 condition at the surface of the star
         v = copy(vinit)
-        press = 0.5 * umagout * (g.r[-1]/g.r)**2 * (rho/rho[-1]+1.)/2.
+        #        print("umagout = "+str(umagout))
+        #        ii = input("vout * mdot = "+str(vout*mdot/g.across[-1]))
+        press =  (umagout-vout*mdot/2./g.across[-1]) * (g.r[-1]/g.r)**2 * (rho/rho[-1]+1.)/2. * 0.5
         rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
         rho *= (rhonoise+1.)
         beta = betafun_p(Fbeta_press(rho, press, betacoeff))

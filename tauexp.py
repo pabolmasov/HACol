@@ -38,7 +38,7 @@ def tratfac(x, taumin, taumax):
         wnan=where(isnan(x))
         if(size(wnan)>0):
             tt[wnan] = 0.
-            print("trat = "+str(x.min())+".."+str(x.max()))
+            print("x = "+str(x[wnan]))
             ip = input('trat')
         return tt
     else:

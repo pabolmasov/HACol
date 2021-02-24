@@ -492,7 +492,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
     # mdot:
     mdlev = 3.*arange(nv)/double(nv-2)-1.
     somemap(rnew, tar*tscale, mdar/mdot, name=outdir+'/q2d_m', \
-            inchsize = [4,6], cbtitle = r'$s c^2/L_{\rm Edd}$', levels = mdlev)
+            inchsize = [4,6], cbtitle = r'$s / \dot{M}$', levels = mdlev)
 
     # mean mdar:
     tslice1  = 0.02
