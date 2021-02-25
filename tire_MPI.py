@@ -301,7 +301,8 @@ def qloss_separate(rho, v, u, g, gin = False):
     if cooltwosides:
         taueff = rho * delta 
     else:
-        taueff = rho / (1. / delta + 2. * delta /  across) 
+        taueff = rho / (1. / delta + 2. * delta /  across)
+    taueff /= 2. # either we radiate from two sides and use one-half of taueff, or we use the full optical depth and use effectively one side
     # taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
@@ -311,9 +312,9 @@ def qloss_separate(rho, v, u, g, gin = False):
     else:
         taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
     if cooltwosides:
-        qloss = copy(2.*urad*(across/delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+        qloss = 2.*copy(urad*(across/delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
     else:
-        qloss = copy(2.*urad*(across/delta+2.*delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+        qloss = 2.*copy(urad*(across/delta+2.*delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
 
     if cslimit:
         # if u/rho \sim cs^2 << 1/r, 1-exp(...) decreases, and cooling stops
