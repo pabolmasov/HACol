@@ -1,30 +1,17 @@
 
 INSTALLATION AND RUNNING
 
-To run the code, make sure you have python3 (checked for python3.6) and preferrably ipython. The configuration file is globals.conf. Probably, you would not need to change anything in the code, only in the configuration. globals.conf contains different configurations of the code, differing in physical and numerical parameters.
-The main file for sqeuential calculations is tire_RK.py, and the main procedure is alltire(). Tune all the global parameters in globals.conf and then run your ipython or python. From ipython, compile the code
-> %run tire_RK
-and then run the main routine
-> alltire()
-If "autostart" is set in globals.conf, "alltire" will launch automatically. For parallel calculations you may try tire_parallel instead of tire_RK. All you need is to ensure you have the number of cores equal to the number of domains set by "parallelfactor" in globals.conf plus 2 (one for the main thread, one for output). 
-If everything is fine, the "out/" directory (or the output directory set by "outdir" in the "globals" configuration file) should immediately (unless you turned the graphical output off by setting ifplot = False in globals.py) start filling with files like vtie..png and tireout..dat containing the snapshots of your simulation. Also, current total flux (namely, luminosity in L_Edd/4\pi units) will be written to "flux.dat". The main output is either tireout.hdf5 (if "ifhdf" flag is True in globals.conf) or, alternatively, a series of ..dat files with snapshots. 
-Make sure that the outputs of different simulations do not interfere. For this, set different outdir names in the configuration files. 
+To run the code, make sure you have python3 (checked for python3.6 and 3.7), MPI, MPI4py, numpy, scipy, and preferrably ipython and HDF5 support. Sequential version of the code is currently not supported. The configuration file is globals.conf. Probably, you would not need to change anything in the code, only in the configuration. globals.conf contains different configurations of the code, differing in physical and numerical parameters.
+The main working file is tire_MPI.py, and the main routine in it is alltire(). Tune all the global parameters in globals.conf and then run the code from the command line with 
+> mpirun -np <N> python tire_MPI.py <CONF>,
+where <N> stands for the number of processers in use (it should coincide with the value of parallelfactor in globals.conf), and <CONF> is the configuration set up name (in square brackets in globals.conf). In the configuration file is omitted, all the parameters are set to the default values from globals.conf.
 
-To run the code without ipython, you need to be sure that all the necessary libraries like scipy are linked. Then you can uncomment the "alltire()" line at the end of tire_RK and run the code from the command line as
-> python tire_RK.py
-or
-> python tire_RK <CONF>,
-where <CONF> stands for the name of the configuration. 
+If everything is fine, you will get a lot of output to your stdout, nothing to stderr, and the "out/" directory (or the output directory set by "outdir" in the "globals" configuration file) should immediately (unless you turned the graphical output off by setting ifplot = False in globals.py) start filling with files like vtie..png and tireout..dat containing the snapshots of your simulation. Also, current total flux (namely, luminosity in L_Edd/4\pi units) will be written to "flux.dat". The main output is either tireout.hdf5 (if "ifhdf" flag is True in globals.conf) or, alternatively, a series of ..dat files with snapshots. 
+Make sure that the outputs of different simulations do not interfere. For this, set different outdir names for different configurations.  
+
+To run the code without ipython, you need to be sure that all the necessary libraries like scipy are linked. 
 
 If you are running the code on a machine that does not support matplotlib, make sure that graphic output is off (ifplot=False in globals.py). 
-
-PARALLEL SUPPORT
-
-Currently, parallelization may be done either using multiprocessing and pipes (tire_pipes.py) or using pyMPI (tire_MPI.py).  The number of cores involved should equal the parallelfactor parameter in globals.conf. Pipes-based code is started directly as 
-> python tire_pipes <CONF>
-To run with MPI, make sure you have mpi4py, and then the code may be started with <N> cores as 
-> mpirun -np <N> python tire_MPI <CONF>
-
 
 OUTPUTS
 
@@ -34,13 +21,10 @@ Alternatively, if "ifhdf" is True, it will write the same information in the HDF
 
 RESTART
 
-Currently, there is a support for restart with identical or different spatial resolution. If the size of the radial mesh (number of points is identical), no interpolation is used. If the number of points is different, all the quantities will be remapped. If the outer radius of the simulation is larger than the outer radius of the restart file, the code will report an error. 
+Currently, there is a support for restart with identical or different spatial resolution. If the size of the radial mesh (number of points) is identical, no interpolation is used. If the number of points is different, all the quantities will be remapped. If the outer radius of the simulation is larger than the outer radius of the restart file, the code will report an error. 
 
 POSSIBLE PROBLEMS
 
 As the code produces a lot of individual output files, you may encounter problems with file indexers. Notably, under most KDE-using systems, baloo file extractor easily hangs the system, hence it is instructive to turn it off by "balooctl disable" in the session you are running. 
 
-The code is designed in a way to make the results accessable as soon as possible. You do not need to wait until the simulation ends to read and reduce the output entries. If you need to kill the code during the simulation, all the results would be saved. However, the output files are not accessable for reading from the same ipython session then. 
-
-TODO: 
-1) how fine the resolution should be?
+The code is designed in a way to make the results accessable as soon as possible. You do not need to wait until the simulation ends to read and reduce the output entries. If you need to kill the code during the simulation, all the results would be saved. However, the output files are not accessable for reading from the same ipython session then, and there may be problems with reading the HDF5 simultaneously with writing to it. 
