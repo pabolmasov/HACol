@@ -1,19 +1,28 @@
-from scipy.integrate import *
-from scipy.interpolate import *
-
+# loading libraries: numpy
 import numpy.random
 from numpy.random import rand
 from numpy import *
-# import time
+
+# libraries:scipy
+from scipy.integrate import *
+from scipy.interpolate import *
+
+# libraries needed for interaction with system 
 import os
-# import re
 import linecache
 import os.path
-# import imp
 import sys
 import configparser as cp
 import gc
 
+# parallel support
+from mpi4py import MPI
+# MPI parameters:
+comm = MPI.COMM_WORLD
+crank = comm.Get_rank()
+csize = comm.Get_size()
+
+################ reading arguments ###########################
 if(size(sys.argv)>1):
     print("launched with arguments "+str(', '.join(sys.argv)))
     # new conf file
@@ -21,12 +30,6 @@ if(size(sys.argv)>1):
     print(conf+" configuration set by the arguments")
 else:
     conf='DEFAULT'
-
-from mpi4py import MPI
-# MPI parameters:
-comm = MPI.COMM_WORLD
-crank = comm.Get_rank()
-csize = comm.Get_size()
     
 # configuration file (read by each thread):
 conffile = 'globals.conf'
@@ -111,7 +114,7 @@ if verbose:
 
 vout = configactual.getfloat('voutfactor')  /sqrt(r_e) # velocity at the outer boundary
 minitfactor = configactual.getfloat('minitfactor') # initial total mass in the units of equilibrium mass
-umag = b12**2*2.29e6*m1
+umag = b12**2*2.29e6*m1 # on the pole!
 umagout = 0.5**2*umag*(rstar/r_e)**6
 csqout = vout**2
 if verbose:
@@ -302,19 +305,22 @@ def qloss_separate(rho, v, u, g, gin = False):
         taueff = rho * delta 
     else:
         taueff = rho / (1. / delta + 2. * delta /  across)
-    taueff /= 2. # either we radiate from two sides and use one-half of taueff, or we use the full optical depth and use effectively one side
+    # taueff /= 2. # either we radiate from two sides and use one-half of taueff, or we use the full optical depth and use effectively one side
     # taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     beta = betafun(Fbeta(rho, u, betacoeff))
     urad = copy(u * (1.-beta)/(1.-beta/2.))
-    urad = (urad+fabs(urad))/2.    
+    #  urad = (urad+fabs(urad))/2.    
     if ifthin:
         taufactor = tratfac(taueff, taumin, taumax) / xirad
     else:
         taufactor = taufun(taueff, taumin, taumax) / (xirad*taueff+1.)
+        
     if cooltwosides:
-        qloss = 2.*copy(urad*(across/delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+        perimeter = 2. * (across/delta)
     else:
-        qloss = 2.*copy(urad*(across/delta+2.*delta) * taufactor)  # diffusion approximation; energy lost from 4 sides
+        perimeter = 2. * (across/delta+2.*delta)
+        
+    qloss = copy(urad*perimeter * taufactor)  # diffusion approximation; energy lost from 4 sides
 
     if cslimit:
         # if u/rho \sim cs^2 << 1/r, 1-exp(...) decreases, and cooling stops

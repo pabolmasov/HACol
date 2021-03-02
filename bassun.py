@@ -17,11 +17,12 @@ def xis(gamma, eta, n=3, x0=20., ifbeta = False):
     (gamma = rstar**2/mdot/across[0]/afac**2)
     (eta = (8/21/sqrt(2)))**0.25 (umag*sqrt(rstar)*d0**2)**0.25, where d0 = (across/4./pi/rstar/sin(theta))[0]
     '''
-    if((eta*gamma**0.25)<1.) | (gamma>100.):
+    if((eta*gamma**0.25)<1.) | (gamma>1000.):
         return nan
     x = fsolve(fxis, x0, args=(gamma, eta, n), maxfev = 1000, xtol=1e-10)
     #    print(fxis(x, gamma, eta, n))
     if ifbeta:
+        print("beta")
         beta = 1.-gamma*exp(gamma)*(expn(1,gamma)-expn(1, gamma*x))
         return x, beta
     else:
@@ -44,7 +45,8 @@ def dtint(gamma, xs, cthfun, beta = None):
         csq = 1./3. * exp(gamma * x) * (expn(2,gamma*x)/x + beta * exp(-gamma) - expn(2,gamma)) # / x**3
         cth = cthfun(x)
         #        print("mean cos = "+str(cth.mean()))
-        dt = simps(sqrt((3.*cth**2+1.)/ csq)/cth, x=x)/2.
+        w = where(csq>0.)
+        dt = simps((sqrt((3.*cth**2+1.)/ csq)/cth)[w], x=x[w])/2.
     else:
         dt = zeros(nxs)
         for k in arange(nxs):

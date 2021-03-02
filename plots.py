@@ -284,12 +284,14 @@ def binplot_short(freq, dfreq, pds, dpds, outfile='binnedpds'):
 
 def errorplot(x, dx, y, dy, outfile = 'errorplot', xtitle = None, ytitle = None, fit = None,
               xrange = None, yrange = None, addline = None, xlog = False, ylog = False, pointlabels = None, lticks = None):
-
+    '''
+    addline should be a tuple and contain [x,y]
+    '''
     clf()
     fig, ax = subplots()
     ax.errorbar(x, y, xerr=dx, yerr=dy, fmt='.k')
     if addline is not None:
-        ax.plot(x, addline, 'r:')
+        ax.plot(addline[0], addline[1], 'r:')
     if fit is not None:
         xtmp = linspace(x.min(), x.max(), 100)
         ax.plot(xtmp, exp(log(xtmp)*fit[0]+fit[1]), 'r-')

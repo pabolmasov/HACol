@@ -214,7 +214,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
     rstar = config[conf].getfloat('rstar')
     m1 = config[conf].getfloat('m1')
     tscale = config[conf].getfloat('tscale') * m1
-    mdot = config[conf].getfloat('mdot')
+    mdot = config[conf].getfloat('mdot') * 4.*pi
     mu30 = config[conf].getfloat('mu30')
     realxirad = config[conf].getfloat('xirad')
 
@@ -306,19 +306,26 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
             b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
             umag = b12**2*2.29e6*m1
             BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
+            print("BSgamma = "+str(BSgamma))
+            print("BSeta = "+str(BSeta))
             xs, BSbeta = bs.xis(BSgamma, BSeta, x0=4., ifbeta = True)
-            tth = tscale * rstar**1.5 * bs.dtint(BSgamma, xmean, cthfun)
+            xtmp = (xmean.max()-xmean.min())*arange(100)/double(99)+xmean.min()
+            xtmp = xmean
+            tth = tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, xtmp, cthfun)
+            print(tth)
             # * mdot *  7.* sqrt(rstar * xmean) * delta_s**2/across_s * (1.+2.*across_s/delta_s**2)
             fth = 1./tth
             # 0.0227364 / xirad / sqrt(rstar*xmean)/rstar / mdot * (1./delta_s+2.*delta_s / across_s)**2 * 2.03e5/m1 # Hz
-            goodx = (xmean > 3.*xstd) * (tcenter> tcenter[2])
-            pfit, pcov = polyfit(log(xmean[goodx]), log(fmax[goodx]), 1, cov = True)
-            print("dln(f)/dln(R_s) = "+str(pfit[0])+"+/-"+str(pcov[0,0]))
+            if (size(unique(xmean))>5):
+                goodx = (xmean > 1.*xstd) * (tcenter> tcenter[2])
+                pfit, pcov = polyfit(log(xmean[goodx]), log(fmax[goodx]), 1, cov = True)
+                print("dln(f)/dln(R_s) = "+str(pfit[0])+"+/-"+str(pcov[0,0]))
             if fosccol is not None:
                 print(foscmean)
-                fth = foscmean*2.
+                fth = foscmean
                 fth[xmean > 10.] = sqrt(-1.)
-            plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', yrange = frange, xrange = [maximum(quantile(xmean-xstd, 0.2), 1.), minimum(xmean[xmean<xmean.max()].max(), geo_r.max()/rstar)], addline = fth, xlog=True, ylog=False, lticks = [4, 5, 6, 8, 10])
+                xtmp = xmean
+            plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', yrange = frange, xrange = [maximum(quantile(xmean-xstd, 0.2), 1.), minimum(xmean[xmean<xmean.max()].max(), geo_r.max()/rstar)], addline = [xtmp,fth], xlog=True, ylog=False, lticks = [4, 5, 6, 8, 10])
         else:
             plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_lfmax', xtitle = r'$L/L_{\rm Edd}$', ytitle = '$f$, Hz')
             
@@ -423,7 +430,6 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     drrat = config[conf].getfloat('drrat')
     realxirad = config[conf].getfloat('xirad')
     b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
-    umag = b12**2*2.29e6*m1
 
     n=arange(n1, n2, dn, dtype=int)
     t = zeros(size(n), dtype=double)
@@ -447,8 +453,9 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     acrosslast =  geometry[-1,3]
     #   acrosslast = pi*4.*afac*drrat * geometry[-1,0]**2 
     BSgamma = (across0/delta0**2)/mdot*rstar / (realxirad/1.5)
+    umag = b12**2*2.29e6*m1 * (1.+3.*cos(th[0])**2)/4.
     # umag is magnetic pressure
-    BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
+    BSeta = (8./21./sqrt(2.) * umag * 3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
     xs, BSbeta = bs.xis(BSgamma, BSeta, x0=xest, ifbeta = True)
     dt_BS = tscale * rstar**1.5 * bs.dtint(BSgamma, xs, cthfun)
     print("eta = "+str(BSeta))
@@ -520,7 +527,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     print("s/RNS = "+str(xmean)+"+/-"+str(xrms)+"\n")
     fmean = ff[wlate].mean() ; frms = ff[wlate].std()
     print("flux = "+str(fmean)+"+/-"+str(frms)+"\n")
-    print("OR flux = "+str(lc_tot[wlaten].mean())+".."+str(lc_part[wlaten].mean())+"\n")
+    print("total flux = "+str(lc_tot[wlaten].mean())+"+/-"+str(lc_tot[wlaten].std())+"\n below the shock: "+str(lc_part[wlaten].mean())+"+/-"+str(lc_part[wlaten].std())+"\n")
     print("lc_out = "+str(lc_out[wlaten].mean())+"\n")
         
 ###############################
