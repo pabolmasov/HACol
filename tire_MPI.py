@@ -418,7 +418,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         beta = concatenate([[betaleft], beta])
     else:
         rho = concatenate([[rho[0]], rho])
-        v = concatenate([[v[0]], v])
+        v = concatenate([[0.], v]) # inner BC for v
         u = concatenate([[u[0]], u])
         urad = concatenate([[urad[0]], urad])
         press = concatenate([[press[0]], press])
@@ -446,21 +446,28 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
     fm, fs, fe = fluxes(gnd, rho, v, u, press)
     if rightpack is None:
         fm[-1] = -mdot * turnofffactor
+    if leftpack is None:
+        fe[0] = 0.
+        fm[0] = 0.
     g1 = Gamma1(5./3., beta)
-    vl, vm, vr =sigvel_mean(v, sqrt(g1*press/rho))
+    g1[:] = 5./3. # stability?
+    vl, vm, vr = sigvel_linearized(v, sqrt(g1*press/rho), g1, rho, press)
+    # sigvel_linearized(v, sqrt(g1*press/rho), g1, rho, press)
+    # sigvel_mean(v, sqrt(g1*press/rho))
     # sigvel_linearized(v, cs, g1, rho, press)
     # sigvel_isentropic(v, cs, g1, csqmin=csqmin)
     if any(vl>=vm) or any(vm>=vr):
         wwrong = (vl >=vm) | (vm<=vr)
         print("rho = "+str((rho[1:])[wwrong]))
-        print("press = "+str((press[1:])[wwrong]))
+        print("press = "+str((press[:])[wwrong]))
         print(vl[wwrong])
         print(vm[wwrong])
         print(vr[wwrong])
         print(vm[wwrong])
         print("R = "+str((gnd.r[1:])[wwrong]))
         print("signal velocities crashed")
-        ii=input("cs")
+        # ii=input("cs")
+        sys.exit(1) 
     if crank == first:
         fm[0] = 0.
         #        fs[0] = fs[1]
@@ -883,7 +890,7 @@ def alltire():
         vinit=vout *sqrt(rmax/g.r) # initial velocity
         
         # setting the initial distributions of the primitive variables:
-        rho = copy(abs(mdot) / (abs(vout)+abs(vinit)) / g.across*0.5)
+        rho = copy(abs(mdot) / (abs(vout)+abs(vinit)) / g.across)
         #   rho *= 1. + (g.r/rstar)**2
         # total mass
         mass = trapz(rho*g.across, x=g.l)
@@ -891,12 +898,12 @@ def alltire():
         print('meq = '+str(meq)+"\n")
         # ii = input('M')
         rho *= meq/mass * minitfactor # normalizing to the initial mass
-        vinit = vout * sqrt(rmax/g.r) * (g.r-rstar)/(rmax-rstar) # to fit the v=0 condition at the surface of the star
+        vinit = vout * sqrt(rmax/g.r) * ((g.r-rstar)/(rmax-rstar))**3 # to fit the v=0 condition at the surface of the star
         v = copy(vinit)
         #        print("umagout = "+str(umagout))
         #        ii = input("vout * mdot = "+str(vout*mdot/g.across[-1]))
-        press =  (umagout-vout*mdot/2./g.across[-1]) * (g.r[-1]/g.r)**2 * (rho/rho[-1]+1.)/2. * 0.5
-        rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
+        press =  (umagout-vout*mdot/2./g.across[-1]) * (g.r[-1]/g.r) * (rho/rho[-1]+1.)/2. * 0.25
+        rhonoise = 1.e-2 * random.random_sample(nx) # noise (entropic)
         rho *= (rhonoise+1.)
         beta = betafun_p(Fbeta_press(rho, press, betacoeff))
         u = press * 3. * (1.-beta/2.)

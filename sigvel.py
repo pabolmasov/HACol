@@ -17,7 +17,7 @@ def sigvel_isentropic(v, cs, g1, csqmin = 0.):
     vstar = (v[1:]+v[:-1])/2. + (cs/(g1-1.))[:-1]-(cs/(g1-1.))[1:] # estimates for radiation-pressure-dominated case
     astar = (cs[:-1] + cs[1:])/2. + ((v*(g1-1.))[:-1]-(v*(g1-1.))[1:])/4. # see Toro et al. (1994), eq (10)
     if any(astar <= csqmin):
-        w=[astar <= csqmin]
+        w=where(astar <= csqmin)
         astar[w] = csqmin
 
     #        vr=(v+cs) ; vl=(v-cs)
@@ -31,7 +31,7 @@ def sigvel_linearized(v, cs, g1, rho, p):
     '''
     rhomean = (rho[1:]+rho[:-1])/2. ; csmean = (cs[1:]+cs[:-1])/2. 
     pstar = (p[1:]+p[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
-    vstar = (v[1:]+v[:-1])/2. + (p[1:]-p[:-1])/rhomean/csmean
+    vstar = (v[1:]+v[:-1])/2. + (p[1:]-p[:-1])/rhomean/csmean/2.
     rhostarleft = rho[:-1] + (v[:-1]-vstar)*rhomean / csmean
     rhostarright = rho[1:] + (vstar-v[1:])*rhomean / csmean
     astarleft = sqrt(g1[:-1]*pstar/rhostarleft) ; astarright = sqrt(g1[1:]*pstar/rhostarright)
