@@ -10,16 +10,24 @@ def sigvel_mean(v, cs):
     vr = maximum((v+cs)[1:], vstar+astar)
     return vl, vstar, vr
 
+def sigvel_roe(v, cs, rho):
+    '''
+    '''
+    vstar = ((v*sqrt(rho))[1:]+(v*sqrt(rho))[:-1])/(sqrt(rho)[1:]+sqrt(rho)[:-1])
+    astar = ((cs*sqrt(rho))[:-1] + (cs*sqrt(rho))[1:])/(sqrt(rho)[1:]+sqrt(rho)[:-1])
+    vl = minimum((v-cs)[:-1], vstar-astar)
+    vr = maximum((v+cs)[1:], vstar+astar)
+    return vl, vstar, vr
+
 def sigvel_isentropic(v, cs, g1, csqmin = 0.):
     '''
     isentropic signal velocity estimates (see Toro 1994; section 3.1)
     '''
-    vstar = (v[1:]+v[:-1])/2. + (cs/(g1-1.))[:-1]-(cs/(g1-1.))[1:] # estimates for radiation-pressure-dominated case
-    astar = (cs[:-1] + cs[1:])/2. + ((v*(g1-1.))[:-1]-(v*(g1-1.))[1:])/4. # see Toro et al. (1994), eq (10)
+    vstar = vmean + (cs/(g1-1.))[:-1]-(cs/(g1-1.))[1:] # estimates for radiation-pressure-dominated case
+    astar = amean + ((v*(g1-1.))[:-1]-(v*(g1-1.))[1:])/4. # see Toro et al. (1994), eq (10)
     if any(astar <= csqmin):
         w=where(astar <= csqmin)
         astar[w] = csqmin
-
     #        vr=(v+cs) ; vl=(v-cs)
     vl = minimum((v-cs)[:-1], vstar-astar)
     vr = maximum((v+cs)[1:], vstar+astar)
@@ -34,11 +42,26 @@ def sigvel_linearized(v, cs, g1, rho, p):
     vstar = (v[1:]+v[:-1])/2. + (p[1:]-p[:-1])/rhomean/csmean/2.
     rhostarleft = rho[:-1] + (v[:-1]-vstar)*rhomean / csmean
     rhostarright = rho[1:] + (vstar-v[1:])*rhomean / csmean
+    rhostarleft = maximum(rhostarleft, minimum(rho[1:], rho[:-1]))
+    rhostarright = maximum(rhostarright, minimum(rho[1:], rho[:-1]))
+    pstar = maximum(pstar, minimum(p[1:], p[:-1]))
     astarleft = sqrt(g1[:-1]*pstar/rhostarleft) ; astarright = sqrt(g1[1:]*pstar/rhostarright)
     vl = minimum((v-cs)[:-1], vstar-astarleft)
     vr = maximum((v+cs)[1:], vstar+astarright)
     return vl, vstar, vr
 
+def sigvel_hybrid(v, cs, g1, rho, p):
+    '''
+    hybrid estimates by Toro (1994)
+    '''
+    rhomean = (rho[1:]+rho[:-1])/2. ; csmean = (cs[1:]+cs[:-1])/2. 
+    pstar = (p[1:]+p[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
+    vstar = (v[1:]+v[:-1])/2. - (p[1:]-p[:-1])/rhomean/csmean/2.
+    hsleft = pstar/p[:-1] ; hsright = pstar / p[1:]
+    qleft = maximum(sqrt(1.+(g1+1.)/2./g1*(hsleft-1.)), 1.)
+    qright = maximum(sqrt(1.+(g1+1.)/2./g1*(hsright-1.)), 1.)
+    return v[:-1]-cs[:-1]*qleft, vstar, v[1:]+cs[1:]*qright
+    
 def sigvel_toro(m, s, e, p, fe, sl, sr, across_half, r_half, sth_half):
     '''
     (recursive)
