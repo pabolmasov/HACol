@@ -368,6 +368,7 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
     wcomp1 = maximum((wcomp-kleap),0)
     wcomp2 = minimum((wcomp+kleap),n-1)
     print("maximal compression found at r="+str((r[wcomp1]+r[wcomp2])/2.)+" +/- "+str((-r[wcomp1]+r[wcomp2])/2.))
+    # print("element No "+str(wcomp1)+" out of "+str(n))
     if isnan(r[wcomp]):
         print("t = "+str(t))
         print(dvdl.min(), dvdl.max())
@@ -397,7 +398,7 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
                             xtitle=r'$r$', ytitle=r'$uv$',
                             xlog=False, ylog = True, formatsequence = ['k.', 'b-'],
                             vertical = (r[wcomp1]+r[wcomp2])/2.)
-           
+            
     return t, (r[wcomp1]+r[wcomp2])/2.,(-r[wcomp1]+r[wcomp2])/2., v[wcomp1], v[wcomp2], ltot, lbelowshock, lonshock,  -((u*4./3.+v**2/2.)*v)[-1]  
 
 def shock_dat(n, prefix = "out/tireout", kleap = 1):

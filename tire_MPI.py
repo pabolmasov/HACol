@@ -198,7 +198,7 @@ def toprim_separate(m, s, e, g):
     '''
     rho=m/g.across
     v=s/m
-    phi = -1./g.r-0.5*(g.r*g.sth*omega)**2
+    phi = copy(-1./g.r-0.5*(g.r*g.sth*omega)**2)
     u=(e-m*(v**2/2.+phi*potfrac))/g.across
     #    umin = u.min()
     beta = betafun(Fbeta(rho, u, betacoeff))
@@ -212,7 +212,7 @@ def tocon_separate(rho, v, u, g):
     '''
     conversion from primitivies (density rho, velcity v, internal energy u) to conserved quantities m, s, e; g is geometry (structure)
     '''
-    phi = -1./g.r-0.5*(g.r*g.sth*omega)**2
+    phi = copy(-1./g.r-0.5*(g.r*g.sth*omega)**2)
     m=rho*g.across # mass per unit length
     s=m*v          # momentum per unit length
     e=(u+rho*(v**2/2.+phi*potfrac))*g.across  # total energy (thermal + mechanic) per unit length
@@ -228,7 +228,7 @@ def tocon(prim, gnd = None):
     #    rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; nd = prim['N']
     if gnd is None:
         gnd = l_g[prim['N']]
-    phi = -1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2    
+    phi = copy(-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2)
     m=prim['rho']*gnd.across # mass per unit length
     s=m*prim['v'] # momentum per unit length
     e=(prim['u']+prim['rho']*(prim['v']**2/2.+phi*potfrac))*gnd.across  # total energy (thermal + mechanic) per unit length
@@ -241,7 +241,7 @@ def toprim(con, gnd = None):
     #  m = con['m'] ; s = con['s'] ; e = con['e'] ; nd = con['N']
     if gnd is None:
         gnd = g
-    phi = -1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2    
+    phi = copy(-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2)
     rho = con['m']/gnd.across
     v = con['s']/con['m']
     u = (con['e']-con['m']*(v**2/2.+phi*potfrac))/gnd.across
@@ -284,7 +284,7 @@ def fluxes(g, rho, v, u, press):
     #    nd = prim['N']  # ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; press = prim['press'] ; beta = prim['beta']
     #    gnd = l_g[nd]
     # across = g.across ; r = g.r  ; sth = g.sth 
-    phi = -1./g.r-0.5*(g.r*g.sth*omega)**2    
+    phi = copy(-1./g.r-0.5*(g.r*g.sth*omega)**2)
     s = rho * v * g.across # mass flux (identical to momentum per unit length -- can we use it?)
     p = g.across * (rho*v**2 + press) # momentum flux
     fe = g.across * v * (u + press + (v**2/2.+potfrac*phi)*rho) # energy flux without diffusion    
@@ -373,10 +373,10 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     qloss = qloss_separate(rho, v, u, g, gin = True)    
     # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff, taumin, taumax) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
-    dm = copy(rho*0.-dmsqueeze) # copy(rho*0.-dmsqueeze)
+    dm = copy(rho*0.-dmsqueeze) 
     #  dudt = copy(v*force-qloss) # +irradheating # copy
-    ds = copy((force*(1.-potfrac)+gammaforce*potfrac) - dmsqueeze * v) # lost mass carries away momentum
-    de = copy((force*(1.-potfrac)+gammaforce*potfrac) * v - qloss - desqueeze) # lost matter carries away energy (or enthalpy??)
+    ds = copy(force - dmsqueeze * v) # lost mass carries away momentum
+    de = copy((force*(1.-potfrac)+gammaforce*potfrac) * v - qloss - desqueeze) 
     #    return dm, force, dudt, qloss, ueq
     return dm, ds, de
 
@@ -387,7 +387,6 @@ def derivo(l_half, m, s, e, s_half, p_half, fe_half, dm, ds, de):
     main advance step
     input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
     output: three temporal derivatives later used for the time step
-    includes boundary conditions for mass and energy!
     '''
     nl=size(m)
     dmt=zeros(nl) ; dst=zeros(nl); det=zeros(nl)
@@ -424,7 +423,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         beta = concatenate([[betaleft], beta])
     else:
         rho = concatenate([[rho[0]], rho])
-        v = concatenate([[0.], v]) # inner BC for v
+        v = concatenate([[-v[0]], v]) # inner BC for v
         u = concatenate([[u[0]], u]) 
         urad = concatenate([[urad[0]], urad])
         press = concatenate([[press[0]], press])
@@ -457,15 +456,6 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
     #        fm[0] = 0.
     g1 = Gamma1(5./3., beta)
     g1[:] = 5./3. # stability?
-    # vl, vm, vr = sigvel_linearized(v, sqrt(g1*press/(rho+u)), g1, rho+u, press)
-    # print("sigvel (lin) = "+str(vl.min())+".."+str(vr.max()))
-    # sigvel_linearized(v, sqrt(g1*press/rho), g1, rho, press)
-    # vl, vm, vr = sigvel_mean(v, sqrt(g1*press/rho))
-    # print("sigvel (mean) = "+str(vl.min())+".."+str(vr.max()))
-    # vl, vm, vr = sigvel_roe(v, sqrt(g1*press/rho), rho)
-    # print("sigvel (Roe) = "+str(vl.min())+".."+str(vr.max()))
-    # sigvel_linearized(v, cs, g1, rho, press)
-    # vl, vm, vr = sigvel_isentropic(v, sqrt(g1*press/rho), 5./3., csqmin=0.)
     vl, vm, vr = sigvel_hybrid(v, sqrt(g1*press/rho), 5./3., rho, press)
     # print("sigvel (h) = "+str(vl.min())+".."+str(vr.max()))
     # ii =input("V")
@@ -510,16 +500,19 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         dmsqueeze = 2. * m[1:-1] * sqrt(g1[1:-1]*maximum((press[1:-1]-umagtar)/rho[1:-1], 0.))/gnd.delta[1:-1]
         if squeezeothersides:
             dmsqueeze += 4. * m[1:-1] * sqrt(g1[1:-1]*maximum((press[1:-1]-umagtar)/rho[1:-1], 0.))/ (gnd.across[1:-1] / gnd.delta[1:-1])
-        desqueeze = dmsqueeze * (e[1:-1] + press[1:-1] * gnd.across[1:-1]) / m[1:-1] # (e-u*g.across)/m
+        phi = copy(-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2)
+        desqueeze = dmsqueeze * ((e + press * gnd.across) / m + potfrac * phi)[1:-1] # (e-u*g.across)/m
+        # dmsqueeze[0] = 0.
+        # desqueeze[0] = 0.
     else:
         dmsqueeze = 0.
         desqueeze = 0.
     dm, ds, de = sources(gnd, rho[1:-1], v[1:-1], u[1:-1], urad[1:-1], ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze)
     #    ltot=trapz(flux, x=gnd.l[1:-1]) 
-#    if crank == first:
-#        fm_half[0] = 0.
+    #    if crank == first:
+    #        fm_half[0] = 0.
         #        fs[0] = fs[1]
-#        fe_half[0] = 0.
+        #        fe_half[0] = 0.
 
     dmt, dst, det = derivo(lhalf, m, s, e, fm_half, fs_half, fe_half, dm, ds, de)
 
@@ -621,7 +614,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
     dl = (ghalf.l[1:]-ghalf.l[:-1])
 
     #    umagtar = umag * ((1.+3.*gext.cth**2)/4. * (rstar/gext.r)**6)[1:-1]
-    phi = -1./g.r-0.5*(g.r*g.sth*omega)**2 # gravitational potential (needed by the inner BC)
+    phi = copy(-1./g.r-0.5*(g.r*g.sth*omega)**2) # gravitational potential (needed by the inner BC)
     
     #    print("nd = "+str(nd)+": "+str(lhalf))
     #    ii = input('lhfl')
@@ -669,8 +662,8 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
             con1['s'][-1] = -mdot * turnofffactor
             con1['e'][-1] = -vout*mdot*(1.-potfrac)
             # con1['e'][-1] = umagout*g.across[-1]-vout*mdot/2.*(1.-potfrac) # (con1['m'] / 2. /g.r)[-1]
-        if crank == first:
-            con1['s'][0] = 0.
+        #  if crank == first:
+            #     con1['s'][0] = 0.
             # con1['e'][0] = con1['e'][1] + (1.-potfrac) * (phi[1] * con1['m'][1]-phi[0] * con1['m'][0]) 
         if thetimer is not None:
             thetimer.stop_comp("updateCon")
@@ -691,8 +684,8 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
             con2['s'][-1] = -mdot * turnofffactor
             con2['e'][-1] = -vout*mdot*(1.-potfrac)
             # con2['e'][-1] =  umagout*g.across[-1]-vout*mdot/2.*(1.-potfrac) # (con2['m'] / 2. /g.r)[-1]
-        if crank == first:
-            con2['s'][0] = 0.
+            #  if crank == first:
+            #   con2['s'][0] = 0.
             # con2['e'][0] = con2['e'][1]  + (1.-potfrac) * (phi[1] * con2['m'][1]-phi[0] * con2['m'][0]) 
         if thetimer is not None:
             thetimer.stop_comp("updateCon")
@@ -711,10 +704,10 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         con3 = updateCon(con, dcon3, dt)
         if crank == last:
             con3['s'][-1] = -mdot * turnofffactor 
-            # con3['e'][-1] = -vout*mdot*(1.-potfrac)
+            con3['e'][-1] = -vout*mdot*(1.-potfrac)
             # con3['e'][-1] =  umagout*g.across[-1]-vout*mdot/2.*(1.-potfrac) #(con3['m'] / 2. /g.r)[-1]
-        if crank == first:
-            con3['s'][0] = 0.
+            #    if crank == first:
+            #     con3['s'][0] = 0.
             # con3['e'][0] = con3['e'][1] + (1.-potfrac) * (phi[1] * con3['m'][1]-phi[0] * con3['m'][0]) 
         if thetimer is not None:
             thetimer.stop_comp("updateCon")
@@ -737,8 +730,8 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
             con['s'][-1] = -mdot * turnofffactor 
             con['e'][-1] = -vout*mdot*(1.-potfrac)
             # con['e'][-1] =  umagout*g.across[-1]-vout*mdot/2.*(1.-potfrac) # (con['m'] / 2. /g.r)[-1]
-        if crank == first:
-            con['s'][0] = 0.
+            #       if crank == first:
+            #        con['s'][0] = 0.
             # con['e'][0] = con['e'][1] + (1.-potfrac) * (phi[1] * con['m'][1]-phi[0] * con['m'][0]) 
             #        prim = toprim(con, gnd = g)
         if thetimer is not None:
@@ -915,7 +908,7 @@ def alltire():
         umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
         #
     
-        ##### initial conditions: ####
+        ##### IC initial conditions: ####
         m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
         vinit=vout *sqrt(rmax/g.r) # initial velocity
         
@@ -928,11 +921,11 @@ def alltire():
         print('meq = '+str(meq)+"\n")
         # ii = input('M')
         rho *= meq/mass * minitfactor # normalizing to the initial mass
-        vinit = vout * sqrt(rmax/g.r) * ((g.r-rstar)/(rmax-rstar)) # to fit the v=0 condition at the surface of the star
+        vinit = vout * sqrt(rmax/g.r) * ((g.r-rstar)/(rmax-rstar))**2 # to fit the v=0 condition at the surface of the star
         v = copy(vinit)
         #        print("umagout = "+str(umagout))
         #        ii = input("vout * mdot = "+str(vout*mdot/g.across[-1]))
-        press =  (umagout-vout*mdot/2./g.across[-1]) * (g.r[-1]/g.r)**2 * (rho/rho[-1]+1.)/2. * 0.5
+        press =  (umagout-vout*mdot/2./g.across[-1]) * (g.r[-1]/g.r) * (rho/rho[-1]+1.)/2. * 0.5
         rhonoise = 1.e-3 * random.random_sample(nx) # noise (entropic)
         rho *= (rhonoise+1.)
         beta = betafun_p(Fbeta_press(rho, press, betacoeff))
