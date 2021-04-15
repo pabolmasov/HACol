@@ -158,7 +158,9 @@ if verbose:
 
 ttest = False # set True to output topology test (which domains are connected to which)
 
-potfrac = 0.
+potfrac = 0.5
+szero = False # if we are setting rho v = 0 at the inner boundary
+# szero decreases stability
 
 # loading local modules:
 if ifplot:
@@ -326,16 +328,16 @@ def qloss_separate(rho, v, u, g, gin = False):
     else:
         perimeter = 2. * (across/delta+2.*delta)
         
-    qloss = copy(urad*perimeter * taufactor)  # diffusion approximation; energy lost from 4 sides
+    qloss = copy(urad*perimeter * taufactor)  # diffusion approximation
 
-    #    if cslimit:
+    if cslimit:
         # if u/rho \sim cs^2 << 1/r, 1-exp(...) decreases, and cooling stops
-        #        qloss *= taufun((u/rho)/(csqmin/r), taumin, taumax) 
+        qloss *= taufun((u/rho)/(csqmin/r), taumin, taumax) 
         #        (1.-exp(-(u+ufloor)/(rho+rhofloor))/(csqmin/r))) 
         
     return qloss
 
-def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., desqueeze = 0.):
+def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., desqueeze = 0., dt = None):
         # prim, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
     '''
     computes the RHSs of conservation equations
@@ -351,8 +353,6 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #  sinsum=sina*cth+cosa*sth # cos( pi/2-theta + alpha) = sin(theta-alpha)
     #     tau = rho*g.across/(4.*pi*g.r*g.sth*afac)
     delta = g.delta[1:-1] ;  across = g.across[1:-1] ; r = g.r[1:-1] ; cth = g.cth[1:-1] ; sth = g.sth[1:-1] ; cosa = g.cosa[1:-1] ; sina = g.sina[1:-1]
-    #    tau = rho * delta # tau in transverse direction
-    #    tauphi = rho * across / delta / 2. # optical depth in azimuthal direction
     taueff = copy(rho)*0.
     if cooltwosides:
         taueff[:] = rho *delta 
@@ -370,13 +370,20 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     if(forcecheck):
         network = simps(force/(rho*across), x=g.l)
         return network, (1./r[0]-1./r[-1])
-    qloss = qloss_separate(rho, v, u, g, gin = True)    
+    qloss = qloss_separate(rho, v, u, g, gin = True)
+    if dt is not None:
+        qloss = u * taufun(qloss*dt/u, taumin, taumax)
+    #    if crank == first:
+    #        qloss[0] = 0. # no heat loss from the innermost cell
+    #        force[0] = 0. # no force on the innermost cell
     # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff, taumin, taumax) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     dm = copy(rho*0.-dmsqueeze) 
     #  dudt = copy(v*force-qloss) # +irradheating # copy
     ds = copy(force - dmsqueeze * v) # lost mass carries away momentum
-    de = copy((force*(1.-potfrac)+gammaforce*potfrac) * v - qloss - desqueeze) 
+    #if crank == first:
+    #    ds[0] = 0.
+    de = copy((force*(1.-potfrac)+gammaforce*potfrac) * v - qloss - desqueeze)  #
     #    return dm, force, dudt, qloss, ueq
     return dm, ds, de
 
@@ -396,7 +403,7 @@ def derivo(l_half, m, s, e, s_half, p_half, fe_half, dm, ds, de):
     
     return dmt, dst, det
 
-def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
+def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq = None):
     # BCleft, BCright, 
     # m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, momentum_inflow = None, energy_inflow =  None):
     '''
@@ -422,12 +429,35 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         press = concatenate([[pressleft], press])
         beta = concatenate([[betaleft], beta])
     else:
-        rho = concatenate([[rho[0]], rho])
-        v = concatenate([[-v[0]], v]) # inner BC for v
-        u = concatenate([[u[0]], u]) 
-        urad = concatenate([[urad[0]], urad])
-        press = concatenate([[press[0]], press])
-        beta = concatenate([[beta[0]], beta])        
+        beta0 = beta[0]
+        # bernoulli = ((u*4.-3./2.*beta0)/3./(1.-beta/2.)+rho*v**2/2.)[0]
+        # u0 = bernoulli*3.*(1.-beta[0]/2.)/(4.-3./2.*beta[0])
+        rho0 = rho[0] ; press0 = press[0] ; u0 = u[0] ; urad0 = urad[0] ; v0 = v[0] ; beta0 = beta[0] # 
+        #        if v0 < 0.:
+        #     dr = (1./gnd.r[0]-1./gnd.r[1])*0.+v0**2/2. # to compensate ram pressure
+        # else:
+        #    dr = (1./gnd.r[0]-1./gnd.r[1])*0.            
+        dr = (1./gnd.r[0]-1./gnd.r[1])
+        upfac = 1. + rho0/press0*dr/4.
+        #        rhofac = rhofac**2
+        rho1 = rho0  #  sqrt(2.)/3.*beta0/(1.-beta0/2.)**0.75/(1.-beta0)**0.25*u0**0.75 * betacoeff
+        # print("rho1/rho = "+str(rho1/rho0))
+        # if v0>0.:
+        #     rhofac = 1.
+        press1 = press0 * upfac
+        u1 = u0 * upfac
+        urad1 = urad0 * upfac
+        #   betafun_p(Fbeta(rho0, press0, betacoeff))
+        rho = concatenate([[rho1], rho])
+        # v = concatenate([[-v0], v]) # inner BC for v
+        v = concatenate([[maximum(-v0, 0.)], v]) # inner BC for v
+        # v = concatenate([[-minimum(1., exp(-v0*1e3))*v0], v]) # inner BC for v
+        u = concatenate([[u1], u]) 
+        urad = concatenate([[urad1], urad])
+            # [3.*(1.-beta0)/(4.-3./2.*beta0)*bernoulli], urad])
+        press = concatenate([[press1], press])
+            #[bernoulli/(4.-3./2.*beta0)], press])
+        beta = concatenate([[beta0], beta])        
     if rightpack is not None:
         rhoright = rightpack['rho'] ; vright = rightpack['v'] ; uright = rightpack['u']
         # rhoright, vright, uright = rightpack
@@ -447,34 +477,41 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         u = concatenate([u, [u[-1]]])
         urad = concatenate([urad, [urad[-1]]])
         press = concatenate([press, [press[-1]]])
-        beta = concatenate([beta, [beta[-1]]])        
+        beta = concatenate([beta, [beta[-1]]])
+        print(crank)
+        ii = input("NONE:"+str(crank)) # this should not happen: outer BC is set separately
+    # fluxes:
     fm, fs, fe = fluxes(gnd, rho, v, u, press)
-    if rightpack is None:
-        fm[-1] = -mdot * turnofffactor
-    #    if leftpack is None:
-    #        fe[0] = 0.
-    #        fm[0] = 0.
+    #
+    #    if rightpack is None:
+    #        fm[-1] = -mdot * turnofffactor
+    #        fe[-1] = mdot * vout**2 * (1.-potfrac) * turnofffactor
+    # if leftpack is None:
+    #    fe[0] = 0.
+    #    fm[0] = 0.
+    # fs[0] = fs[1]+rho[1]*gnd.across[1]/gnd.r[1]**2*lhalf[0]
+    #     fs[0] = ((press+rho*v**2)*gnd.across)[1] # press[0] * gnd.across[0]
+
     g1 = Gamma1(5./3., beta)
     g1[:] = 5./3. # stability?
-    vl, vm, vr = sigvel_hybrid(v, sqrt(g1*press/rho), 5./3., rho, press)
+    vl, vm, vr = sigvel_hybrid(v, sqrt(g1*press/rho)*(2.+0.0*double(not(raddiff))), 5./3., rho, press)
     # print("sigvel (h) = "+str(vl.min())+".."+str(vr.max()))
     # ii =input("V")
     if any(vl>=vm) or any(vm>=vr):
         wwrong = (vl >=vm) | (vm<=vr)
         print("rho = "+str((rho[1:])[wwrong]))
         print("press = "+str((press[1:])[wwrong]))
-        print(vl[wwrong])
-        print(vm[wwrong])
-        print(vr[wwrong])
-        print(vm[wwrong])
+        print("vleft = "+str(vl[wwrong]))
+        print("vmed = "+str(vm[wwrong]))
+        print("vright = "+str(vr[wwrong]))
         print("R = "+str((gnd.r[1:])[wwrong]))
         print("signal velocities crashed")
         # ii=input("cs")
         sys.exit(1) 
-    if crank == first:
-        fm[0] = 0.
+    # if crank == first:
+    #    fm[0] = 0.
         #        fs[0] = fs[1]
-        fe[0] = 0.
+        # fe[0] = 0.
     m, s, e = tocon_separate(rho, v, u, gnd) # extended conserved quantities
     fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm)
     if(raddiff):
@@ -489,7 +526,9 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
         else:
             taueff = (rho[1:]+rho[:-1])/2. / (1./delta + 2. * delta /  across) 
         duls_half *= taufun(taueff, taumin, taumax) 
-        dule_half *= taufun(taueff, taumin, taumax) 
+        dule_half *= taufun(taueff, taumin, taumax)
+        if leftpack is None:
+            dule_half[0] = 0.
         # duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         #  dule_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         fs_half += duls_half ; fe_half += dule_half         
@@ -502,17 +541,18 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0.):
             dmsqueeze += 4. * m[1:-1] * sqrt(g1[1:-1]*maximum((press[1:-1]-umagtar)/rho[1:-1], 0.))/ (gnd.across[1:-1] / gnd.delta[1:-1])
         phi = copy(-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2)
         desqueeze = dmsqueeze * ((e + press * gnd.across) / m + potfrac * phi)[1:-1] # (e-u*g.across)/m
-        # dmsqueeze[0] = 0.
-        # desqueeze[0] = 0.
+        if crank == first:
+            dmsqueeze[0] = 0.
+            desqueeze[0] = 0.
     else:
         dmsqueeze = 0.
         desqueeze = 0.
-    dm, ds, de = sources(gnd, rho[1:-1], v[1:-1], u[1:-1], urad[1:-1], ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze)
+    dm, ds, de = sources(gnd, rho[1:-1], v[1:-1], u[1:-1], urad[1:-1], ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze, dt = dtq)
     #    ltot=trapz(flux, x=gnd.l[1:-1]) 
-    #    if crank == first:
-    #        fm_half[0] = 0.
-        #        fs[0] = fs[1]
-        #        fe_half[0] = 0.
+    # if crank == first:
+    #    fm_half[0] = 0.
+        # fs_half[0] = 0.
+        #   fe_half[0] /= 2.
 
     dmt, dst, det = derivo(lhalf, m, s, e, fm_half, fs_half, fe_half, dm, ds, de)
 
@@ -554,7 +594,7 @@ def BCsend(leftpack_send, rightpack_send, comm):
         rightpack = comm.recv(source = right, tag = right)
     return leftpack, rightpack
 
-def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0., nout = 0, thetimer = None):
+def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0., nout = 0, thetimer = None, rightpack_save = None):
 #(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile, t = 0., nout = 0):
     '''
     single domain, calculated by a single core
@@ -564,6 +604,10 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
     con1 = icon.copy()
     
     prim = toprim(con, gnd = g) # primitive from conserved
+
+    # outer BC:
+    if (crank == last) & (rightpack_save is None):
+        rightpack_save = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]}
 
     ltot = 0. # total luminosity of the flow (required for IRR)
     timectr = 0
@@ -577,6 +621,13 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
 
     gleftbound = geometry_local(g, 0)
     grightbound = geometry_local(g, -1)
+    if crank == first: # interpolation of the inner ghost zone
+        gleftbound.l[0]=g.l[0]-(g.l[1]-g.l[0])
+        gleftbound.r[0]=g.r[0]-(g.r[1]-g.r[0]) # temporary!!!
+        gleftbound.sth[0]=g.sth[0]*2.-g.sth[1]
+        gleftbound.across[0] = g.across[0]
+        gleftbound.delta[0] = g.delta[0]
+
     # topology test: tag traces the origin domain
     if ttest and (t<dtout):
         if crank > first:
@@ -639,6 +690,12 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
+
+        if crank == last:
+            rightpack = rightpack_save
+            # print("crank = "+str(last)+": rho = "+str(rightpack['rho']))
+            # --ensuring fixed physical conditions @ the right boundary
+        
         if thetimer is not None:
             thetimer.stop_comp("BC")        
             thetimer.start_comp("dt")
@@ -652,18 +709,19 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         if thetimer is not None:
             thetimer.stop_comp("dt")        
             thetimer.start_comp("RKstep")
-        dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot)
+        dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot, dtq = dt)
         if thetimer is not None:
             thetimer.stop_comp("RKstep")
             thetimer.start_comp("updateCon")
         con1 = updateCon(con, dcon1, dt/2.)
         # ultimate BC:
-        if crank == last:
-            con1['s'][-1] = -mdot * turnofffactor
-            con1['e'][-1] = -vout*mdot*(1.-potfrac)
+        #    if crank == last:
+        #        con1['s'][-1] = -mdot * turnofffactor
+        #        con1['e'][-1] = vout*mdot*(1.-potfrac)/2.
             # con1['e'][-1] = umagout*g.across[-1]-vout*mdot/2.*(1.-potfrac) # (con1['m'] / 2. /g.r)[-1]
-        #  if crank == first:
-            #     con1['s'][0] = 0.
+        if (crank == first) & szero:
+            # con1['s'][0] = 0.
+            con1['s'][0] = minimum(con1['s'][0]+con1['m'][0]*dt/g.r[0]**2, 0.)
             # con1['e'][0] = con1['e'][1] + (1.-potfrac) * (phi[1] * con1['m'][1]-phi[0] * con1['m'][0]) 
         if thetimer is not None:
             thetimer.stop_comp("updateCon")
@@ -672,20 +730,24 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
+        if crank == last:
+            rightpack = rightpack_save            
+            # --ensuring fixed physical conditions @ the right boundary
         if thetimer is not None:
             thetimer.stop_comp("BC")
             thetimer.start_comp("RKstep")
-        dcon2 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , BCfluxleft, BCfluxright)
+        dcon2 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot, dtq = dt) # , BCfluxleft, BCfluxright)
         if thetimer is not None:
             thetimer.stop_comp("RKstep")
             thetimer.start_comp("updateCon")
         con2 = updateCon(con, dcon2, dt/2.)     
-        if crank == last:
-            con2['s'][-1] = -mdot * turnofffactor
-            con2['e'][-1] = -vout*mdot*(1.-potfrac)
+        #  if crank == last:
+        #      con2['s'][-1] = -mdot * turnofffactor
+        #      con2['e'][-1] = vout*mdot*(1.-potfrac)/2.
             # con2['e'][-1] =  umagout*g.across[-1]-vout*mdot/2.*(1.-potfrac) # (con2['m'] / 2. /g.r)[-1]
-            #  if crank == first:
-            #   con2['s'][0] = 0.
+        if (crank == first) & szero:
+            #  con2['s'][0] = 0.
+            con2['s'][0] = minimum(con2['s'][0]+con2['m'][0]*dt/g.r[0]**2, 0.)
             # con2['e'][0] = con2['e'][1]  + (1.-potfrac) * (phi[1] * con2['m'][1]-phi[0] * con2['m'][0]) 
         if thetimer is not None:
             thetimer.stop_comp("updateCon")
@@ -694,20 +756,25 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
+        if crank == last:
+            rightpack = rightpack_save
+            # --ensuring fixed physical conditions @ the right boundary
         if thetimer is not None:
             thetimer.stop_comp("BC")
             thetimer.start_comp("RKstep")
-        dcon3 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) #, BCfluxleft, BCfluxright)
+        dcon3 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot, dtq = dt) #, BCfluxleft, BCfluxright)
         if thetimer is not None:
             thetimer.stop_comp("RKstep")
             thetimer.start_comp("updateCon")
         con3 = updateCon(con, dcon3, dt)
-        if crank == last:
-            con3['s'][-1] = -mdot * turnofffactor 
-            con3['e'][-1] = -vout*mdot*(1.-potfrac)
+        # if crank == last:
+        #    con3['s'][-1] = -mdot * turnofffactor 
+        #    con3['e'][-1] = vout*mdot*(1.-potfrac)/2.
             # con3['e'][-1] =  umagout*g.across[-1]-vout*mdot/2.*(1.-potfrac) #(con3['m'] / 2. /g.r)[-1]
-            #    if crank == first:
-            #     con3['s'][0] = 0.
+        if (crank == first) & szero:
+            con3['s'][0] = minimum(con3['s'][0]+con3['m'][0]*dt/g.r[0]**2, 0.)
+            # con3['s'][0] += con3['m'][0]*dt/g.r[0]**2
+            #   con3['s'][0] = 0.
             # con3['e'][0] = con3['e'][1] + (1.-potfrac) * (phi[1] * con3['m'][1]-phi[0] * con3['m'][0]) 
         if thetimer is not None:
             thetimer.stop_comp("updateCon")
@@ -716,22 +783,26 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
+        if crank == last:
+            rightpack = rightpack_save            
+            # --ensuring fixed physical conditions @ the right boundary
         if thetimer is not None:
             thetimer.stop_comp("BC")
             thetimer.start_comp("RKstep")
-        dcon4 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , BCfluxleft, BCfluxright)
+        dcon4 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot, dtq = dt) # , BCfluxleft, BCfluxright)
         if thetimer is not None:
             thetimer.stop_comp("RKstep")
             thetimer.start_comp("updateCon")
 
         con = updateCon(con, [dcon1, dcon2, dcon3, dcon4], [dt/6., dt/3., dt/3., dt/6.])
         
-        if crank == last:
-            con['s'][-1] = -mdot * turnofffactor 
-            con['e'][-1] = -vout*mdot*(1.-potfrac)
+        # if crank == last:
+        #    con['s'][-1] = -mdot * turnofffactor 
+        #    con['e'][-1] = vout*mdot*(1.-potfrac)/2.
             # con['e'][-1] =  umagout*g.across[-1]-vout*mdot/2.*(1.-potfrac) # (con['m'] / 2. /g.r)[-1]
-            #       if crank == first:
-            #        con['s'][0] = 0.
+        if (crank == first) & szero:
+            con['s'][0] = minimum(con['s'][0]+con['m'][0]*dt/g.r[0]**2, 0.)
+            # con['s'][0] += con['m'][0]*dt/g.r[0]**2
             # con['e'][0] = con['e'][1] + (1.-potfrac) * (phi[1] * con['m'][1]-phi[0] * con['m'][0]) 
             #        prim = toprim(con, gnd = g)
         if thetimer is not None:
@@ -740,7 +811,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         t += dt
         #        print("nd = "+str(nd)+"; t = "+str(t)+"; dt = "+str(dt))
         prim = toprim(con, gnd = g) # primitive from conserved
-        if cslimit:
+        if cslimit & False:
             prim['u'] =  maximum(prim['u'], prim['rho']*csqmin)
             con = tocon(prim, gnd = g)
             con['umagtar'] = icon['umagtar']
@@ -765,7 +836,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         thetimer.purge_comps()
     nout += 1
 
-    return nout, t, con
+    return nout, t, con, rightpack_save
     
 ##########################################################
 def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
@@ -1104,13 +1175,17 @@ def alltire():
         tpack = comm.bcast(tpack, root = 0)
         t = tpack["t"] ; nout = tpack["nout"]
         tmax += t
+
+    rightpack_save = None
+        
     while (t<tmax):
         if crank ==0:
-            nout, t, con = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot,
-                                     t=t, nout = nout, thetimer = timer)
+            nout, t, con, rightpack_save = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot,
+                                     t=t, nout = nout, thetimer = timer, rightpack_save = rightpack_save)
         else:
-            nout, t, con = onedomain(g, ghalf, con, comm, t=t, nout = nout)
-
+            nout, t, con, rightpack_save = onedomain(g, ghalf, con, comm, t=t, nout = nout, rightpack_save = rightpack_save)
+        if rightpack_save is not None:
+            print("vout = "+str(rightpack_save['v']))
 if (parallelfactor != csize):
     print("wrong number of processes, "+str(parallelfactor)+" != "+str(csize))
     exit(1)

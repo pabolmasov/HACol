@@ -56,6 +56,8 @@ def sigvel_hybrid(v, cs, g1, rho, p):
     '''
     rhomean = (rho[1:]+rho[:-1])/2. ; csmean = (cs[1:]+cs[:-1])/2. 
     pstar = (p[1:]+p[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
+    # ((cs[:-1]+cs[1:]-(g1-1.)/2.*(v[1:]-v[:-1]))/(cs[:-1]/p[:-1]**((g1-1.)/2./g1)+cs[1:]/p[1:]**((g1-1.)/2./g1)))**(2.*g1/(1.-g1))
+    # (p[1:]+p[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
     vstar = (v[1:]+v[:-1])/2. - (p[1:]-p[:-1])/rhomean/csmean/2.
     hsleft = pstar/p[:-1] ; hsright = pstar / p[1:]
     qleft = maximum(sqrt(1.+(g1+1.)/2./g1*(hsleft-1.)), 1.)

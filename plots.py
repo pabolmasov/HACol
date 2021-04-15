@@ -608,7 +608,7 @@ def curvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", conf = 'D
     savefig("curvestack.png")
     close('all')
 
-def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=False, conf = 'DEFAULT'):
+def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=False, conf = 'DEFAULT', rmax = None):
     '''
     plots a series of velocity curves from the ascii output
     '''
@@ -628,10 +628,16 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         r = lines[:,0] ; v = lines[:,2]
         nr = size(r)
         plot(r, v, label = str(k))
-        if(v.min()<vmin):
-            vmin = v.min()
-        if(v.max()>vmax):
-            vmax = v.max()
+        if rmax is not None:
+            vmincurrent = v[r<rmax].min()
+            vmaxcurrent = v[r<rmax].max()
+        else:
+            vmincurrent = v.min()
+            vmaxcurrent = v.max()           
+        if(vmincurrent<vmin):
+            vmin = vmincurrent
+        if(vmaxcurrent>vmax):
+            vmax = vmaxcurrent
         if plot2d & (kctr==0):
             tar = zeros(nt, dtype=double)
             v2 = zeros([nt, nr], dtype=double)
@@ -648,8 +654,11 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
     if nt < 10:
         legend()
     xscale('log')
+
     vmin = maximum(vmin, -1.) ; vmax = minimum(vmax, 1.)
     ylim(vmin, vmax)
+    if rmax is not None:
+        xlim(1., rmax)
     xlabel(r'$R/R_*$') ; ylabel(r'$v/c$')
     fig.set_size_inches(5, 4)
     fig.tight_layout()
@@ -660,8 +669,12 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         fig=figure()
         pcolormesh(r, tar, v2, cmap='hot', vmin=vmin, vmax=vmax) #, levels=(arange(nv+1)-0.5)/double(nv)*(vmax-vmin)+vmin, cmap='hot')
         colorbar()
-        xscale('log')
         xlabel(r'$R/R_*$') ; ylabel(r'$t$, s')
+        if rmax is not None:
+            xlim(1., rmax)
+        else:
+            xscale('log')
+        # print(tar.min())
         ylim(tar.min(), tar.max())
         fig.set_size_inches(4, 6)
         fig.tight_layout()
