@@ -608,6 +608,40 @@ def curvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", conf = 'D
     savefig("curvestack.png")
     close('all')
 
+def rhocurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", conf = 'DEFAULT'):
+    '''
+    plots a series of U/Umag curves from the ascii output
+    '''
+
+    tscale = 4.92594e-06 *1.4 # temporary! need to read it!
+    
+    rho0 = [] ; rho1 = [] ; vl1 = [] ; vl0 = []
+    
+    for k in arange(n1,n2,step):
+        fname = prefix + entryname(k, ndig=5) + postfix
+        print(fname)
+        lines = loadtxt(fname, comments="#")
+        print(shape(lines))
+        r = lines[:,0] ; rho = lines[:,1] ; v = lines[:,2]
+        rho0.append(rho[0])   ;     rho1.append(rho[1])
+        vl1.append(v[1])
+        vl0.append(v[0])
+    print(r[0])
+    dr = (r[1]-r[0])
+    v1 = abs(asarray(vl1))
+    v0 = abs(asarray(vl0))
+    rho0 = asarray(rho0)
+    rho1 = asarray(rho1)
+    print(v)
+    outdir = os.path.dirname(prefix)
+    fluxlines = loadtxt(outdir+'/flux.dat', comments="#", delimiter=" ", unpack=False)
+    t = fluxlines[:,0] ; f = fluxlines[:,1]
+    t =t[arange(0,n2-n1,step)]
+
+    rho_acc = cumtrapz((v1*rho1+v0*rho0)/2., x=t/tscale, initial = rho0[0])
+    
+    someplots(t, [rho0, rho1, rho_acc], name = "rho0", xtitle=r'$t$, s', ytitle=r'$\rho_0$', xlog=False, ylog=True, formatsequence = ['k-', 'r:', 'b--'])
+
 def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=False, conf = 'DEFAULT', rmax = None):
     '''
     plots a series of velocity curves from the ascii output
@@ -840,3 +874,4 @@ def plot_dts(n, prefix = 'out/tireout', postfix = '.dat', conf = 'DEFAULT'):
     someplots(r, [dl], ylog = True, ytitle='$\Delta l$', name = 'dl', formatsequence = ['k-'])
 
     someplots(r, [dt_CFL, dt_thermal, dt_diff], ylog = True, ytitle='$\Delta t$', name = 'dts', formatsequence = ['k-', 'b:', 'r--'])
+

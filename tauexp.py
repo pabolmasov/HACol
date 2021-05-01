@@ -50,3 +50,19 @@ def tratfac(x, taumin, taumax):
             else:
                 return (1.-exp(-x))/x
             
+# smoothed step for gravpotential
+def sstep(x, xmin, xmax):
+    '''
+    calculates exp(-1/x) with smooth limits
+    '''
+    wlow = where(x<xmin)
+    whigh = where(x>xmax)
+    wmed = where((x>=xmin) & (x<=xmax))
+    xx = copy(x)
+    if(size(wlow)>0):
+        xx[wlow] = x[wlow]**2
+    if(size(whigh)>0):
+        xx[whigh] = 1.
+    if(size(wmed)>0):
+        xx[wmed] = (1.-exp(-x[wmed]))**2
+    return xx
