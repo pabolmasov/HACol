@@ -53,7 +53,7 @@ def tratfac(x, taumin, taumax):
 # smoothed step for gravpotential
 def sstep(x, xmin, xmax):
     '''
-    calculates exp(-1/x) with smooth limits
+    calculates 1-exp(-x) with smooth limits
     '''
     wlow = where(x<xmin)
     whigh = where(x>xmax)
@@ -66,3 +66,15 @@ def sstep(x, xmin, xmax):
     if(size(wmed)>0):
         xx[wmed] = (1.-exp(-x[wmed]))**2
     return xx
+
+def scalarstep(x, xmin, xmax):
+    '''
+    calculates 1-exp(-x) with smooth limits for a scalar angument
+    '''
+    if x<0.:
+        return 0.
+    if x<xmin:
+        return x
+    if x>xmax:
+        return 1.
+    return 1.-exp(-x)
