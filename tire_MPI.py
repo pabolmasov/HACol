@@ -138,13 +138,13 @@ rhoscale = configactual.getfloat('rhoscale') / m1
 
 if verbose & (omega>0.):
     print(conf+": spin period "+str(2.*pi/omega*tscale)+"s")
-tr = afac * dr_e/r_e / xifac * r_e**2.5 / rstar # replenishment time scale of the column
+tr = afac * dr_e/r_e / xifac * (r_e/xifac)**2.5 / rstar # replenishment time scale of the column
 if verbose:
     print("r_e = "+str(r_e))
     print(conf+": replenishment time "+str(tr*tscale))
-    #   ii =input("R")
-tmax = tr * configactual.getfloat('tmax')
-dtout = tr * configactual.getfloat('dtout')                   # tr * configactual.getfloat('dtout')
+    # ii =input("R")
+tmax = tr * configactual.getfloat('tmax') 
+dtout = tr * configactual.getfloat('dtout')    # tr * configactual.getfloat('dtout')
 ifplot = configactual.getboolean('ifplot')
 ifhdf = configactual.getboolean('ifhdf')
 plotalias = configactual.getint('plotalias')
@@ -205,7 +205,7 @@ def regularize(u, rho, press):
     if internal energy goes below ufloor, we heat the matter up artificially
     '''
     #    u1=u-ufloor ; rho1=rho-rhofloor ; press1 = press-ufloor
-    return (u+ufloor+fabs(u-ufloor))/2., (rho+rhofloor+fabs(rho-rhofloor))/2., (press+ufloor +fabs(press-ufloor))/2.    
+    return (u+ufloor+abs(u-ufloor))/2., (rho+rhofloor+abs(rho-rhofloor))/2., (press+ufloor +abs(press-ufloor))/2.    
 
 ##############################################################################
 
@@ -353,14 +353,14 @@ def qloss_separate(rho, urad, g, gin = False, dt = None):
         
     qloss = copy(urad*perimeter * taufactor)  # diffusion approximation
 
-    if cslimit:
-        # if u/rho \sim cs^2 << 1/r, 1-exp(...) decreases, and cooling stops
-        qloss *= taufun((urad/rho)/(csqmin/r), taumin, taumax) 
+    #    if cslimit:
+    # if u/rho \sim cs^2 << 1/r, 1-exp(...) decreases, and cooling stops
+    #        qloss *= taufun((urad/rho)/(csqmin/r), taumin, taumax) 
         #        (1.-exp(-(u+ufloor)/(rho+rhofloor))/(csqmin/r))) 
         
-        # if dt is not None: #!!! temporary!
+        #    if dt is not None: #!!! temporary!
         # qloss *= tratfac(qloss*dt/u*10., 0.001, 100.)
-        #  qloss = minimum(qloss, u*across/dt*0.5)
+        #         qloss = minimum(qloss, urad*across/dt*0.5)
         #    qloss = minimum(qloss, u/dt*0.25)
     
     return qloss
@@ -387,13 +387,13 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
         delta = g.delta ;  across = g.across ; r = g.r ; cth = g.cth ; sth = g.sth ; cosa = g.cosa ; sina = g.sina
         dr = copy(r)
         dr[:-1] = r[1:]-r[:-1] ; dr[-1] = dr[-2]
-    taueff = copy(rho)*0.
-    if cooltwosides:
-        taueff[:] = rho *delta 
-    else:
-        taueff[:] = rho / (1./delta + 2. * delta /  across) 
+    # taueff = copy(rho)*0.
+    # if cooltwosides:
+    #     taueff[:] = rho *delta 
+    # else:
+    #     taueff[:] = rho / (1./delta + 2. * delta /  across) 
     sinsum = 2.*cth / sqrt(3.*cth**2+1.)  # = sina*cth+cosa*sth = sin(theta+alpha)
-    force = copy(gforce(sinsum, g, dr)*rho*across)
+    force = copy(gforce(sinsum, g, dr)*rho*across) # without irratiation
                   # *(1.-eta * ltot * tratfac(rho*delta, taumin, taumax))
                   # +omega**2*r*sth*cosa)*rho*across) # *taufac
     if eta>0.:
@@ -415,7 +415,7 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     dm = copy(rho*0.-dmsqueeze) 
     #  dudt = copy(v*force-qloss) # +irradheating # copy
     ds = copy(force+gammaforce - dmsqueeze * v) # lost mass carries away momentum
-    de = copy((force+gammaforce)*(1.-potfrac) * v - qloss - desqueeze)  #
+    de = copy((force*(1.-potfrac)+gammaforce) * v - qloss - desqueeze)  #
     #if crank == first:
     #    ds[0] = 0.
     #    de[0] = 0.
@@ -427,7 +427,7 @@ def derivo(l_half, s_half, p_half, fe_half, dm, ds, de):
     #sleft, sright, pleft, pright, feleft, feright):
     '''
     main advance step
-    input: three densities, l (midpoints), three fluxes (midpoints), three sources, timestep, r, sin(theta), cross-section
+    input: l (midpoints), three fluxes (midpoints), three sources
     output: three temporal derivatives later used for the time step
     '''
     nl=size(dm)
@@ -443,6 +443,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
     # m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, momentum_inflow = None, energy_inflow =  None):
     '''
     calculating elementary increments of conserved quantities
+    input: geometry, half-step l, primitives (dictionary), data from the left ghost zone, from the right ghost zone
     '''
     #    prim = toprim(con) # primitive from conserved
     rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad'] ; u = prim['u'] ;   beta = prim['beta']
@@ -453,7 +454,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
         if umagtar is None:
             umagtar = umag * ((1.+3.*gnd.cth**2)/4. * (rstar/gnd.r)**6)[1:-1]
         # step = sstep(press/umagtar-1., 0.001, 10.) * sqrt(g1*umagtar/rho)
-        step = sqrt(g1*maximum(press-umagtar, 0.)/rho)
+        step = sqrt(g1*maximum(press-umagtar, 0.)/rho) 
         dmsqueeze = 2. * m * step/gnd.delta[1:-1]
         if squeezeothersides:
             dmsqueeze += 4. * m * step/ (gnd.across[1:-1] / gnd.delta[1:-1])
@@ -463,7 +464,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
         else:
             desqueeze = dmsqueeze * ((e + press * gnd.across[1:-1]) / m) # (e-u*g.across)/m
         if crank == first:
-            dmsqueeze[0] = 0.
+            dmsqueeze[0] = 0. # no losses from the innermost cell (difficult to fit with the BC)
             desqueeze[0] = 0.
     else:
         dmsqueeze = 0.
@@ -490,11 +491,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
         # ii = input("L")
         rho0 = rho[0] ; press0 = press[0] ; u0 = u[0] ; urad0 = urad[0] ; v0 = v[0] ; beta0 = beta[0] #
         crossfrac = gnd.across[1] / gnd.across[0]
-        crossfac = 1.
         rho1 = rho0 * crossfrac
-        #        dr = 1./gnd.r[0]-1./gnd.r[1]
-        #print(str(dv)+"=dv")
-        # ii = input("K")
         u1 = u0 * crossfrac # + rho1 * dr
         beta1 = betafun(Fbeta(rho1, u1, betacoeff))
         press1 = u1/3./(1.-beta1/2.)
@@ -540,18 +537,30 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
 
     g1 = Gamma1(5./3., beta)
     g1[:] = 5./3. # stability?
-    vl, vm, vr = sigvel_hybrid(v, sqrt(g1*press/rho)*(1.5), 4./3., rho, press)
-    # print("sigvel (h) = "+str(vl.min())+".."+str(vr.max()))
+    u, rho, press = regularize(u, rho, press)
+    vl, vm, vr = sigvel_hybrid(v, sqrt(g1*press/rho), 5./3., rho, press)
     # ii =input("V")
-    if any(vl>=vm) or any(vm>=vr):
-        wwrong = (vl >=vm) | (vm<=vr)
-        print("rho = "+str((rho[1:])[wwrong]))
-        print("press = "+str((press[1:])[wwrong]))
-        print("vleft = "+str(vl[wwrong]))
-        print("vmed = "+str(vm[wwrong]))
-        print("vright = "+str(vr[wwrong]))
-        print("R = "+str((gnd.r[1:])[wwrong]))
-        print("signal velocities crashed")
+    if any(vl>vm) or any(vm>vr):
+        print("core "+str(crank)+": sigvel (h) = "+str(vl.min())+".."+str(vr.max()))
+        print("core "+str(crank)+": dv = "+str((vr-vl).min())+".."+str((vr-vl).max()))
+        print("core "+str(crank)+": dv(m) = "+str((vr-vm).min())+".."+str((vm-vl).min()))
+        wwrong = where((vl >vm) | (vm>vr))
+        nwrong = size(wwrong)
+        print(str(nwrong)+" corrupted cell(s)")
+        for k in arange(nwrong):
+            print("R/R* = "+str((gnd.r[1:])[wwrong[k]]/rstar))
+            print("vleft = "+str(vl[wwrong[k]]))
+            print("vmed = "+str(vm[wwrong[k]]))
+            print("vright = "+str(vr[wwrong[k]]))
+            ii = input("K")
+            
+        #print("rho = "+str((rho[1:])[wwrong]))
+        #print("press = "+str((press[1:])[wwrong]))
+        #print("vleft = "+str(vl[wwrong]))
+        #print("vmed = "+str(vm[wwrong]))
+        #print("vright = "+str(vr[wwrong]))
+        #print("R = "+str((gnd.r[1:])[wwrong]))
+        print("signal velocities crashed -- core "+str(crank))
         # ii=input("cs")
         sys.exit(1) 
     # if crank == first:

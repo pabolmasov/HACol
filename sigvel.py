@@ -56,13 +56,14 @@ def sigvel_hybrid(v, cs, g1, rho, p):
     '''
     rhomean = (rho[1:]+rho[:-1])/2. ; csmean = (cs[1:]+cs[:-1])/2. 
     pstar = (p[1:]+p[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
-    # ((cs[:-1]+cs[1:]-(g1-1.)/2.*(v[1:]-v[:-1]))/(cs[:-1]/p[:-1]**((g1-1.)/2./g1)+cs[1:]/p[1:]**((g1-1.)/2./g1)))**(2.*g1/(1.-g1))
-    # (p[1:]+p[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
+    #  pstar *= 1.5
     vstar = (v[1:]+v[:-1])/2. - (p[1:]-p[:-1])/rhomean/csmean/2.
     hsleft = pstar/p[:-1] ; hsright = pstar / p[1:]
     qleft = maximum(sqrt(1.+(g1+1.)/2./g1*(hsleft-1.)), 1.)
     qright = maximum(sqrt(1.+(g1+1.)/2./g1*(hsright-1.)), 1.)
-    return v[:-1]-cs[:-1]*qleft, vstar, v[1:]+cs[1:]*qright
+    vl = v[:-1]-cs[:-1]*qleft  ; vr = v[1:]+cs[1:]*qright
+    vstar = minimum(maximum(vstar, vl), vr)
+    return vl, vstar, vr
     
 def sigvel_toro(m, s, e, p, fe, sl, sr, across_half, r_half, sth_half):
     '''
