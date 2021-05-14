@@ -46,44 +46,46 @@ if conf is None:
     configactual = config['DEFAULT']
 else:
     configactual = config[conf]
+    
 # geometry:
 nx = configactual.getint('nx')
-nx0 = configactual.getint('nx0factor') * nx
-parallelfactor = configactual.getint('parallelfactor')
+nx0 = configactual.getint('nx0factor') * nx # refinement used to make an accurate geometry structure; used only once
+parallelfactor = configactual.getint('parallelfactor') # number of cores/processes
 last = parallelfactor-1 ; first = 0
 
-logmesh = configactual.getboolean('logmesh')
-rbasefactor = configactual.getfloat('rbasefactor')
+logmesh = configactual.getboolean('logmesh') # logarithmic mesh in l
+rbasefactor = configactual.getfloat('rbasefactor') # offset of the mesh (making it even more nonlinear than log)
 
 # numerical parameters:
-CFL = configactual.getfloat('CFL')
-Cth = configactual.getfloat('Cth')
-Cdiff = configactual.getfloat('Cdiff')
-timeskip = configactual.getint('timeskip')
-ufloor = configactual.getfloat('ufloor')
-rhofloor = configactual.getfloat('rhofloor')
-csqmin = configactual.getfloat('csqmin')
-cslimit = configactual.getboolean('cslimit')
-potfrac = configactual.getfloat('potfrac')
-szero = configactual.getboolean('szero')
-nsurf = configactual.getfloat('nsurf')
-ttest = configactual.getboolean('ttest')
+CFL = configactual.getfloat('CFL') # Courant-Friedrichs-Levy coeff. 
+Cth = configactual.getfloat('Cth') # numerical coeff. for radiation losses
+Cdiff = configactual.getfloat('Cdiff') # numerical coeff. for diffusion 
+timeskip = configactual.getint('timeskip') # >1 if we want to update the time step every "timeskip" steps; not recommended
+ufloor = configactual.getfloat('ufloor') # minimal possible energy density
+rhofloor = configactual.getfloat('rhofloor') # minimal possible mass density
+cslimit = configactual.getboolean('cslimit') # if we are going to set a lower limit for temperature (thermal bath)
+csqmin = configactual.getfloat('csqmin') # minimal possible speed-of-sound-squared (only if cslimit is on)
+potfrac = configactual.getfloat('potfrac') # how do we include potential energy: 0 if all the work is treated as an energy source; 1 if the potential is included in the expression for conserved enegry
+szero = configactual.getboolean('szero') # if we set velocity to zero in the 0th cell (not recommended, as )
+ttest = configactual.getboolean('ttest') # topology test output
 
 # physics:
-mu30 = configactual.getfloat('mu30')
-m1 = configactual.getfloat('m1')
-mdot = configactual.getfloat('mdot') * 4. *pi # internal units
+mu30 = configactual.getfloat('mu30') # magnetic moment, 10^{30} Gs cm^3 units 
+m1 = configactual.getfloat('m1') # NS mass (solar units)
+mdot = configactual.getfloat('mdot') * 4. *pi # internal units, GM/varkappa c
 mdotsink = configactual.getfloat('mdotsink') * 4. *pi # internal units
-rstar = configactual.getfloat('rstar')
+rstar = configactual.getfloat('rstar') # GM/c^2 units
 b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
-mow = configactual.getfloat('mow')
-betacoeff = configactual.getfloat('betacoeff') * (m1)**(-0.25)/mow
+mow = configactual.getfloat('mow') # mean molecular weight
+betacoeff = configactual.getfloat('betacoeff') * (m1)**(-0.25)/mow 
 
 # BC modes:
 BSmode = configactual.getboolean('BSmode')
 coolNS = configactual.getboolean('coolNS')
 ufixed = configactual.getboolean('ufixed')
 squeezemode = configactual.getboolean('squeezemode')
+zeroeloss = configactual.getboolean('zeroeloss') # mass is lost without thermal energy (kinetic is lost)
+
 squeezeothersides = configactual.getboolean('squeezeothersides')
 cooltwosides = configactual.getboolean('cooltwosides')
 
@@ -101,7 +103,7 @@ nubulk = configactual.getfloat('nubulk')
 weinberg = configactual.getboolean('weinberg')
 eta = configactual.getfloat('eta')
 heatingeff = configactual.getfloat('heatingeff')
-ifturnoff = configactual.getboolean('ifturnoff')
+ifturnoff = configactual.getboolean('ifturnoff') # if mdot is artificially reduced (by a factor turnofffactor)
 if ifturnoff:
     turnofffactor = configactual.getfloat('turnofffactor')
     print("TURNOFF: mass accretion rate decreased by "+str(turnofffactor))
@@ -187,7 +189,7 @@ def gphi(g, dr = 0.):
         r0 = rstar - (g.r[1]-g.r[0])/2.
     else:
         r0 = 0.
-    r = r0 + abs(g.r+dr-r0) 
+    r = r0 + abs(g.r+dr-r0)  # mirroring the potential at half the first cell (between the first cell and the ghost)
     #    if crank == first:
     phi = -1./r - 0.5*(r*g.sth*omega)**2
     return phi
@@ -195,7 +197,7 @@ def gphi(g, dr = 0.):
 def gforce(sinsum, g, dr):
     # gravitational force calculated self-consistently using gphi on cell boundaries
     #    if crank == first:
-    phi = gphi(g, -dr/2.)
+    phi = gphi(g, -dr/2.) 
     return sinsum * ( phi[1:-1] - phi[2:] ) / dr[1:-1]/2. #gphi(g, -dr/2.)-gphi(g, dr/2.))
     
 def regularize(u, rho, press):
@@ -313,7 +315,7 @@ def fluxes(g, rho, v, u, press):
     fe = g.across * v * (u + press + (v**2/2.+potfrac*phi)*rho) # energy flux without diffusion    
     return s, p, fe
 
-def qloss_separate(rho, v, u, g, gin = False, dt = None):
+def qloss_separate(rho, urad, g, gin = False, dt = None):
     '''
     standalone estimate for flux distribution
     '''
@@ -322,7 +324,7 @@ def qloss_separate(rho, v, u, g, gin = False, dt = None):
     taueff = copy(rho)*0.
     #   print("size rho = "+str(size(rho)))
     #   print("size g = "+str(size(g.delta)))
-    if gin:
+    if gin: # when we exclude ghost zones
         delta = g.delta[1:-1]
         across = g.across[1:-1]
         r = g.r[1:-1]
@@ -336,8 +338,8 @@ def qloss_separate(rho, v, u, g, gin = False, dt = None):
         taueff = rho / (1. / delta + 2. * delta /  across)
     # taueff /= 2. # either we radiate from two sides and use one-half of taueff, or we use the full optical depth and use effectively one side
     # taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
-    beta = betafun(Fbeta(rho, u, betacoeff))
-    urad = copy(u * (1.-beta)/(1.-beta/2.))
+    # beta = betafun(Fbeta(rho, u, betacoeff))
+    # urad = copy(u * (1.-beta)/(1.-beta/2.))
     #  urad = (urad+fabs(urad))/2.    
     if ifthin:
         taufactor = tratfac(taueff, taumin, taumax) / xirad
@@ -353,13 +355,13 @@ def qloss_separate(rho, v, u, g, gin = False, dt = None):
 
     if cslimit:
         # if u/rho \sim cs^2 << 1/r, 1-exp(...) decreases, and cooling stops
-        qloss *= taufun((u/rho)/(csqmin/r), taumin, taumax) 
+        qloss *= taufun((urad/rho)/(csqmin/r), taumin, taumax) 
         #        (1.-exp(-(u+ufloor)/(rho+rhofloor))/(csqmin/r))) 
         
-    # if dt is not None: #!!! temporary!
+        # if dt is not None: #!!! temporary!
         # qloss *= tratfac(qloss*dt/u*10., 0.001, 100.)
-      #  qloss = minimum(qloss, u*across/dt*0.5)
-        # qloss = minimum(qloss, u/dt*0.1)
+        #  qloss = minimum(qloss, u*across/dt*0.5)
+        #    qloss = minimum(qloss, u/dt*0.25)
     
     return qloss
 
@@ -401,7 +403,7 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     if(forcecheck):
         network = simps(force/(rho*across), x=g.l)
         return network, (1./r[0]-1./r[-1])
-    qloss = qloss_separate(rho, v, u, g, gin = True, dt = dt)
+    qloss = qloss_separate(rho, urad, g, gin = True, dt = dt)
     # if crank == first:
     #    print((force/rho/across)[0:2])
     #    ii = input('F')
@@ -450,11 +452,16 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
     if(squeezemode):
         if umagtar is None:
             umagtar = umag * ((1.+3.*gnd.cth**2)/4. * (rstar/gnd.r)**6)[1:-1]
-        dmsqueeze = 2. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/gnd.delta[1:-1]
+        # step = sstep(press/umagtar-1., 0.001, 10.) * sqrt(g1*umagtar/rho)
+        step = sqrt(g1*maximum(press-umagtar, 0.)/rho)
+        dmsqueeze = 2. * m * step/gnd.delta[1:-1]
         if squeezeothersides:
-            dmsqueeze += 4. * m * sqrt(g1*maximum((press-umagtar)/rho, 0.))/ (gnd.across[1:-1] / gnd.delta[1:-1])
-        phi = gphi(gnd, 0.) # copy(-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2)
-        desqueeze = dmsqueeze * ((e + press * gnd.across[1:-1]) / m + potfrac * phi[1:-1]) # (e-u*g.across)/m
+            dmsqueeze += 4. * m * step/ (gnd.across[1:-1] / gnd.delta[1:-1])
+        if zeroeloss:
+            # phi = gphi(gnd, 0.) # copy(-1./gnd.r-0.5*(gnd.r*gnd.sth*omega)**2)        
+            desqueeze  = dmsqueeze * e /m
+        else:
+            desqueeze = dmsqueeze * ((e + press * gnd.across[1:-1]) / m) # (e-u*g.across)/m
         if crank == first:
             dmsqueeze[0] = 0.
             desqueeze[0] = 0.
@@ -483,6 +490,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
         # ii = input("L")
         rho0 = rho[0] ; press0 = press[0] ; u0 = u[0] ; urad0 = urad[0] ; v0 = v[0] ; beta0 = beta[0] #
         crossfrac = gnd.across[1] / gnd.across[0]
+        crossfac = 1.
         rho1 = rho0 * crossfrac
         #        dr = 1./gnd.r[0]-1./gnd.r[1]
         #print(str(dv)+"=dv")
@@ -493,10 +501,12 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
         urad1 = u1*(1.-beta1)/(1.-beta1/2.)
         #   betafun_p(Fbeta(rho0, press0, betacoeff))
         rho = concatenate([[rho1], rho])
-        edv = 0.41
-        # edv = 0.
+        # edv = 0.41
+        edv = 0.
         # dv = -4. /(gnd.r[1]+gnd.r[0]) /(gnd.r[2]+gnd.r[1]) *v0/gnd.r[0]
-        v = concatenate([[-v0+dv*(1.-edv) + edv*dv*scalarstep(-v0/dv, 0.01, 10.)], v]) # inner BC for v
+        v1 = -minimum(v0,0.)+dv
+        # -v0+dv*(1.-edv) + edv*dv*scalarstep(-v0/dv, 0.01, 10.)
+        v = concatenate([[v1], v]) # inner BC for v
         u = concatenate([[u1], u]) 
         urad = concatenate([[urad1], urad])
             # [3.*(1.-beta0)/(4.-3./2.*beta0)*bernoulli], urad])
@@ -530,7 +540,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
 
     g1 = Gamma1(5./3., beta)
     g1[:] = 5./3. # stability?
-    vl, vm, vr = sigvel_hybrid(v, sqrt(g1*press/rho)*(1.+0.5*double(not(raddiff))), 4./3., rho, press)
+    vl, vm, vr = sigvel_hybrid(v, sqrt(g1*press/rho)*(1.5), 4./3., rho, press)
     # print("sigvel (h) = "+str(vl.min())+".."+str(vr.max()))
     # ii =input("V")
     if any(vl>=vm) or any(vm>=vr):
@@ -626,8 +636,11 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
 
     # outer BC:
     if (crank == last) & (rightpack_save is None):
+        prim['v'][-1] = -mdot / (prim['rho'] * g.across)[-1] # velocity should be consistent with the mass accretion rate
+        if ifturnoff:
+            prim['rho'][-1] *= turnofffactor # reducing the mass flow at the outer limit
         rightpack_save = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]}
-
+        
     ltot = 0. # total luminosity of the flow (required for IRR)
     timectr = 0
     
@@ -885,7 +898,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
     # wsort = argsort(r) # restoring the proper order of inputs
     #    r = r[wsort] ;  m = m[wsort] ;  e = e[wsort]
     # rho = rho[wsort] ; v = v[wsort] ; u = u[wsort] ; urad = urad[wsort] ; beta = beta[wsort] ; umagtar = umagtar[wsort]
-    qloss = qloss_separate(rho, v, u, gglobal)
+    qloss = qloss_separate(rho, urad, gglobal)
     ltot = trapz(qloss, x = gglobal.l) 
     mtot = trapz(m, x = gglobal.l)
     etot = trapz(e, x = gglobal.l)
@@ -896,7 +909,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0):
     print(str(t*tscale)+' '+str(mtot)+'\n')
     # print("dt = "+str(dt)+'\n')
     dt, dt_CFL, dt_thermal, dt_diff = timestepdetails(gglobal, rho, press, u, v, urad,  xirad = xirad, raddiff = raddiff, CFL = CFL, Cdiff = Cdiff, Cth = Cth, taumin = taumin, taumax = taumax)
-    qloss = qloss_separate(rho, v, u, gglobal, dt=dt)
+    qloss = qloss_separate(rho, urad, gglobal, dt=dt)
     print("dt = "+str(dt)+" = "+str(dt_CFL)+"; "+str(dt_thermal)+"; "+str(dt_diff)+"\n")
     fflux.flush() ; ftot.flush()
     if hfile is not None:
@@ -1005,7 +1018,7 @@ def alltire():
         vinit=vout *sqrt(rmax/g.r) # initial velocity
         
         # setting the initial distributions of the primitive variables:
-        rho = copy(abs(mdot) / (abs(vout)+abs(vinit)) / g.across) 
+        rho = copy(abs(mdot) / (abs(vout)+abs(vinit)) / g.across)
         #   rho *= 1. + (g.r/rstar)**2
         # total mass
         mass = trapz(rho*g.across, x=g.l)
@@ -1014,6 +1027,7 @@ def alltire():
         # ii = input('M')
         rho *= meq/mass * minitfactor # normalizing to the initial mass
         vinit = vout * sqrt(rmax/g.r) * ((g.r-rstar)/(rmax-rstar)) # to fit the v=0 condition at the surface of the star
+        vinit *= abs(mdot / (rho * vinit * g.across)[-1])
         v = copy(vinit)
         #        print("umagout = "+str(umagout))
         #        ii = input("vout * mdot = "+str(vout*mdot/g.across[-1]))

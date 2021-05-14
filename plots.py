@@ -383,6 +383,8 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
     mow = config[conf].getfloat('mow')
     b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
     umag1 = b12**2*2.29e6*m1
+    print("mdot = "+str(mdot))
+    ii = input("M")
     print("Umag = "+str(umag)+" = "+str(umag1)+"\n")
     betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
     
@@ -445,6 +447,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
         betaeff_m[k] = (umagtar/rho)[0:1].mean() * rstar * 4.
         #  print(rstar)
         mdar[k, :] = mfun(rnew)
+        print("mdor[-1] = "+str(mdar[k,-1]))
         tar[k] = t
     nv=30
     vmin = round(var.min(),2)
