@@ -519,8 +519,28 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
     print("mass loss starts at "+str(tar[mamax]*tscale)+"+/-"+\
           str((tar[mamax+1]-tar[mamax-1])*tscale/2.))
     print(" at radius "+str(rvent[mamax])+"+/-"+str(drvent[mamax]))
-    someplots(rnew, [mdmean1, mdmean2, mdmean3, mdmean1*0.+mdot], xtitle=r'$R/R_*$', ytitle=r'$sc^2/L_{\rm Edd}$', \
-              formatsequence=['k.', 'gx', 'b+', 'r-'], ylog = False, xlog = True, name=outdir+"/mdmean")
+    #someplots(rnew, [mdmean1, mdmean2, mdmean3, mdmean1*0.+mdot], xtitle=r'$R/R_*$', ytitle=r'$sc^2/L_{\rm Edd}$', \
+    #          formatsequence=['k.', 'gx', 'b+', 'r-'], ylog = False, xlog = True, name=outdir+"/mdmean")
+
+    mdmean = mdar.mean(axis=0)
+    mdstd = mdar.std(axis=0)
+
+    clf()
+    fig=figure()
+    plot(rnew, rnew*0.+1., ':k')
+    plot(rnew, rnew*0., '--k')
+    plot(rnew, mdmean/mdot, '-k')
+    plot(rnew, (mdmean+mdstd)/mdot, color='gray')
+    plot(rnew, (mdmean-mdstd)/mdot, color='gray')
+    xscale('log') ;  xlabel(r'$R/R_{\rm *}$', fontsize=14)
+    ylabel(r'$\langle s \rangle / \dot{m}$', fontsize=14)
+    fig.set_size_inches(3.35, 2.)
+    fig.tight_layout()
+    savefig(outdir+'/q2d_mdmean.png')
+    savefig(outdir+'/q2d_mdmean.eps')
+    close('all')
+    
+
     someplots(tar*tscale, [betaeff, betaeff_m, betavent], xtitle=r'$t$, s', ytitle=r'$\frac{u+P}{\rho}\frac{R_*}{GM_*}$', \
               formatsequence=['k.', 'r-', 'b:'], ylog = False, xlog = False, name=outdir+"/betaeff", yrange = [0., betaeff.max()*1.1])
     print("mean effective betaBS = "+str(betaeff.mean()))
@@ -645,11 +665,21 @@ def rhocurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", conf =
     
     someplots(t, [rho0, rho1, rho_acc], name = "rho0", xtitle=r'$t$, s', ytitle=r'$\rho_0$', xlog=False, ylog=True, formatsequence = ['k-', 'r:', 'b--'])
 
-def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=False, conf = 'DEFAULT', rmax = None):
+def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=False, conf = 'DEFAULT', rmax = None, mdotshow = False):
     '''
     plots a series of velocity curves from the ascii output
     '''
     rstar = config[conf].getfloat('rstar')
+    mdot = config[conf].getfloat('mdot')
+    tscale = config[conf].getfloat('tscale')
+    m1 = config[conf].getfloat('m1')
+    tscale *= m1
+
+    outdir = os.path.dirname(prefix)
+    geofile = outdir+"/geo.dat"
+    print("mdot = "+str(mdot))
+    ii = input("M")
+    r, theta, alpha, across, l, delta = geo.gread(geofile) 
 
     kctr = 0
     vmin=0. ; vmax=0.
@@ -657,14 +687,17 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
     
     clf()
     fig = figure()
-    for k in arange(n1,n2,step):
+    for k in arange(nt)*step+n1:
         fname = prefix + entryname(k, ndig=5) + postfix
         print(fname)
         lines = loadtxt(fname, comments="#")
         print(shape(lines))
-        r = lines[:,0] ; v = lines[:,2]
+        r = lines[:,0] ; v = lines[:,2] ; rho = lines[:,1]
         nr = size(r)
-        plot(r, v, label = str(k))
+        if mdotshow:
+            plot(r, v*rho*across, label = str(k))
+        else:
+            plot(r, v, label = str(k))
         if rmax is not None:
             vmincurrent = v[r<rmax].min()
             vmaxcurrent = v[r<rmax].max()
@@ -678,6 +711,9 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         if plot2d & (kctr==0):
             tar = zeros(nt, dtype=double)
             v2 = zeros([nt, nr], dtype=double)
+            if mdotshow:
+                m2 = zeros([nt, nr], dtype=double)
+                rho2 = zeros([nt, nr], dtype=double)
         if(plot2d):
             ff=open(fname)
             stime = ff.readline()
@@ -685,18 +721,28 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
             tar[kctr] = double(''.join(re.findall("\d+[.]\d+e-\d+|\d+[.]\d+", stime)))
             print(stime+": "+str(tar[kctr]))
             v2[kctr,:] = v[:]
+            if mdotshow:
+                m2[kctr,:] = (rho*v*across)[:]
+                rho2[kctr,:] = (rho)[:]                
             kctr += 1
-    plot(r, -1./sqrt(r*rstar), '--k', label='virial')
-    plot(r, -1./7./sqrt(r*rstar), ':k', label=r'$\frac{1}{7}$ virial')
+    if mdotshow:
+        plot(r, r*0.-mdot*4.*pi, '--k', label=r'$\dot{M}$')
+    else:
+        plot(r, -1./sqrt(r*rstar), '--k', label='virial')
+        plot(r, -1./7./sqrt(r*rstar), ':k', label=r'$\frac{1}{7}$ virial')
     if nt < 10:
         legend()
     xscale('log')
 
-    vmin = maximum(vmin, -1.) ; vmax = minimum(vmax, 1.)
-    ylim(vmin, vmax)
+    if not(mdotshow):
+        vmin = maximum(vmin, -1.) ; vmax = minimum(vmax, 1.)
+        ylim(vmin, vmax)
+        ylabel(r'$v/c$')
+    else:
+        ylabel(r'$\dot{M}$')
     if rmax is not None:
         xlim(1., rmax)
-    xlabel(r'$R/R_*$') ; ylabel(r'$v/c$')
+    xlabel(r'$R/R_*$')
     fig.set_size_inches(5, 4)
     fig.tight_layout()
     savefig("Vcurvestack.png")
@@ -704,7 +750,10 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         nv=20
         clf()
         fig=figure()
-        pcolormesh(r, tar, v2, cmap='hot', vmin=vmin, vmax=vmax) #, levels=(arange(nv+1)-0.5)/double(nv)*(vmax-vmin)+vmin, cmap='hot')
+        if mdotshow:
+            pcolormesh(r, tar, -m2/mdot/4./pi, cmap='hot', vmin=-1., vmax=2.)
+        else:
+            pcolormesh(r, tar, v2, cmap='hot', vmin=vmin, vmax=vmax)
         colorbar()
         xlabel(r'$R/R_*$') ; ylabel(r'$t$, s')
         if rmax is not None:
@@ -716,6 +765,31 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         fig.set_size_inches(4, 6)
         fig.tight_layout()
         savefig("Vcurvestack_2d.png")
+        if mdotshow:
+            rhot = copy(rho2)*0. ; vrhor = copy(m2)*0.
+            for k in arange(size(r))-1:
+                rhot[:-1,k] = (rho2[1:,k]-rho2[:-1,k])/(tar[1:]-tar[:-1])*tscale * (across[k]+across[k+1])/2.
+                vrhor[:,k] = -(m2[:,k+1]-m2[:,k])/(r[k+1]-r[k])
+            nlev = 10
+            # rholev1 = quantile(rhot, 0.1)
+            # rholev2 = quantile(rhot, 0.9)
+            rholev1 = -1.5 ; rholev2 = 1.5
+            rholev = (rholev2 - rholev1) * arange(nlev)/double(nlev-1)+rholev1
+            clf()
+            contourf(r, tar, (rhot-vrhor)/(abs(rhot)+abs(vrhor)), cmap='hot', levels = rholev)
+            colorbar()
+            contour(r, tar, (rhot-vrhor)/(abs(rhot)+abs(vrhor)), levels = [-1.,0.,1.], colors=['k','w','k'])
+            xlabel(r'$R/R_*$') ; ylabel(r'$t$, s')
+            if rmax is not None:
+                xlim(1., rmax)
+            else:
+                xscale('log')
+            # print(tar.min())
+            ylim(tar.min(), tar.max())
+            fig.set_size_inches(4, 6)
+            fig.tight_layout()
+            savefig("Vcurvestack_drho.png")
+            
     close('all')
         
 

@@ -467,7 +467,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     ii = input("xs")
     # spherization radius
     rsph =1.5*mdot/4./pi
-    eqlum = mdot/rstar
+    eqlum = mdot/rstar*(1.-BSbeta)
     print("m1 = "+str(m1))
     print("mdot = "+str(mdot))
     print("rstar = "+str(rstar))
@@ -557,11 +557,14 @@ def tailfit(prefix = 'out/flux', trange = None, ifexp = False, ncol = -1):
     if ifexp:
         par, pcov = curve_fit(tailexpfun, t1, f1, p0=[t1.max()/5.,f1.max()-f1.min(), 0., f1.min()])
     else:
-        par, pcov = curve_fit(tailfitfun, t1, f1, p0=[-2.,5., 0., f1.min()])
+        par, pcov = curve_fit(tailfitfun, t1, f1, p0=[-2.,5., trange[0], f1.min()])
     if ifplot:
         if ifexp:
             plots.someplots(t, [f, tailexpfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'], yrange=[f[f>0.].min(), f.max()])
-            plots.someplots(t, [f-par[3], tailexpfun(t, par[0], par[1], par[2], 0.)], name = prefix+"_dfit", xtitle=r'$t$, s', ytitle=r'$\Delta L$', formatsequence=['k.', 'r-'], ylog = True, xlog = False)
+            if par[1]>0.:
+                plots.someplots(t, [f-par[3], tailexpfun(t, par[0], par[1], par[2], 0.)], name = prefix+"_dfit", xtitle=r'$t$, s', ytitle=r'$\Delta L$', formatsequence=['k.', 'r-'], ylog = True, xlog = False)
+            else:
+                plots.someplots(t, [par[3]-f, -tailexpfun(t, par[0], par[1], par[2], 0.)], name = prefix+"_dfit", xtitle=r'$t$, s', ytitle=r'$\Delta L$', formatsequence=['k.', 'r-'], ylog = True, xlog = False)
         else:
             plots.someplots(t, [f, tailfitfun(t, par[0], par[1], par[2], par[3]), t*0.+par[3]], name = prefix+"_fit", xtitle=r'$t$, s', ytitle=r'$L$', xlog=False, ylog=False, formatsequence=['k.', 'r-', 'g:'], yrange=[f[f>0.].min(), f.max()])
             plots.someplots(t, [f-par[3], tailfitfun(t, par[0], par[1], par[2], 0.)], name = prefix+"_dfit", xtitle=r'$t$, s', ytitle=r'$\Delta L$', formatsequence=['k.', 'r-'], ylog = True, xlog = False)
@@ -571,6 +574,7 @@ def tailfit(prefix = 'out/flux', trange = None, ifexp = False, ncol = -1):
     else:
         print("slope ="+str(par[0])+"+/-"+str(sqrt(pcov[0,0])))
     print("y0 ="+str(par[3])+"+/-"+str(sqrt(pcov[3,3])))
+    print("norm ="+str(par[1])+"+/-"+str(sqrt(pcov[1,1])))
        
 def taus(n, prefix = 'out/tireout', ifhdf = True, conf = 'DEFAULT'):
     '''
@@ -694,6 +698,8 @@ def energytest(infile, n1, n2, dn, conf = 'DEFAULT'):
     '''
     tracks the evolution of different types of energy
     '''
+    geofile = os.path.dirname(infile)+"/geo.dat"
+    r, theta, alpha, across, l, delta = geo.gread(geofile)
 
     n = arange(n1, n2, dn)
     nt = size(n)
@@ -703,9 +709,9 @@ def energytest(infile, n1, n2, dn, conf = 'DEFAULT'):
     
     for k in arange(nt):
         entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(infile, n[k])
-        ekin[k] = trapz(rho * v**2/2., x = l)
-        epot[k] = -trapz(rho / r, x = l)
-        eheat[k] = trapz(u, x = l)
+        ekin[k] = trapz(rho * v**2/2. * across, x = l)
+        epot[k] = -trapz(rho / r * across, x = l)
+        eheat[k] = trapz(u * across, x = l)
         etot[k] = ekin[k] + epot[k] + eheat[k]
         tar[k] = t
         ltot[k] = trapz(qloss, x=l)
@@ -721,6 +727,18 @@ def energytest(infile, n1, n2, dn, conf = 'DEFAULT'):
     dedt = (etot[1:]-etot[:-1])/(tar[1:]-tar[:-1]) * tscale
     dedt_p = (epot[1:]-epot[:-1])/(tar[1:]-tar[:-1]) * tscale
 
-    plots.someplots(tar[1:], [-dedt, ltot[1:], dedt_p], formatsequence = ['k-', 'b:', 'k:'], 
+    plots.someplots(tar[1:], [-dedt, ltot[1:], dedt_p, dedt_p+ltot[1:]-dedt], formatsequence = ['k-', 'b--', 'k:', 'r:'], 
                     name = os.path.dirname(infile)+'/energytest_d', xlog = False, 
                     xtitle = r'$t$, s', ytitle = r'$dE/dt$', yrange = [-ltot.max(), ltot.max()*2.])
+
+def masstest(indir):
+
+    massfile = indir + '/totals.dat'
+    
+    masslines = loadtxt(massfile, comments="#", delimiter=" ", unpack=False)
+    
+    t=masslines[:,0] ; m=masslines[:,1] ; mlost=masslines[:,3] ; macc=masslines[:,4] ; mdotcurrent = masslines[:,5]
+
+    plots.someplots(t, [m-m[0], macc-mlost-(macc[0]-mlost[0])], name = 'mbalance', formatsequence = ['k-', 'r:', 'b--'],
+                    xlog = False, ylog = False, xtitle = r'$t$, s', ytitle = r'$M$')
+    print("mass change / mass injected = "+str((m[-1]-m[0])/(macc[-1]-macc[0])))

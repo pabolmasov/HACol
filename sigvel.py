@@ -54,15 +54,35 @@ def sigvel_hybrid(v, cs, g1, rho, p):
     '''
     hybrid estimates by Toro (1994)
     '''
-    rhomean = (rho[1:]+rho[:-1])/2. ; csmean = (cs[1:]+cs[:-1])/2. 
-    pstar = (p[1:]+p[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
+    rhomean = (rho[1:]+rho[:-1])/2. ; csmean = (cs[1:]+cs[:-1])/2.
+    z = (g1-1.)/2./g1
+    pstar = ((cs[:-1]+cs[1:]-(g1-1.)/2.*(v[1:]-v[:-1]))/((cs/p**z)[:-1]+(cs/p**z)[1:]))**(1./z)
+    # (p[1:]+p[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
     #  pstar *= 1.5
-    vstar = (v[1:]+v[:-1])/2. - (p[1:]-p[:-1])/rhomean/csmean/2.
+    # vstar = (v[1:]+v[:-1])/2. - (p[1:]-p[:-1])/rhomean/csmean/2.    
+    
     hsleft = pstar/p[:-1] ; hsright = pstar / p[1:]
-    qleft = maximum(sqrt(1.+(g1+1.)/2./g1*(hsleft-1.)), 1.)
-    qright = maximum(sqrt(1.+(g1+1.)/2./g1*(hsright-1.)), 1.)
+    qleft = sqrt(1.+(g1+1.)/2./g1*maximum(hsleft-1.,0.))
+    qright = sqrt(1.+(g1+1.)/2./g1*maximum(hsright-1.,0.))
+        
+    if any(qleft) < 0.:
+        print("qleft = "+str(qleft[where(qleft<0.)]))
+    if any(qright) < 0.:
+        print("qright = "+str(qright[where(qright<0.)]))
     vl = v[:-1]-cs[:-1]*qleft  ; vr = v[1:]+cs[1:]*qright
-    vstar = minimum(maximum(vstar, vl), vr)
+    vstar = ((rho*cs*v)[:-1]+(rho*cs*v)[:-1] + p[:-1]-p[1:])/((rho*cs)[:-1]+(rho*cs)[1:])    
+
+    # (p[1:]-p[:-1] + (rho*v)[:-1]*(vl-v[:-1]) - (rho*v)[1:]*(vr-v[1:])) / (rho[:-1]*(vl-v[:-1]) - rho[1:]*(vr-v[1:]))
+    # if there are points where vl > vr (there could be in a shock wave), let us swap the velocities 
+    winv = where(vl > vr)
+    if size(winv) > 0:
+    #    a = 2.*((vl-vr)/(qleft*cs[:-1]+cs[1:]*qright))[winv]-1.
+    #    vl[winv] -= a * (cs[:-1]*qleft)[winv]
+    #    vr[winv] += a * (cs[1:]*qright)[winv]
+        v1 = maximum(vl, vr)
+        v2 = minimum(vl, vr)
+        vl = minimum(v1, v2) ; vr = maximum(v1,v2)     
+    vstar = minimum(maximum(vstar, vl*0.99+vr*0.01), vr*0.99+vl*0.01)
     return vl, vstar, vr
     
 def sigvel_toro(m, s, e, p, fe, sl, sr, across_half, r_half, sth_half):
