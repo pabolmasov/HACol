@@ -706,6 +706,7 @@ def energytest(infile, n1, n2, dn, conf = 'DEFAULT'):
     
     etot = zeros(nt) ;    ekin = zeros(nt) ;    epot = zeros(nt)
     eheat = zeros(nt) ; tar = zeros(nt) ; ltot = zeros(nt)
+    mass = zeros(nt)
     
     for k in arange(nt):
         entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(infile, n[k])
@@ -715,14 +716,21 @@ def energytest(infile, n1, n2, dn, conf = 'DEFAULT'):
         etot[k] = ekin[k] + epot[k] + eheat[k]
         tar[k] = t
         ltot[k] = trapz(qloss, x=l)
+        mass[k] = trapz(rho * across, x = l)
 
+    llost = cumtrapz(ltot, x=tar, initial = 0.)
+        
     m1 = config[conf].getfloat('m1')
     tscale = config[conf].getfloat('tscale') * m1
     tar *= tscale
-    plots.someplots(tar, [etot, ekin, epot, eheat], 
+    plots.someplots(tar, [etot, ekin, epot, eheat, etot+llost], 
                     name = os.path.dirname(infile)+'/energytest',
-                    formatsequence = ['k-', 'b--', 'r:', 'g-.'],
+                    formatsequence = ['k-', 'b--', 'r:', 'g-.', 'm--'],
                     xtitle = r'$t$, s', ytitle = r'$E$')
+    plots.someplots(mass, [etot, ekin, epot, eheat, llost], 
+                    name = os.path.dirname(infile)+'/energytest_m',
+                    formatsequence = ['k-', 'b--', 'r:', 'g-.', 'm--'],
+                    xtitle = r'$M$', ytitle = r'$E$')
 
     dedt = (etot[1:]-etot[:-1])/(tar[1:]-tar[:-1]) * tscale
     dedt_p = (epot[1:]-epot[:-1])/(tar[1:]-tar[:-1]) * tscale

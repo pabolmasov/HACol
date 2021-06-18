@@ -30,7 +30,7 @@ def time_step(prim, g, dl, xirad = 1.5, raddiff = True, eta = 0., CFL = 0.5, Cdi
     # mass loss!
     if CMloss > 0.:
         perimeter = 2.*(2.*g.delta + g.across/g.delta)
-        dt_mloss = (g.across/perimeter /sqrt(csqest)).min()
+        dt_mloss = ((g.across/perimeter)[1:-1] /sqrt(csqest)).min()
         dt_thermal = minimum(dt_thermal, dt_mloss)
 
     # outputs luminosity if irradiation is included

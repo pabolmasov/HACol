@@ -759,7 +759,8 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         if rmax is not None:
             xlim(1., rmax)
         else:
-            xscale('log')
+            if r.max()/r.min() > 3.:
+                xscale('log')
         # print(tar.min())
         ylim(tar.min(), tar.max())
         fig.set_size_inches(4, 6)
