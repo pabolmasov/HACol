@@ -195,7 +195,7 @@ def gphi(g, dr = 0.):
         # dr0 = (g.r[1]-g.r[0])
         r = abs(g.r+dr-r0)+r0  # ((g.r-dr-r0)**4+dr0**4)**0.25+r0
     else:
-        r0 = g.r+dr
+        r = g.r+dr
     # r0 + abs(g.r+dr-r0)  # mirroring the potential at half the first cell (between the first cell and the ghost)
     #    if crank == first:
     phi = -1./r - 0.5*(r*g.sth*omega)**2 
