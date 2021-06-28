@@ -499,29 +499,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
     somemap(rnew, tar*tscale, mdar/mdot, name=outdir+'/q2d_m', \
             inchsize = [4,6], cbtitle = r'$s / \dot{M}$', levels = mdlev)
 
-    # mean mdar:
-    tslice1  = 0.02
-    tslice2  = 0.05
-    tslice3  = 0.08
-    
-    t1 = ((tar*tscale - tslice1)**2).argmin()
-    t2 = ((tar*tscale - tslice2)**2).argmin()
-    t3 = ((tar*tscale - tslice3)**2).argmin()
-    mdmean1 = mdar[t1,:] #.mean(axis = 0)
-    mdmean2 = mdar[t2,:] #.mean(axis = 0)
-    mdmean3 = mdar[t3,:] #.mean(axis = 0)
-    maskedvent = ma.masked_array(rvent, mask = (rvent>rshock))
-    maskedvent1 = ma.masked_array(rvent, mask = ((rvent>rshock)|(maxprat < 0.99)|(rvent > 10.)|(rvent<=1.))) # masked works incorrectly? 
-    someplots(tar*tscale, [rshock, rvent, maskedvent, maskedvent1], name=outdir+"/mdvent",
-              xtitle='$t$, s', ytitle=r"$R/R_*$", \
-              formatsequence=['k.', 'r:', 'r-', 'bo'], ylog = False, xlog = False, inchsize = [4,6])
-    mamax = maskedvent1.argmax()
-    print("mass loss starts at "+str(tar[mamax]*tscale)+"+/-"+\
-          str((tar[mamax+1]-tar[mamax-1])*tscale/2.))
-    print(" at radius "+str(rvent[mamax])+"+/-"+str(drvent[mamax]))
-    #someplots(rnew, [mdmean1, mdmean2, mdmean3, mdmean1*0.+mdot], xtitle=r'$R/R_*$', ytitle=r'$sc^2/L_{\rm Edd}$', \
-    #          formatsequence=['k.', 'gx', 'b+', 'r-'], ylog = False, xlog = True, name=outdir+"/mdmean")
-
+    # mean mdar
     mdmean = mdar.mean(axis=0)
     mdstd = mdar.std(axis=0)
 
@@ -708,23 +686,24 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
             vmin = vmincurrent
         if(vmaxcurrent>vmax):
             vmax = vmaxcurrent
-        if plot2d & (kctr==0):
+        if kctr == 0:
             tar = zeros(nt, dtype=double)
+        if plot2d & (kctr==0):           
             v2 = zeros([nt, nr], dtype=double)
-            if mdotshow:
-                m2 = zeros([nt, nr], dtype=double)
-                rho2 = zeros([nt, nr], dtype=double)
-        if(plot2d):
-            ff=open(fname)
-            stime = ff.readline()
-            ff.close()
-            tar[kctr] = double(''.join(re.findall("\d+[.]\d+e-\d+|\d+[.]\d+", stime)))
+        if mdotshow & (kctr==0):
+            m2 = zeros([nt, nr], dtype=double)
+            rho2 = zeros([nt, nr], dtype=double)
+        ff=open(fname)
+        stime = ff.readline()
+        ff.close()
+        tar[kctr] = double(''.join(re.findall("\d+[.]\d+e-\d+|\d+[.]\d+", stime)))
+        if(plot2d):            
             print(stime+": "+str(tar[kctr]))
             v2[kctr,:] = v[:]
-            if mdotshow:
-                m2[kctr,:] = (rho*v*across)[:]
-                rho2[kctr,:] = (rho)[:]                
-            kctr += 1
+        if mdotshow:
+            m2[kctr,:] = (rho*v*across)[:]
+            rho2[kctr,:] = (rho)[:]                
+        kctr += 1
     if mdotshow:
         plot(r, r*0.-mdot*4.*pi, '--k', label=r'$\dot{M}$')
     else:
@@ -767,30 +746,30 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         fig.tight_layout()
         savefig("Vcurvestack_2d.png")
         if mdotshow:
-            rhot = copy(rho2)*0. ; vrhor = copy(m2)*0.
-            for k in arange(size(r))-1:
-                rhot[:-1,k] = (rho2[1:,k]-rho2[:-1,k])/(tar[1:]-tar[:-1])*tscale * (across[k]+across[k+1])/2.
-                vrhor[:,k] = -(m2[:,k+1]-m2[:,k])/(r[k+1]-r[k])
-            nlev = 10
-            # rholev1 = quantile(rhot, 0.1)
-            # rholev2 = quantile(rhot, 0.9)
-            rholev1 = -1.5 ; rholev2 = 1.5
-            rholev = (rholev2 - rholev1) * arange(nlev)/double(nlev-1)+rholev1
+            kslice = 10
             clf()
-            contourf(r, tar, (rhot-vrhor)/(abs(rhot)+abs(vrhor)), cmap='hot', levels = rholev)
-            colorbar()
-            contour(r, tar, (rhot-vrhor)/(abs(rhot)+abs(vrhor)), levels = [-1.,0.,1.], colors=['k','w','k'])
-            xlabel(r'$R/R_*$') ; ylabel(r'$t$, s')
-            if rmax is not None:
-                xlim(1., rmax)
-            else:
-                xscale('log')
-            # print(tar.min())
-            ylim(tar.min(), tar.max())
+            plot(tar, rho2[:, kslice], 'k-')
+            plot(tar, rho2[:, kslice*2], 'b--')
+            #            plot(tar, rho2[:, -kslice], 'r:')
+            # yscale('log')
+            xlabel(r'$t$, s')
+            ylabel(r'$\rho$')            
             fig.set_size_inches(4, 6)
             fig.tight_layout()
             savefig("Vcurvestack_drho.png")
-            
+    
+    if mdotshow:
+        kslice1 = 10
+        kslice2 = 600
+        clf()
+        plot(tar, -m2[:, kslice1]/mdot/4./pi, 'k-')
+        plot(tar, -m2[:, kslice2]/mdot/4./pi, 'b--')
+        plot(tar, -m2[:, -10]/mdot/4./pi, 'r:')
+        plot(tar, -m2[:, -10]/mdot/2., 'r:')
+        xlabel(r'$t$, s')
+        ylabel(r'$s/\dot{M}$')
+        savefig("Vcurvestack_mdslice.png")
+        
     close('all')
         
 

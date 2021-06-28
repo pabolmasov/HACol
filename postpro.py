@@ -747,6 +747,6 @@ def masstest(indir):
     
     t=masslines[:,0] ; m=masslines[:,1] ; mlost=masslines[:,3] ; macc=masslines[:,4] ; mdotcurrent = masslines[:,5]
 
-    plots.someplots(t, [m-m[0], macc-mlost-(macc[0]-mlost[0])], name = 'mbalance', formatsequence = ['k-', 'r:', 'b--'],
+    plots.someplots(t, [m-m[0], macc-mlost-(macc[0]-mlost[0]), (macc-macc[0])*1e-2, (mlost-mlost[0])*1e-2], name = 'mbalance', formatsequence = ['k-', 'r:', 'b--', 'm-', 'c-'],
                     xlog = False, ylog = False, xtitle = r'$t$, s', ytitle = r'$M$')
     print("mass change / mass injected = "+str((m[-1]-m[0])/(macc[-1]-macc[0])))

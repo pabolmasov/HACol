@@ -205,7 +205,7 @@ def gforce(sinsum, g, dr):
     # gravitational force calculated self-consistently using gphi on cell boundaries
     #    if crank == first:
     phi = gphi(g, dr/2.)  # 
-    phi1 = gphi(g, -dr/2.)  # 
+    phi1 = gphi(g, -dr/2.)  #
     return sinsum * (( phi1 - phi ) / dr)[1:-1] # subefficient!
 # ( phi[1:-1] - phi[2:] ) / dr[1:-1] /2.
     
@@ -242,7 +242,7 @@ def toprim_separate(m, s, e, g):
     #    umin = u.min()
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
-    u, rho, press = regularize(u, rho, press)
+    # u, rho, press = regularize(u, rho, press)
     # after regularization, we need to update beta
     beta = betafun(Fbeta(rho, u, betacoeff))
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
@@ -292,7 +292,7 @@ def toprim(con, gnd = None):
     #    umin = u.min()
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
-    u, rho, press = regularize(u, rho, press)
+    # u, rho, press = regularize(u, rho, press)
     beta = betafun(Fbeta(rho, u, betacoeff)) # not the most efficient
     urad = u*(1.-beta)/(1.-beta/2.)
     prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press}
@@ -329,9 +329,9 @@ def fluxes(g, rho, v, u, press):
     #    gnd = l_g[nd]
     # across = g.across ; r = g.r  ; sth = g.sth 
     phi = gphi(g) # copy(-1./g.r-0.5*(g.r*g.sth*omega)**2)
-    s = rho * v * g.across # mass flux (identical to momentum per unit length -- can we use it?)
-    p = g.across * (rho*v**2 + press) # momentum flux
-    fe = g.across * v * (u + press + (v**2/2.+potfrac*phi)*rho) # energy flux without diffusion    
+    s = g.across * (v *rho) # mass flux (identical to momentum per unit length -- can we use it?)
+    p = s*v + press * g.across # momentum flux
+    fe = g.across * ( (u + press) * v + (v**2/2.+potfrac*phi)*(rho*v)) # energy flux without diffusion    
     return s, p, fe
 
 def qloss_separate(rho, urad, g, gin = False, dt = None):
@@ -381,8 +381,8 @@ def qloss_separate(rho, urad, g, gin = False, dt = None):
     
     return qloss
 
-def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., desqueeze = 0., dt = None):
-        # prim, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
+def sources(m, g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., desqueeze = 0., dt = None):
+    # prim, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
     '''
     computes the RHSs of conservation equations
     mass loss (and associated energy loss) is calculated separately (dmsqueeze)
@@ -409,15 +409,21 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     # else:
     #     taueff[:] = rho / (1./delta + 2. * delta /  across) 
     sinsum = 2.*cth / sqrt(3.*cth**2+1.)  # = sina*cth+cosa*sth = sin(theta+alpha)
+    # barycentering (does not work out)
+    #rc = copy(r)
+    #rc[1:-1] = ((m*r)[2:] + 2. * (m*r)[1:-1] + (m*r)[:-2])/m[1:-1]/4.
+    #rc[0] = (3. * (m*r)[0] + (m*r)[1])/m[0]/4.
+    #rc[-1] = ((m*r)[-2] + 3. * (m*r)[-1])/m[-1]/4.
+    
     force = -sinsum * rho * across / r**2
     if crank == first:
         force[0] = 0.
-    # force = copy(gforce(sinsum, g, dr)*rho*across) # without irradiation
-                  # *(1.-eta * ltot * tratfac(rho*delta, taumin, taumax))
+    #    force = copy(gforce(sinsum, rho, g, dr)*across) # without irradiation
+    # *(1.-eta * ltot * tratfac(rho*delta, taumin, taumax))
                   # +omega**2*r*sth*cosa)*rho*across) # *taufac
     # for k in arange(size(force)):
     #    print(str(force[k])+" = "+str(((-sinsum/r**2*across)*rho)[k]))
-    #    ii = input("F")
+    # ii = input("F")
     if eta>0.:
         gammaforce = -copy(gforce(sinsum, g, dr)) * eta * ltot * tratfac(rho*delta, taumin, taumax)
     else:
@@ -436,7 +442,11 @@ def sources(g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., d
     #        force[0] = 0. # no force on the innermost cell
     # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff, taumin, taumax) !!! need to include irradheating later!
     #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
-    dm = copy(rho*0.-dmsqueeze) 
+    if squeezemode:
+        if dmsqueeze.min() < 0.:
+            print("min(dmsq) = "+str(dmsqueeze.min()))
+            ii = input("dm")
+    dm = copy(rho)*0.-dmsqueeze
     #  dudt = copy(v*force-qloss) # +irradheating # copy
     ds = copy(force+gammaforce - dmsqueeze * v) # lost mass carries away momentum
     de = copy((force*(1.-potfrac)+gammaforce) * v - qloss - desqueeze)  #
@@ -455,7 +465,7 @@ def derivo(l_half, s_half, p_half, fe_half, dm, ds, de):
     input: l (midpoints), three fluxes (midpoints), three sources
     output: three temporal derivatives later used for the time step
     '''
-    nl=size(dm)
+    # nl=size(dm)
     # dmt=zeros(nl) ; dst=zeros(nl); det=zeros(nl)
     dmt = -(s_half[1:]-s_half[:-1])/(l_half[1:]-l_half[:-1]) + dm
     dst = -(p_half[1:]-p_half[:-1])/(l_half[1:]-l_half[:-1]) + ds
@@ -499,7 +509,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
     #if (dmsqueeze >0.).sum() > 5:        
     #    print("P>Umag in "+str((dmsqueeze >0.).sum())+" points")
     #    ii =input('dm')
-    dm, ds, de = sources(gnd, rho, v, u, urad, ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze, dt = dtq) 
+    dm, ds, de = sources(m, gnd, rho, v, u, urad, ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze, dt = dtq) 
 
     # adding ghost zones:
     if leftpack is not None:
@@ -565,14 +575,15 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
 
     g1 = Gamma1(5./3., beta)
     # g1[:] = 5./3. # stability?
-    u, rho, press = regularize(u, rho, press)
+    # u, rho, press = regularize(u, rho, press)
     cs = sqrt(g1*press/rho)
-    vl, vm, vr = sigvel_hybrid(v, cs, 5./3., rho, press)
+    vl, vm, vr = sigvel_hybrid(v, cs, 4./3., rho, press)
+    # vl, vm, vr = sigvel_roe(v, cs, rho)
     #if crank == first:
     #    vm[0] = maximum(-vm[1], 0.)
     #    vl[0] = -1.
     #    vr[0] = 1.
-        
+    
     if any(vl>vm) or any(vm>vr):
         print("core "+str(crank)+": sigvel (h) = "+str(vl.min())+".."+str(vr.max()))
         print("core "+str(crank)+": dv = "+str((vr-vl).min())+".."+str((vr-vl).max()))
@@ -602,7 +613,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
     #    fe[0] = 0.
     m, s, e = tocon_separate(rho, v, u, gnd) # conserved quantities for the extended mesh
     if rsolver == 'HLLC':
-        fm_half, fs_half, fe_half =  solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press)
+        fm_half, fs_half, fe_half =  solv.HLLC1([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, u)
     else:
         fm_half, fs_half, fe_half =  solv.HLLE([fm, fs, fe], [m, s, e], vl, vr, vm)
 
@@ -800,7 +811,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         comm.send(outblock, dest = first, tag = crank)
     else:
         tireouts(hfile, comm, outblock, fflux, ftot, nout = nout, dmlost = dmlost)
-    nout += 1
+    # nout += 1
     if thetimer is not None:
         thetimer.stop("io")
         
@@ -916,6 +927,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
 
         con = updateCon(con, [dcon1, dcon2, dcon3, dcon4], dt,
                         coeffs = [1./6., 1./3., 1./3., 1./6.])
+        # con = updateCon(con, dcon2, dt) #!!! temporary
         if squeezemode:
             dmlost += (dcon1['dmloss'] + 2.* dcon2['dmloss'] + 2.*dcon3['dmloss'] + dcon4['dmloss'])/6. * dt
         
@@ -1129,7 +1141,7 @@ def alltire():
             rho *= (rhonoize+1.)
             beta = betafun_p(Fbeta_press(rho, press, betacoeff))
             u = press * 3. * (1.-beta/2.)
-            u, rho, press = regularize(u, rho, press)
+            # u, rho, press = regularize(u, rho, press)
 
         # restart block:
         # if we want to restart from a stored configuration
