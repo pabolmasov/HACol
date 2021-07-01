@@ -613,7 +613,7 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
     #    fe[0] = 0.
     m, s, e = tocon_separate(rho, v, u, gnd) # conserved quantities for the extended mesh
     if rsolver == 'HLLC':
-        fm_half, fs_half, fe_half =  solv.HLLC1([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, u)
+        fm_half, fs_half, fe_half =  solv.HLLC1([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, v)
     else:
         fm_half, fs_half, fe_half =  solv.HLLE([fm, fs, fe], [m, s, e], vl, vr, vm)
 

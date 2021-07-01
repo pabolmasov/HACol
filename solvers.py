@@ -45,7 +45,7 @@ def HLLC(fs, qs, sl, sr, sm, rho, press):
     makes a proxy for a half-step flux,
     following the basic framework of Toro et al. 1994
     flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right, velocity of the contact discontinuity
-    Does not work yet :9(
+    works for Sod
     '''
     f1, f2, f3 = fs  ;  q1, q2, q3 = qs
     ds = sr - sl
@@ -135,33 +135,41 @@ def HLLC(fs, qs, sl, sr, sm, rho, press):
        
     return fhalf1, fhalf2, fhalf3
 
-def HLLC1(fs, qs, sl, sr, sm, rho, press, u):
+def HLLC1(fs, qs, sl, sr, sm, rho, press, v):
     '''
     second version of HLLC, according to Fleischmann et al.(2020)
+    Sod test passed (about 2 times better than HLLE; rarefaction wave different)
     '''
     f1, f2, f3 = fs  ;  q1, q2, q3 = qs
     ds = sr - sl
-
-    v = f1/q1
+    # v = f1/q1
     
     nx=size(q1)
-    fhalf1=zeros(nx-1, dtype=double)  ;  fhalf2=zeros(nx-1, dtype=double)  ;  fhalf3=zeros(nx-1, dtype=double)    
+    #     fhalf1=zeros(nx-1, dtype=double)  ;  fhalf2=zeros(nx-1, dtype=double)  ;  fhalf3=zeros(nx-1, dtype=double)    
 
     q1star_left = q1[:-1] * (sl-v[:-1])/(sl-sm)
-    q2star_left = q2[:-1] * (sl-v[:-1])/(sl-sm) * sm
-    q3star_left = q3[:-1] * (sl-v[:-1])/(sl-sm) * ((u/rho)[:-1] + (sm-v[:-1])*(sm+press[:-1]/rho[:-1]/(sl-v[:-1])))
+    q2star_left = q1[:-1] * (sl-v[:-1])/(sl-sm) * sm
+    q3star_left = (sl-v[:-1])/(sl-sm) * (q3[:-1] + (sm-v[:-1])*(sm+(press/rho)[:-1]/(sl-v[:-1])) * q1[:-1])
     q1star_right = q1[1:] * (sr-v[1:])/(sr-sm)
-    q2star_right = q2[1:] * (sr-v[1:])/(sr-sm) * sm
-    q3star_right = q3[1:] * (sr-v[1:])/(sr-sm) * ((u/rho)[1:] + (sm-v[1:])*(sm+press[1:]/rho[1:]/(sr-v[1:])))
+    q2star_right = q1[1:] * (sr-v[1:])/(sr-sm) * sm
+    q3star_right = (sr-v[1:])/(sr-sm) * (q3[1:] + (sm-v[1:])*(sm+(press/rho)[1:]/(sr-v[1:])) * q1[1:]) 
 
+    '''
+    f1half = (f1[:-1]+f1[1:])/2. - (abs(sl) * (q1star_left-q1[:-1]) + abs(sm) * (q1star_right - q1star_left) \
+                                    + abs(sr) * (q1star_right-q1[1:]))/2.
+    f2half = (f2[:-1]+f2[1:])/2. - (abs(sl) * (q2star_left-q2[:-1]) + abs(sm) * (q2star_right - q2star_left) \
+                                    + abs(sr) * (q2star_right-q2[1:]))/2.
+    f3half = (f3[:-1]+f3[1:])/2. - (abs(sl) * (q3star_left-q3[:-1]) + abs(sm) * (q3star_right - q3star_left) \
+                                    + abs(sr) * (q3star_right-q3[1:]))/2.
+    '''
     f1half = (1.+sign(sm))/2. * (f1[:-1]+minimum(sl, 0.)*(q1star_left-q1[:-1])) \
              +  (1.-sign(sm))/2. * (f1[1:]+maximum(sr, 0.)*(q1star_right-q1[1:]))
-    f2half = (1.+sign(sm))/2. * (f2[:-1]+minimum(sl, 0.)*(q2star_left-q1[:-1])) \
+    f2half = (1.+sign(sm))/2. * (f2[:-1]+minimum(sl, 0.)*(q2star_left-q2[:-1])) \
              +  (1.-sign(sm))/2. * (f2[1:]+maximum(sr, 0.)*(q2star_right-q2[1:]))
     f3half = (1.+sign(sm))/2. * (f3[:-1]+minimum(sl, 0.)*(q3star_left-q3[:-1])) \
              +  (1.-sign(sm))/2. * (f3[1:]+maximum(sr, 0.)*(q3star_right-q3[1:]))
-
-    return fhalf1, fhalf2, fhalf3
+    
+    return f1half, f2half, f3half
     
    
    

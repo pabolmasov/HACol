@@ -766,6 +766,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         plot(tar, -m2[:, kslice2]/mdot/4./pi, 'b--')
         plot(tar, -m2[:, -10]/mdot/4./pi, 'r:')
         plot(tar, -m2[:, -10]/mdot/2., 'r:')
+        # ylim(-1., 3.)
         xlabel(r'$t$, s')
         ylabel(r'$s/\dot{M}$')
         savefig("Vcurvestack_mdslice.png")
