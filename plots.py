@@ -662,7 +662,8 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
     kctr = 0
     vmin=0. ; vmax=0.
     nt = int(floor((n2-n1)/step)) # ; nr = size(r)
-    
+
+    close("all")
     clf()
     fig = figure()
     for k in arange(nt)*step+n1:
@@ -721,6 +722,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         ylabel(r'$\dot{M}$')
     if rmax is not None:
         xlim(1., rmax)
+        ylim(m2.min(), m2.max())
     xlabel(r'$R/R_*$')
     fig.set_size_inches(5, 4)
     fig.tight_layout()
@@ -759,13 +761,13 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
             savefig("Vcurvestack_drho.png")
     
     if mdotshow:
-        kslice1 = 10
+        kslice1 = 1
         kslice2 = 600
         clf()
         plot(tar, -m2[:, kslice1]/mdot/4./pi, 'k-')
         plot(tar, -m2[:, kslice2]/mdot/4./pi, 'b--')
         plot(tar, -m2[:, -10]/mdot/4./pi, 'r:')
-        plot(tar, -m2[:, -10]/mdot/2., 'r:')
+        #  plot(tar, -m2[:, -10]/mdot, 'r:')
         # ylim(-1., 3.)
         xlabel(r'$t$, s')
         ylabel(r'$s/\dot{M}$')

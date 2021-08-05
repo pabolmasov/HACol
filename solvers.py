@@ -2,7 +2,7 @@ from numpy import *
 
 debug = False
 
-def HLLE(fs, qs, sl, sr, sm):
+def HLLE(fs, qs, sl, sr, sm, press, crossfacl, crossfacr, fsp, phi = None):
     '''
     makes a proxy for a half-step flux, HLLE-like
     flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
@@ -13,6 +13,8 @@ def HLLE(fs, qs, sl, sr, sm):
     # v = copy(f1/q1) # local velocity (mid cells)
     # sl1 = sl ; sr1 = sr
     # sl1 = minimum(sl, (v-cs)[:-1]) ; sr1 = maximum(sr, (v+cs)[1:])
+    # if phi is not None:
+    #    sl *= phi ; sr *= phi
     sl1 = minimum(sl, 0.) ; sr1 = maximum(sr, 0.)
     ds = sr1-sl1 # see Einfeldt et al. 1991 eq. 4.4
     #    print(ds)
@@ -38,6 +40,11 @@ def HLLE(fs, qs, sl, sr, sm):
             fhalf1[wneg] = f1[1:]
             fhalf2[wneg] = f2[1:]
             fhalf3[wneg] = f3[1:]
+    #  if phi is not None:
+    # fhalf2 += (1.-phi) * (sqrt(rho[1:])*q1[1:]+sqrt(rho[:-1])*q1[:-1]) * ds * (sqrt(rho[1:])*v[1:]-sqrt(rho[:-1])*v[:-1]) / 2. / (sqrt(rho[1:])+sqrt(rho[:-1]))**2
+    # effectively, this is a flux-splitter:
+    # fhalf2 += fsp[1:] * (crossfacr - 1.) - fsp[:-1] * (crossfacl - 1.)
+
     return fhalf1, fhalf2, fhalf3
 
 def HLLC(fs, qs, sl, sr, sm, rho, press):
@@ -135,13 +142,14 @@ def HLLC(fs, qs, sl, sr, sm, rho, press):
        
     return fhalf1, fhalf2, fhalf3
 
-def HLLC1(fs, qs, sl, sr, sm, rho, press, v):
+def HLLC1(fs, qs, sl, sr, sm, rho, press, v, phi = None):
     '''
     second version of HLLC, according to Fleischmann et al.(2020)
     Sod test passed (about 2 times better than HLLE; rarefaction wave different)
+    phi is low-Mach correction
     '''
     f1, f2, f3 = fs  ;  q1, q2, q3 = qs
-    ds = sr - sl
+    #    ds = sr - sl
     # v = f1/q1
     
     nx=size(q1)
@@ -161,16 +169,90 @@ def HLLC1(fs, qs, sl, sr, sm, rho, press, v):
                                     + abs(sr) * (q2star_right-q2[1:]))/2.
     f3half = (f3[:-1]+f3[1:])/2. - (abs(sl) * (q3star_left-q3[:-1]) + abs(sm) * (q3star_right - q3star_left) \
                                     + abs(sr) * (q3star_right-q3[1:]))/2.
+    
+    if phi is not None:
+        sl1 = copy(sl-sm) * phi + sm # phi * copy(sl) # phi*(sl-sm)+sm
+        sr1 = copy(sr-sm) * phi + sm # phi * copy(sr) # phi*(sr-sm)+sm
+        sm1 = sm
+    else:
     '''
-    f1half = (1.+sign(sm))/2. * (f1[:-1]+minimum(sl, 0.)*(q1star_left-q1[:-1])) \
-             +  (1.-sign(sm))/2. * (f1[1:]+maximum(sr, 0.)*(q1star_right-q1[1:]))
-    f2half = (1.+sign(sm))/2. * (f2[:-1]+minimum(sl, 0.)*(q2star_left-q2[:-1])) \
-             +  (1.-sign(sm))/2. * (f2[1:]+maximum(sr, 0.)*(q2star_right-q2[1:]))
-    f3half = (1.+sign(sm))/2. * (f3[:-1]+minimum(sl, 0.)*(q3star_left-q3[:-1])) \
-             +  (1.-sign(sm))/2. * (f3[1:]+maximum(sr, 0.)*(q3star_right-q3[1:]))
+    if phi is not None:
+        sl1 = sl * sin(pi/2.*phi)
+        sr1 = sr * sin(pi/2.*phi)
+        sm1 = sm
+    else:
+        sl1 = sl
+        sr1 = sr
+        sm1 = sm
+        
+    # compact form from Fleischmann 2021 
+    f1half = (1.+sign(sm1))/2. * (f1[:-1]+minimum(sl1, 0.)*(q1star_left-q1[:-1])) \
+             +  (1.-sign(sm1))/2. * (f1[1:]+maximum(sr1, 0.)*(q1star_right-q1[1:]))
+    f2half = (1.+sign(sm1))/2. * (f2[:-1]+minimum(sl1, 0.)*(q2star_left-q2[:-1])) \
+             +  (1.-sign(sm1))/2. * (f2[1:]+maximum(sr1, 0.)*(q2star_right-q2[1:]))
+    f3half = (1.+sign(sm1))/2. * (f3[:-1]+minimum(sl1, 0.)*(q3star_left-q3[:-1])) \
+             +  (1.-sign(sm1))/2. * (f3[1:]+maximum(sr1, 0.)*(q3star_right-q3[1:]))
+
+    if False:
+        gamma = 4./3.
+        cs = sqrt(gamma * press/rho)
+        rhomean = (rho[1:]+rho[:-1])/2. ; csmean = (cs[1:]+cs[:-1])/2.
+        f2half += (1.-phi) * rhomean * csmean / 2. * fabs(v[1:]-v[:-1])
+        # f1half -= phi * rhomean / 2. * fabs(v[1:]-v[:-1])
     
     return f1half, f2half, f3half
+
+
+def HLLCL(fs, qs, rho, press, v, gamma = None):
+    '''
+    Kitamura & Shima 2019
+    '''
+    f1, f2, f3 = fs  ;  q1, q2, q3 = qs
+    #    ds = sr - sl
+    # v = f1/q1
     
-   
-   
+    nx=size(q1)
+
+    if gamma is None:
+        gamma = 4./3.
+
+    cl = sqrt(gamma * press/rho)[:-1] ; cr = sqrt(gamma * press/rho)[1:]
+    machl = minimum(1.0, 1.0 * sqrt((v[:-1]/cl)**2+0.01))
+    machr = minimum(1.0, 1.0 * sqrt((v[1:]/cr)**2+0.01))
+    phil = machl * (2.-machl) ;   phir = machr * (2.-machr)
     
+    # cl1 = cl * phil ; cr1 = cr * phir
+    cl1 = cl ; cr1 = cr
+    sl = minimum(v[:-1]-cl1, v[1:]-cr1)
+    sr = maximum(v[:-1]+cl1, v[1:]+cr1)
+    sl1 = minimum(0., sl) ; sr1 = maximum(0., sr)
+    sl0 = minimum(v[:-1]-cl, v[1:]-cr) ;  sr0 = maximum(v[:-1]+cl, v[1:]+cr)
+    al = rho[:-1] * (v[:-1]-sl) ; ar = rho[1:] * (sr-v[1:])
+    al0 = rho[:-1] * (v[:-1]-sl0) ; ar0 = rho[1:] * (sr0-v[1:])
+    sm = (al * v[:-1] + ar * v[1:]) / (al+ar) - (press[1:]-press[:-1]) / (al0+ar0)
+
+    p1 = (press[1:]+press[:-1] + al * (v[:-1]-sm) - ar * (v[1:]-sm))/2. # pstar
+    p2 = copy(p1) # ptilde
+
+    f1half=zeros(nx-1, dtype=double)  ;  f2half=zeros(nx-1, dtype=double)  ;  f3half=zeros(nx-1, dtype=double) 
+    ds = sr1-sl1
+    wreg = where(ds > 0.)
+    w0 = where(ds <= 0.)
+    
+    f1half[wreg] = ((sr1 * f1[:-1] - sr1 * f1[1:])/(sr1-sl1) + sr1 * sl1 * (q1[1:]-q1[:-1])/(sr1-sl1))[wreg]
+    f2half[wreg] = ((sr1*f2[:-1]-sl1*f2[1:])/(sr1-sl1)+sl1*sr1*(q2[1:]-q2[:-1])/(sr1-sl1))[wreg]
+    f3half[wreg] = ((sr1*f3[:-1]-sl1*f3[1:])/(sr1-sl1)+sl1*sr1*(q3[1:]-q3[:-1])/(sr1-sl1))[wreg]
+    # as in classic HLLE
+    if size(w0)>0.:
+        wpos = where((ds <=0.) & (sm >= 0.))
+        wneg = where((ds <=0.) & (sm <= 0.))
+        if size(wpos)>0.:
+            fhalf1[wpos] = f1[:-1]
+            fhalf2[wpos] = f2[:-1]
+            fhalf3[wpos] = f3[:-1]
+        if size(wneg)>0.:
+            fhalf1[wneg] = f1[1:]
+            fhalf2[wneg] = f2[1:]
+            fhalf3[wneg] = f3[1:]
+
+    return f1half, f2half, f3half

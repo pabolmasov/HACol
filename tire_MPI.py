@@ -60,6 +60,7 @@ rbasefactor = configactual.getfloat('rbasefactor') # offset of the mesh (making 
 
 # numerical parameters:
 rsolver = configactual.get('rsolver')
+fsplitter = configactual.getboolean('fsplitter')
 CFL = configactual.getfloat('CFL') # Courant-Friedrichs-Levy coeff. 
 Cth = configactual.getfloat('Cth') # numerical coeff. for radiation losses
 Cdiff = configactual.getfloat('Cdiff') # numerical coeff. for diffusion 
@@ -191,7 +192,7 @@ def gphi(g, dr = 0.):
     # gravitational potential
     # dr0 = (g.r[1]-g.r[0])/2. * 0.
     if crank == first:
-        r0 = rstar # +(g.r[1]-g.r[0])/2.
+        r0 = rstar # - (g.r[1]-g.r[0])/2.
         # dr0 = (g.r[1]-g.r[0])
         r = abs(g.r+dr-r0)+r0  # ((g.r-dr-r0)**4+dr0**4)**0.25+r0
     else:
@@ -242,7 +243,7 @@ def toprim_separate(m, s, e, g):
     #    umin = u.min()
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
-    # u, rho, press = regularize(u, rho, press)
+    u, rho, press = regularize(u, rho, press)
     # after regularization, we need to update beta
     beta = betafun(Fbeta(rho, u, betacoeff))
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
@@ -292,7 +293,7 @@ def toprim(con, gnd = None):
     #    umin = u.min()
     beta = betafun(Fbeta(rho, u, betacoeff))
     press = u/3./(1.-beta/2.)
-    # u, rho, press = regularize(u, rho, press)
+    u, rho, press = regularize(u, rho, press)
     beta = betafun(Fbeta(rho, u, betacoeff)) # not the most efficient
     urad = u*(1.-beta)/(1.-beta/2.)
     prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press}
@@ -325,12 +326,12 @@ def fluxes(g, rho, v, u, press):
     g is geometry (structure)
     Note: fluxes do not include diffusion (added separately)
     '''
-    #    nd = prim['N']  # ; rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; press = prim['press'] ; beta = prim['beta']
-    #    gnd = l_g[nd]
-    # across = g.across ; r = g.r  ; sth = g.sth 
     phi = gphi(g) # copy(-1./g.r-0.5*(g.r*g.sth*omega)**2)
-    s = g.across * (v *rho) # mass flux (identical to momentum per unit length -- can we use it?)
-    p = s*v + press * g.across # momentum flux
+    s = g.across * (v * rho) # mass flux (identical to momentum per unit length -- can we use it?)
+    if not fsplitter:
+        p = s * v + press * g.across # momentum flux
+    else:
+        p = s * v
     fe = g.across * ( (u + press) * v + (v**2/2.+potfrac*phi)*(rho*v)) # energy flux without diffusion    
     return s, p, fe
 
@@ -425,7 +426,8 @@ def sources(m, g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0.
     #    print(str(force[k])+" = "+str(((-sinsum/r**2*across)*rho)[k]))
     # ii = input("F")
     if eta>0.:
-        gammaforce = -copy(gforce(sinsum, g, dr)) * eta * ltot * tratfac(rho*delta, taumin, taumax)
+        gammaforce = -copy(force) * eta * ltot * tratfac(rho*delta, taumin, taumax)
+        # -copy(gforce(sinsum, g, dr)) * eta * ltot * tratfac(rho*delta, taumin, taumax)
     else:
         gammaforce = 0.
     if(forcecheck):
@@ -473,7 +475,7 @@ def derivo(l_half, s_half, p_half, fe_half, dm, ds, de):
     
     return dmt, dst, det
 
-def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq = None):
+def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq = None):
     # BCleft, BCright, 
     # m, s, e, g, ghalf, dl, dlleft, dlright, ltot=0., umagtar = None, momentum_inflow = None, energy_inflow =  None):
     '''
@@ -482,6 +484,10 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
     '''
     #    prim = toprim(con) # primitive from conserved
     rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad'] ; u = prim['u'] ;   beta = prim['beta']
+
+    ahalf = concatenate([ahalf, [(gnd.across[-1]+gnd.across[-2])/2.]])
+    ahalf = concatenate([[(gnd.across[0]+gnd.across[1])/2.], ahalf])
+    
     m, s, e = tocon_separate(rho, v, u, gnd, gin = True) # conserved quantities
     g1 = Gamma1(5./3., beta)
     # sources & sinks:
@@ -575,10 +581,13 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
 
     g1 = Gamma1(5./3., beta)
     # g1[:] = 5./3. # stability?
-    # u, rho, press = regularize(u, rho, press)
+    u, rho, press = regularize(u, rho, press)
     cs = sqrt(g1*press/rho)
-    vl, vm, vr = sigvel_hybrid(v, cs, 4./3., rho, press)
-    # vl, vm, vr = sigvel_roe(v, cs, rho)
+    # vl, vm, vr, philm = sigvel_hybrid(v, cs, 4./3., rho, press)
+    # # vl, vm, vr = sigvel_roe(v, cs, rho)
+    philm = None 
+    vl, vm, vr, philm = sigvel_hybrid(v, cs, 4./3., rho, press,
+                                      pmode = 'acoustic')
     #if crank == first:
     #    vm[0] = maximum(-vm[1], 0.)
     #    vl[0] = -1.
@@ -612,11 +621,23 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
         #        fs[0] = fs[1]
     #    fe[0] = 0.
     m, s, e = tocon_separate(rho, v, u, gnd) # conserved quantities for the extended mesh
-    if rsolver == 'HLLC':
-        fm_half, fs_half, fe_half =  solv.HLLC1([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, v)
+    # print(type(rsolver))
+    # ii = input('solver')
+    # fm_half, fs_half, fe_half =  solv.HLLC1([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, v, phi = philm)
+    #     fm_half, fs_half, fe_half =  solv.HLLCL([fm, fs, fe], [m, s, e], rho, press, v)
+    if 'HLLCL' in rsolver:
+        # print('HLLCL')
+        fm_half, fs_half, fe_half =  solv.HLLCL([fm, fs, fe], [m, s, e], rho, press, v, gamma = g1)
     else:
-        fm_half, fs_half, fe_half =  solv.HLLE([fm, fs, fe], [m, s, e], vl, vr, vm)
-
+        if 'HLLC' in rsolver:
+            # print('HLLC')
+            fm_half, fs_half, fe_half =  solv.HLLC1([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, v, phi = philm)
+        else:
+            # print('size ahalf = '+str(size(ahalf)))
+            # print('size a = '+str(size(gnd.across)))
+            # ii = input('a')
+            fm_half, fs_half, fe_half =  solv.HLLE([fm, fs, fe], [m, s, e], vl, vr, vm, press, ahalf/gnd.across[:-1], ahalf/gnd.across[1:], press * gnd.across, phi = philm)
+    
     if(raddiff):
         #        dl = gnd.l[1:]-gnd.l[:-1]
         #  across = gnd.across
@@ -635,24 +656,13 @@ def RKstep(gnd, lhalf, prim, leftpack, rightpack, umagtar = None, ltot = 0., dtq
         # duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         #  dule_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         fs_half += duls_half ; fe_half += dule_half         
-    # if leftpack is None:
-    #    ds[0] *= (1.-gnd.r[0]/gnd.r[1])/(1.-gnd.r[0]/gnd.r[2])
-    #  if crank == first:
-    #    fm_half[0] = 0.
-        #        fs[0] = fs[1]
-      #  fe_half[0] = 0.
-    # if crank == last:
-    #    fm_half[-1] = mdot
-        # fs_half[-1] = fs_half[-2]
-        # fe_half[-1] = fe_half[-2]
-        # print("mdot = "+str(mdot))
-        
-    dmt, dst, det = derivo(lhalf, fm_half, fs_half, fe_half, dm, ds, de)
 
-    # if crank == last:
-    #     dmt[-1] = 0.
-    #    dst[-1] = 0.
-    #    det[-1] = 0.
+    dmt, dst, det = derivo(lhalf, fm_half, fs_half, fe_half, dm, ds, de)
+    # flux splitter: pressure and ram pressure are treated separately
+    if fsplitter:
+        press_half = (press[1:]+press[:-1])/2.
+        # print(size(press_half), size(gnd.across), size(lhalf), size(dst))
+        dst[:] += gnd.across[1:-1] * (press_half[:-1]-press_half[1:]) / (lhalf[1:]-lhalf[:-1])
     
     return {'m': dmt, 's': dst, 'e': det, 'dmloss': dmloss}
 
@@ -840,7 +850,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         if thetimer is not None:
             thetimer.stop_comp("dt")        
             thetimer.start_comp("RKstep")
-        dcon1 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) #, dtq = dt/4.)
+        dcon1 = RKstep(gext, lhalf, ghalf.across, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) #, dtq = dt/4.)
         if thetimer is not None:
             thetimer.stop_comp("RKstep")
             thetimer.start_comp("updateCon")
@@ -867,7 +877,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         if thetimer is not None:
             thetimer.stop_comp("BC")
             thetimer.start_comp("RKstep")
-        dcon2 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) #, dtq = dt/4.) # , BCfluxleft, BCfluxright)
+        dcon2 = RKstep(gext, lhalf,  ghalf.across, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) #, dtq = dt/4.) # , BCfluxleft, BCfluxright)
         if thetimer is not None:
             thetimer.stop_comp("RKstep")
             thetimer.start_comp("updateCon")
@@ -893,7 +903,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         if thetimer is not None:
             thetimer.stop_comp("BC")
             thetimer.start_comp("RKstep")
-        dcon3 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , dtq = dt/2.) #, BCfluxleft, BCfluxright)
+        dcon3 = RKstep(gext, lhalf,  ghalf.across, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , dtq = dt/2.) #, BCfluxleft, BCfluxright)
         if thetimer is not None:
             thetimer.stop_comp("RKstep")
             thetimer.start_comp("updateCon")
@@ -920,7 +930,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         if thetimer is not None:
             thetimer.stop_comp("BC")
             thetimer.start_comp("RKstep")
-        dcon4 = RKstep(gext, lhalf, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , dtq = dt) # , BCfluxleft, BCfluxright)
+        dcon4 = RKstep(gext, lhalf,  ghalf.across, prim, leftpack, rightpack, umagtar = con['umagtar'], ltot = ltot) # , dtq = dt) # , BCfluxleft, BCfluxright)
         if thetimer is not None:
             thetimer.stop_comp("RKstep")
             thetimer.start_comp("updateCon")
@@ -1024,12 +1034,17 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0.):
         if ifplot:
             plots.vplot(gglobal.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
             plots.uplot(gglobal.r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
-            plots.someplots(gglobal.r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
-                            name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
+            #plots.someplots(gglobal.r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
+            #                name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
             plots.someplots(gglobal.r, [qloss*gglobal.r],
                             name=outdir+'/qloss{:05d}'.format(nout),
                             ytitle=r'$\frac{r{\rm d} E}{{\rm d}l {\rm d} t}$', ylog=False,
                             formatsequence = ['k-', 'r-'])
+            plots.someplots(gglobal.r, [-v/sqrt(4./3.*u/rho),v/sqrt(4./3.*u/rho)],
+                            name=outdir+'/mach{:05d}'.format(nout),
+                            ytitle=r'$\frac{r{\rm d} E}{{\rm d}l {\rm d} t}$', ylog=True,
+                            xlog = True, formatsequence = ['k-', 'k:'])
+            
         # ascii output:
         # print(nout)
         fname=outdir+'/tireout{:05d}'.format(nout)+'.dat'
@@ -1141,7 +1156,7 @@ def alltire():
             rho *= (rhonoize+1.)
             beta = betafun_p(Fbeta_press(rho, press, betacoeff))
             u = press * 3. * (1.-beta/2.)
-            # u, rho, press = regularize(u, rho, press)
+            u, rho, press = regularize(u, rho, press)
 
         # restart block:
         # if we want to restart from a stored configuration

@@ -1,5 +1,8 @@
 from numpy import *
 
+lmcor = False
+malim = 1. # low-Mach limit
+
 def sigvel_mean(v, cs):
     '''
     signal velocities used by Davis 1988 ``Simplified second-order Godunov-type methods''
@@ -54,16 +57,23 @@ def sigvel_linearized(v, cs, g1, rho, p):
     vr = maximum((v+cs)[1:], vstar+astarright)
     return vl, vstar, vr
 
-def sigvel_hybrid(v, cs, g1, rho, p):
+def sigvel_hybrid(v, cs, g1, rho, p, pmode = 'acoustic'):
     '''
     hybrid estimates by Toro (1994)
+    pmode -- mode for pstar. Could be: 'acoustic' (default; Toro 1991), 'TR' (two rarefactions), 'TS' (two shocks) 
     '''
-    rhomean = (rho[1:]+rho[:-1])/2. ; csmean = (cs[1:]+cs[:-1])/2.
-    z = (g1-1.)/2./g1
-    pstar = ((cs[:-1]+cs[1:]-(g1-1.)/2.*(v[1:]-v[:-1]))/((cs/p**z)[:-1]+(cs/p**z)[1:]))**(1./z)
-    # (p[1:]+p[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
-    #  pstar *= 1.5
-    # vstar = (v[1:]+v[:-1])/2. - (p[1:]-p[:-1])/rhomean/csmean/2.    
+    if pmode == 'TR':
+        z = (g1-1.)/2./g1
+        pstar = ((cs[:-1]+cs[1:]-(g1-1.)/2.*(v[1:]-v[:-1]))/((cs/p**z)[:-1]+(cs/p**z)[1:]))**(1./z)
+    else:
+        if pmode == 'TS':
+            gl = sqrt(2./(g1+1.)/rho[:-1]/(p[:-1]+(g1-1.)/(g1+1.)*pstar))
+            gr = sqrt(2./(g1+1.)/rho[1:]/(p[1:]+(g1-1.)/(g1+1.)*pstar))
+            pstar = (gl*p[:-1]+gr*p[1:]-(v[1:]-v[:-1]))/(gl+gr)
+        else:
+            rhomean = (rho[1:]+rho[:-1])/2. ; csmean = (cs[1:]+cs[:-1])/2.
+            pstar = (p[1:]+p[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
+        pstar = maximum(pstar, 0.)
     
     hsleft = pstar/p[:-1] ; hsright = pstar / p[1:]
     qleft = sqrt(1.+(g1+1.)/2./g1*maximum(hsleft-1.,0.))
@@ -76,8 +86,12 @@ def sigvel_hybrid(v, cs, g1, rho, p):
     vl = v[:-1]-cs[:-1]*qleft  ; vr = v[1:]+cs[1:]*qright
     # vstar = (v[:-1]+v[1:])/2. - (p[1:]-p[:-1])/2./rhomean/csmean
     vstar = ((rho*cs*v)[:-1]*qleft+(rho*cs*v)[:-1]*qright + p[:-1]-p[1:])/((rho*cs)[:-1]*qleft+(rho*cs)[1:]*qright)   # where did this come from? 
-    
-    # (p[1:]-p[:-1] + (rho*v)[:-1]*(vl-v[:-1]) - (rho*v)[1:]*(vr-v[1:])) / (rho[:-1]*(vl-v[:-1]) - rho[1:]*(vr-v[1:]))
+    # low-Mach correction
+    if lmcor:
+        # Miczek's thesis, 2012 (p. 51)
+        philm = minimum(1., maximum(fabs((v/cs)[:-1])/malim, fabs((v/cs)[1:]))/malim)
+        # philm = sin(2.*pi*philm)
+        
     # if there are points where vl > vr (there could be in a shock wave), let us swap the velocities 
     winv = where(vl > vr)
     if size(winv) > 0:
@@ -89,7 +103,11 @@ def sigvel_hybrid(v, cs, g1, rho, p):
         v2 = minimum(vl, vr)
         vl = minimum(v1, v2) ; vr = maximum(v1,v2)     
     vstar = minimum(maximum(vstar, vl*0.9999+vr*0.0001), vr*0.9999+vl*0.0001) # affects the shock front
-    return vl, vstar, vr 
+    
+    if lmcor:
+        return vl, vstar, vr, philm
+    else:
+        return vl, vstar, vr, None
     
 def sigvel_toro(m, s, e, p, fe, sl, sr, across_half, r_half, sth_half):
     '''

@@ -46,7 +46,7 @@ def betafun_define():
     '''
     defines the function to calculate beta as a function of rho/u**0.75
     '''
-    bepsilon = 1e-6 ; nb = 1e3
+    bepsilon = 1e-8 ; nb = 1e4
     b1 = 0. ; b2 = 1.-bepsilon
     b = (b2-b1)*arange(nb+1)/double(nb)+b1
     fb = b / (1.-b)**0.25 / (1.-b/2.)**0.75
@@ -57,7 +57,7 @@ def betafun_press_define():
     '''
     defines the function to calculate beta as a function of rho/p**0.75
     '''
-    bepsilon = 1e-6 ; nb = 1e3
+    bepsilon = 1e-8 ; nb = 1e4
     b1 = 0. ; b2 = 1.-bepsilon
     b = (b2-b1)*arange(nb+1)/double(nb)+b1
     fb = b / (1.-b)**0.25
