@@ -748,7 +748,7 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
         fig.tight_layout()
         savefig("Vcurvestack_2d.png")
         if mdotshow:
-            kslice = 10
+            kslice = 11
             clf()
             plot(tar, rho2[:, kslice], 'k-')
             plot(tar, rho2[:, kslice*2], 'b--')
@@ -761,8 +761,8 @@ def Vcurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", plot2d=F
             savefig("Vcurvestack_drho.png")
     
     if mdotshow:
-        kslice1 = 1
-        kslice2 = 600
+        kslice1 = 2
+        kslice2 = 100
         clf()
         plot(tar, -m2[:, kslice1]/mdot/4./pi, 'k-')
         plot(tar, -m2[:, kslice2]/mdot/4./pi, 'b--')

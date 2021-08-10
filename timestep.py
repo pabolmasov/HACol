@@ -10,9 +10,11 @@ def time_step(prim, g, dl, xirad = 1.5, raddiff = True, eta = 0., CFL = 0.5, Cdi
     # also outputs total luminosity of the fraction of the flow, if global eta>0.
     csqest = (4./3.*prim['press']/prim['rho'])[1:-1]
     wpos = where((abs(prim['v'][1:-1]) > 0.) & (prim['u'][1:-1] > 0.))
-    # mach = quantile(abs(prim['v'][1:-1] / sqrt(csqest)), 0.1)
+    mach = quantile(abs(prim['v'][1:-1] / sqrt(csqest)), 0.1)
+    # print(mach)
+    # uu = input('M')
     # dt_CFL = CFL * (dl /sqrt(csqest)).max() / (mach+1./mach)
-    dt_CFL = CFL * (dl[wpos] / sqrt(csqest+prim['v'][1:-1]**2)[wpos]).min()
+    dt_CFL = CFL * (dl[wpos] / sqrt(csqest+prim['v'][1:-1]**2)[wpos]).min() # /(1.+1./mach)
     # dt_CFL = CFL / quantile((dl / sqrt(minimum(csqest,prim['v'][1:-1]**2)))[wpos], 0.01)
     # mach = quantile(abs(prim['v'][1:-1] / sqrt(csqest)), 0.1)
     # print(mach)
@@ -51,8 +53,8 @@ def timestepdetails(g, rho, press, u, v, urad,  xirad = 1.5, raddiff = True, CFL
     rho_half = (rho[1:]+rho[:-1])/2. ; press_half = (press[1:]+press[:-1])/2. ; u_half = (u[1:]+u[:-1])/2. ; v_half = (v[1:]+v[:-1])/2. ; urad_half = (urad[1:]+urad[:-1])/2.
     wpos = where((abs(v_half) > 0.) & (u_half > 0.))
     csqest = 4./3.*press_half/rho_half
-    # mach = quantile(abs(v_half / sqrt(csqest)), 0.1)    
-    dt_CFL = CFL * (dl[wpos] / sqrt(csqest+v_half**2)[wpos]).min() # / (mach+1./mach)
+    mach = quantile(abs(v_half / sqrt(csqest)), 0.1)    
+    dt_CFL = CFL * (dl[wpos] / sqrt(csqest+v_half**2)[wpos]).min() # /(1.+1./mach) # / (mach+1./mach)
     # mach = quantile(abs(v_half / sqrt(csqest)), 0.1)
     # dt_CFL /= sqrt(mach + 1./mach)
 
@@ -71,4 +73,4 @@ def timestepdetails(g, rho, press, u, v, urad,  xirad = 1.5, raddiff = True, CFL
         dt_diff = Cdiff * min(ctmp[ctmp>0.]) # (dx^2/D)
     else:
         dt_diff = dt_CFL * 5. # effectively infinity ;)
-    return minimum(dt_CFL, minimum(dt_diff, dt_thermal)), dt_CFL, dt_thermal, dt_diff, dt_mloss
+    return minimum(dt_CFL, minimum(dt_diff, dt_thermal)), dt_CFL, dt_thermal, dt_diff, dt_mloss, mach

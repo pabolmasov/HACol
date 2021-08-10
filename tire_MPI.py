@@ -419,7 +419,7 @@ def sources(m, g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0.
     force = -sinsum * rho * across / r**2
     if crank == first:
         force[0] = 0.
-    #    force = copy(gforce(sinsum, rho, g, dr)*across) # without irradiation
+    # force = copy(gforce(sinsum, g, dr)*across*rho) # without irradiation
     # *(1.-eta * ltot * tratfac(rho*delta, taumin, taumax))
                   # +omega**2*r*sth*cosa)*rho*across) # *taufac
     # for k in arange(size(force)):
@@ -545,7 +545,7 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         # urad1 = u1*(1.-beta1)/(1.-beta1/2.)
         #   betafun_p(Fbeta(rho0, press0, betacoeff))
         # rho1 = rho[1] ; u1 = u[1] ; press1 = press[1] ; urad1 = urad[1] ; beta1 = beta[1]
-        rho1 = rho[0] ; u1 = u[0] ; press1 = press[0] ; urad1 = urad[0] ; beta1 = beta[0]     ;   v1 = -v[0] # -minimum(v[0], 0.)
+        rho1 = rho[0] ; u1 = u[0] ; press1 = press[0] ; urad1 = urad[0] ; beta1 = beta[0]     ;   v1 = -v[0]
         rho = concatenate([[rho1], rho])
         v = concatenate([[v1], v]) # inner BC for v
         u = concatenate([[u1], u]) 
@@ -586,7 +586,7 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
     # vl, vm, vr, philm = sigvel_hybrid(v, cs, 4./3., rho, press)
     # # vl, vm, vr = sigvel_roe(v, cs, rho)
     philm = None 
-    vl, vm, vr, philm = sigvel_hybrid(v, cs, 4./3., rho, press,
+    vl, vm, vr, philm = sigvel_hybrid(v, cs, 5./3., rho, press,
                                       pmode = 'acoustic')
     #if crank == first:
     #    vm[0] = maximum(-vm[1], 0.)
@@ -660,8 +660,14 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
     dmt, dst, det = derivo(lhalf, fm_half, fs_half, fe_half, dm, ds, de)
     # flux splitter: pressure and ram pressure are treated separately
     if fsplitter:
-        press_half = (press[1:]+press[:-1])/2.
-        # print(size(press_half), size(gnd.across), size(lhalf), size(dst))
+        # press_half = (press[1:]*sqrt(rho[1:])+press[:-1]*sqrt(rho[:-1]))/(sqrt(rho[1:])+sqrt(rho[:-1])) # Roe average
+        rhomean = (rho[1:]+rho[:-1])/2.
+        # cs  = g1*press/rho
+        # g1[:] = 5./3.
+        csmean = (sqrt((g1*press/rho)[1:])+sqrt((g1*press/rho)[:-1]))/2.
+        # rhocmean = (sqrt((g1*press*rho)[1:])+sqrt((g1*press*rho)[:-1]))/2.
+        press_half = (press[1:]+press[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
+        press_half = maximum(press_half, 0.)
         dst[:] += gnd.across[1:-1] * (press_half[:-1]-press_half[1:]) / (lhalf[1:]-lhalf[:-1])
     
     return {'m': dmt, 's': dst, 'e': det, 'dmloss': dmloss}
@@ -1023,9 +1029,10 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0.):
     print(str(t*tscale)+' '+str(mtot)+'\n')
     # ii = input("FT")
     # print("dt = "+str(dt)+'\n')
-    dt, dt_CFL, dt_thermal, dt_diff, dt_mloss = timestepdetails(gglobal, rho, press, u, v, urad,  xirad = xirad, raddiff = raddiff, CFL = CFL, Cdiff = Cdiff, Cth = Cth, taumin = taumin, taumax = taumax, CMloss = 0.5)
+    dt, dt_CFL, dt_thermal, dt_diff, dt_mloss, mach = timestepdetails(gglobal, rho, press, u, v, urad,  xirad = xirad, raddiff = raddiff, CFL = CFL, Cdiff = Cdiff, Cth = Cth, taumin = taumin, taumax = taumax, CMloss = 0.5)
     qloss = qloss_separate(rho, urad, gglobal, dt=dt)
     print("dt = "+str(dt)+" = "+str(dt_CFL)+"; "+str(dt_thermal)+"; "+str(dt_diff)+"; "+str(dt_mloss)+"\n")
+    print("characteristic Mach number: "+str(mach))
     fflux.flush() ; ftot.flush()
     if hfile is not None:
         hdf.dump(hfile, nout, t, rho, v, u, qloss)

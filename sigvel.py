@@ -1,7 +1,7 @@
 from numpy import *
 
-lmcor = False
-malim = 1. # low-Mach limit
+lmcor = True
+malim = 1.0 # low-Mach limit
 
 def sigvel_mean(v, cs):
     '''
@@ -90,7 +90,7 @@ def sigvel_hybrid(v, cs, g1, rho, p, pmode = 'acoustic'):
     if lmcor:
         # Miczek's thesis, 2012 (p. 51)
         philm = minimum(1., maximum(fabs((v/cs)[:-1])/malim, fabs((v/cs)[1:]))/malim)
-        # philm = sin(2.*pi*philm)
+        # philm = sqrt(sin(pi/2.*philm))
         
     # if there are points where vl > vr (there could be in a shock wave), let us swap the velocities 
     winv = where(vl > vr)

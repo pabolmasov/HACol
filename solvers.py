@@ -13,8 +13,8 @@ def HLLE(fs, qs, sl, sr, sm, press, crossfacl, crossfacr, fsp, phi = None):
     # v = copy(f1/q1) # local velocity (mid cells)
     # sl1 = sl ; sr1 = sr
     # sl1 = minimum(sl, (v-cs)[:-1]) ; sr1 = maximum(sr, (v+cs)[1:])
-    # if phi is not None:
-    #    sl *= phi ; sr *= phi
+    if phi is not None:
+        sl *= phi ; sr *= phi
     sl1 = minimum(sl, 0.) ; sr1 = maximum(sr, 0.)
     ds = sr1-sl1 # see Einfeldt et al. 1991 eq. 4.4
     #    print(ds)
@@ -33,13 +33,13 @@ def HLLE(fs, qs, sl, sr, sm, press, crossfacl, crossfacr, fsp, phi = None):
         wpos = where((ds <=0.) & (sm >= 0.))
         wneg = where((ds <=0.) & (sm <= 0.))
         if size(wpos)>0.:
-            fhalf1[wpos] = f1[:-1]
-            fhalf2[wpos] = f2[:-1]
-            fhalf3[wpos] = f3[:-1]
+            fhalf1[wpos] = (f1[:-1])[wpos]
+            fhalf2[wpos] = (f2[:-1])[wpos]
+            fhalf3[wpos] = (f3[:-1])[wpos]
         if size(wneg)>0.:
-            fhalf1[wneg] = f1[1:]
-            fhalf2[wneg] = f2[1:]
-            fhalf3[wneg] = f3[1:]
+            fhalf1[wneg] = (f1[1:])[wneg]
+            fhalf2[wneg] = (f2[1:])[wneg]
+            fhalf3[wneg] = (f3[1:])[wneg]
     #  if phi is not None:
     # fhalf2 += (1.-phi) * (sqrt(rho[1:])*q1[1:]+sqrt(rho[:-1])*q1[:-1]) * ds * (sqrt(rho[1:])*v[1:]-sqrt(rho[:-1])*v[:-1]) / 2. / (sqrt(rho[1:])+sqrt(rho[:-1]))**2
     # effectively, this is a flux-splitter:
