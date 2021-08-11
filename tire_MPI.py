@@ -192,7 +192,7 @@ def gphi(g, dr = 0.):
     # gravitational potential
     # dr0 = (g.r[1]-g.r[0])/2. * 0.
     if crank == first:
-        r0 = rstar # - (g.r[1]-g.r[0])/2.
+        r0 = rstar - (g.r[1]-g.r[0])/2.
         # dr0 = (g.r[1]-g.r[0])
         r = abs(g.r+dr-r0)+r0  # ((g.r-dr-r0)**4+dr0**4)**0.25+r0
     else:
@@ -416,10 +416,10 @@ def sources(m, g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0.
     #rc[0] = (3. * (m*r)[0] + (m*r)[1])/m[0]/4.
     #rc[-1] = ((m*r)[-2] + 3. * (m*r)[-1])/m[-1]/4.
     
-    force = -sinsum * rho * across / r**2
-    if crank == first:
-        force[0] = 0.
-    # force = copy(gforce(sinsum, g, dr)*across*rho) # without irradiation
+    # force = -sinsum * rho * across / r**2
+    # if crank == first:
+    #    force[0] = 0.
+    force = copy(gforce(sinsum, g, dr)*across*rho) # without irradiation
     # *(1.-eta * ltot * tratfac(rho*delta, taumin, taumax))
                   # +omega**2*r*sth*cosa)*rho*across) # *taufac
     # for k in arange(size(force)):
@@ -545,7 +545,7 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         # urad1 = u1*(1.-beta1)/(1.-beta1/2.)
         #   betafun_p(Fbeta(rho0, press0, betacoeff))
         # rho1 = rho[1] ; u1 = u[1] ; press1 = press[1] ; urad1 = urad[1] ; beta1 = beta[1]
-        rho1 = rho[0] ; u1 = u[0] ; press1 = press[0] ; urad1 = urad[0] ; beta1 = beta[0]     ;   v1 = -v[0]
+        rho1 = rho[0] ; u1 = u[0] ; press1 = press[0] ; urad1 = urad[0] ; beta1 = beta[0]     ;   v1 =  -minimum(v[0], 0.)
         rho = concatenate([[rho1], rho])
         v = concatenate([[v1], v]) # inner BC for v
         u = concatenate([[u1], u]) 
@@ -631,12 +631,13 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
     else:
         if 'HLLC' in rsolver:
             # print('HLLC')
-            fm_half, fs_half, fe_half =  solv.HLLC1([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, v, phi = philm)
+            fm_half, fs_half, fe_half =solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, phi = philm)
+            # solv.HLLC1([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, v, phi = philm)
         else:
             # print('size ahalf = '+str(size(ahalf)))
             # print('size a = '+str(size(gnd.across)))
             # ii = input('a')
-            fm_half, fs_half, fe_half =  solv.HLLE([fm, fs, fe], [m, s, e], vl, vr, vm, press, ahalf/gnd.across[:-1], ahalf/gnd.across[1:], press * gnd.across, phi = philm)
+            fm_half, fs_half, fe_half =  solv.HLLE([fm, fs, fe], [m, s, e], vl, vr, vm, phi = philm)
     
     if(raddiff):
         #        dl = gnd.l[1:]-gnd.l[:-1]
@@ -665,9 +666,16 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         # cs  = g1*press/rho
         # g1[:] = 5./3.
         csmean = (sqrt((g1*press/rho)[1:])+sqrt((g1*press/rho)[:-1]))/2.
-        # rhocmean = (sqrt((g1*press*rho)[1:])+sqrt((g1*press*rho)[:-1]))/2.
+        rhocmean = (sqrt((g1*press*rho)[1:])+sqrt((g1*press*rho)[:-1]))/2.
+        # g1 = 5./3.
         press_half = (press[1:]+press[:-1])/2. - rhomean * csmean * (v[1:]-v[:-1])/2.
-        press_half = maximum(press_half, 0.)
+        # gl = sqrt(2./(g1+1.)/rho[:-1]/(press[:-1]+(g1-1.)/(g1+1.)*press_half))
+        # gr = sqrt(2./(g1+1.)/rho[1:]/(press[1:]+(g1-1.)/(g1+1.)*press_half))
+        # press_half = (gl*press[:-1]+gr*press[1:]-(v[1:]-v[:-1]))/(gl+gr)
+        # z = (g1-1.)/2./g1
+        # press_half = ((cs[:-1]+cs[1:]-(g1-1.)/2.*(v[1:]-v[:-1]))/((cs/press**z)[:-1]+(cs/press**z)[1:]))**(1./z)
+        
+        press_half = maximum(press_half, minimum(press[1:], press[:-1]))
         dst[:] += gnd.across[1:-1] * (press_half[:-1]-press_half[1:]) / (lhalf[1:]-lhalf[:-1])
     
     return {'m': dmt, 's': dst, 'e': det, 'dmloss': dmloss}

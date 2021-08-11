@@ -2,17 +2,13 @@ from numpy import *
 
 debug = False
 
-def HLLE(fs, qs, sl, sr, sm, press, crossfacl, crossfacr, fsp, phi = None):
+def HLLE(fs, qs, sl, sr, sm, phi = None):
     '''
     makes a proxy for a half-step flux, HLLE-like
     flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right
     Sod's test passed!
     '''
-    #    sr=1.+vshift[1:] ; sl=-1.+vshift[:-1]
     f1,f2,f3 = fs  ;  q1,q2,q3 = qs
-    # v = copy(f1/q1) # local velocity (mid cells)
-    # sl1 = sl ; sr1 = sr
-    # sl1 = minimum(sl, (v-cs)[:-1]) ; sr1 = maximum(sr, (v+cs)[1:])
     if phi is not None:
         sl *= phi ; sr *= phi
     sl1 = minimum(sl, 0.) ; sr1 = maximum(sr, 0.)
@@ -40,19 +36,16 @@ def HLLE(fs, qs, sl, sr, sm, press, crossfacl, crossfacr, fsp, phi = None):
             fhalf1[wneg] = (f1[1:])[wneg]
             fhalf2[wneg] = (f2[1:])[wneg]
             fhalf3[wneg] = (f3[1:])[wneg]
-    #  if phi is not None:
-    # fhalf2 += (1.-phi) * (sqrt(rho[1:])*q1[1:]+sqrt(rho[:-1])*q1[:-1]) * ds * (sqrt(rho[1:])*v[1:]-sqrt(rho[:-1])*v[:-1]) / 2. / (sqrt(rho[1:])+sqrt(rho[:-1]))**2
-    # effectively, this is a flux-splitter:
-    # fhalf2 += fsp[1:] * (crossfacr - 1.) - fsp[:-1] * (crossfacl - 1.)
-
+ 
     return fhalf1, fhalf2, fhalf3
 
-def HLLC(fs, qs, sl, sr, sm, rho, press):
+def HLLC(fs, qs, sl, sr, sm, rho, press, phi = None):
     '''
     makes a proxy for a half-step flux,
     following the basic framework of Toro et al. 1994
     flux of quantity q, density of quantity q, sound velocity to the left, sound velocity to the right, velocity of the contact discontinuity
     works for Sod
+    does not work well for tire
     '''
     f1, f2, f3 = fs  ;  q1, q2, q3 = qs
     ds = sr - sl
@@ -61,20 +54,10 @@ def HLLC(fs, qs, sl, sr, sm, rho, press):
     
     nx=size(q1)
     fhalf1=zeros(nx-1, dtype=double)  ;  fhalf2=zeros(nx-1, dtype=double)  ;  fhalf3=zeros(nx-1, dtype=double)    
-    '''
-    qstar1_left = (q1[:-1] * sl - f1[:-1]) / (sl - sm) ;   qstar1_right = (q1[1:] * sr - f1[1:]) / (sr - sm)
-    qstar2_left = qstar1_left * sm ; qstar2_right = qstar1_right * sm
-    qstar3_left = ( sl * q3[:-1] - f3[:-1] + sm * pleft)/(sl - sm)
-    qstar3_right = ( sr * q3[1:] - f3[1:] + sm * pright)/(sr - sm)
-
-    
-    fluxleft1 = f1[:-1] + sl * (qstar1_left-q1[:-1]) # Toro eq 18
-    fluxleft2 = f2[:-1] + sl * (qstar2_left-q2[:-1])
-    fluxleft3 = f3[:-1] + sl * (qstar3_left-q3[:-1])
-    fluxright1 = f1[1:] + sr * (qstar1_right-q1[1:]) # Toro er 19
-    fluxright2 = f2[1:] + sr * (qstar2_right-q2[1:])
-    fluxright3 = f3[1:] + sr * (qstar3_right-q3[1:])
-    '''
+    if phi is not None:
+        sl = sl * phi
+        sr = sr * phi
+        sm = sm
     fluxleft1 = sm*(sl*q1[:-1] - f1[:-1])/(sl-sm)
     fluxleft2 = (sm*(sl*q2[:-1] - f2[:-1])+sl*(press[:-1] + rho[:-1]*(sl-v[:-1])*(sm-v[:-1])))/(sl-sm)
     fluxleft3 = (sm*(sl*q3[:-1] - f3[:-1])+sm*sl*(press[:-1] + rho[:-1]*(sl-v[:-1])*(sm-v[:-1])))/(sl-sm)
@@ -105,27 +88,11 @@ def HLLC(fs, qs, sl, sr, sm, rho, press):
     if(size(wsuperleft)>0): # Toro eq 29
         fhalf1[wsuperleft] = (f1[1:])[wsuperleft]
         fhalf2[wsuperleft] = (f2[1:])[wsuperleft]
-        fhalf3[wsuperleft] = (f3[1:])[wsuperleft]
-        '''
-        fhalf1[wsuperleft] = ((sm * ( sr * (q1[1:]-q1[:-1]) + (sr/sl) * f1[:-1] - f1[1:]) +
-                               sr * (1. - sm/sl) * fluxleft1)/(sr - sm))[wsuperleft]
-        fhalf2[wsuperleft] = ((sm * ( sr * (q2[1:]-q2[:-1]) + (sr/sl) * f2[:-1] - f2[1:]) +
-                               sr * (1. - sm/sl) * fluxleft2)/(sr - sm))[wsuperleft]
-        fhalf3[wsuperleft] = ((sm * ( sr * (q3[1:]-q3[:-1]) + (sr/sl) * f3[:-1] - f3[1:]) +
-                               sr * (1. - sm/sl) * fluxleft3)/(sr - sm))[wsuperleft]
-        '''
+        fhalf3[wsuperleft] = (f3[1:])[wsuperleft]       
     if(size(wsuperright)>0): # Toro eq 30
         fhalf1[wsuperright] = (f1[:-1])[wsuperright]
         fhalf2[wsuperright] = (f2[:-1])[wsuperright]
         fhalf3[wsuperright] = (f3[:-1])[wsuperright]        
-        '''
-        fhalf1[wsuperright] = ((sm * ( sl * (q1[1:]-q1[:-1]) - (sl/sr) * f1[1:] + f1[:-1]) -
-                                sl * (1. - sm/sr) * fluxright1)/(sm - sl))[wsuperright]
-        fhalf2[wsuperright] = ((sm * ( sl * (q2[1:]-q2[:-1]) - (sl/sr) * f2[1:] + f2[:-1]) -
-                                sl * (1. - sm/sr) * fluxright2)/(sm - sl))[wsuperright]
-        fhalf3[wsuperright] = ((sm * ( sl * (q3[1:]-q3[:-1]) - (sl/sr) * f3[1:] + f3[:-1]) -
-                                sl * (1. - sm/sr) * fluxright3)/(sm - sl))[wsuperright]
-        '''
     wcool = where(ds<=0.)
     if(size(wcool)>0):
         #        print(str(size(wcool))+" cool points")
@@ -145,7 +112,7 @@ def HLLC(fs, qs, sl, sr, sm, rho, press):
 def HLLC1(fs, qs, sl, sr, sm, rho, press, v, phi = None):
     '''
     second version of HLLC, according to Fleischmann et al.(2020)
-    Sod test passed (about 2 times better than HLLE; rarefaction wave different)
+    does not work now
     phi is low-Mach correction
     '''
     f1, f2, f3 = fs  ;  q1, q2, q3 = qs
@@ -154,6 +121,14 @@ def HLLC1(fs, qs, sl, sr, sm, rho, press, v, phi = None):
     
     nx=size(q1)
     #     fhalf1=zeros(nx-1, dtype=double)  ;  fhalf2=zeros(nx-1, dtype=double)  ;  fhalf3=zeros(nx-1, dtype=double)    
+    if phi is not None:
+        sl1 = sl * phi
+        sr1 = sr * phi
+        sm1 = sm
+    else:
+        sl1 = sl
+        sr1 = sr
+        sm1 = sm
 
     q1star_left = q1[:-1] * (sl-v[:-1])/(sl-sm)
     q2star_left = q1[:-1] * (sl-v[:-1])/(sl-sm) * sm
@@ -161,29 +136,6 @@ def HLLC1(fs, qs, sl, sr, sm, rho, press, v, phi = None):
     q1star_right = q1[1:] * (sr-v[1:])/(sr-sm)
     q2star_right = q1[1:] * (sr-v[1:])/(sr-sm) * sm
     q3star_right = (sr-v[1:])/(sr-sm) * (q3[1:] + (sm-v[1:])*(sm+(press/rho)[1:]/(sr-v[1:])) * q1[1:]) 
-
-    '''
-    f1half = (f1[:-1]+f1[1:])/2. - (abs(sl) * (q1star_left-q1[:-1]) + abs(sm) * (q1star_right - q1star_left) \
-                                    + abs(sr) * (q1star_right-q1[1:]))/2.
-    f2half = (f2[:-1]+f2[1:])/2. - (abs(sl) * (q2star_left-q2[:-1]) + abs(sm) * (q2star_right - q2star_left) \
-                                    + abs(sr) * (q2star_right-q2[1:]))/2.
-    f3half = (f3[:-1]+f3[1:])/2. - (abs(sl) * (q3star_left-q3[:-1]) + abs(sm) * (q3star_right - q3star_left) \
-                                    + abs(sr) * (q3star_right-q3[1:]))/2.
-    
-    if phi is not None:
-        sl1 = copy(sl-sm) * phi + sm # phi * copy(sl) # phi*(sl-sm)+sm
-        sr1 = copy(sr-sm) * phi + sm # phi * copy(sr) # phi*(sr-sm)+sm
-        sm1 = sm
-    else:
-    '''
-    if phi is not None:
-        sl1 = sl * sin(pi/2.*phi)
-        sr1 = sr * sin(pi/2.*phi)
-        sm1 = sm
-    else:
-        sl1 = sl
-        sr1 = sr
-        sm1 = sm
         
     # compact form from Fleischmann 2021 
     f1half = (1.+sign(sm1))/2. * (f1[:-1]+minimum(sl1, 0.)*(q1star_left-q1[:-1])) \
