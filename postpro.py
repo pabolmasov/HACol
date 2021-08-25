@@ -8,7 +8,7 @@ import os
 import hdfoutput as hdf
 import geometry as geo
 import bassun as bs
-import beta as beta
+from beta import *
 
 import configparser as cp
 conffile = 'globals.conf'
@@ -113,7 +113,7 @@ def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf 
     if ifhdf:
         up /= umagtar
     
-    betap = beta.Fbeta(rhop, up * umagtar, betacoeff)
+    betap = Fbeta(rhop, up * umagtar, betacoeff)
     pratp = betap / (1.-betap)
     pressp = up / 3. / (1.-betap/2.)
 
@@ -205,7 +205,9 @@ def pds(infile='out/flux', binning=None, binlogscale=False):
         if ifplot:
             plots.binplot_short(binfreqc, binfreqs, binflux, dbinflux, outfile=infile+'_pdsbinned')
 
-def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False, stnorm = False, fosccol = None, simfreq = None, conf = 'DEFAULT'):
+
+
+def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline = False, ncol = 5, iffront = False, stnorm = False, fosccol = None, simfreq = None, conf = 'DEFAULT', trange = None):
     '''
     makes a dynamic spectrum by making Fourier in each of the "ntimes" time bins. Fourier PDS is binned to "nbins" bins
     "ncol" is the number of data column in the input file (the last one is taken by default)
@@ -227,8 +229,14 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
         fosc = lines[:, fosccol]
     if simfreq is not None:
         l = l.mean() * sin(2.*pi*t*simfreq)*exp(-t)
+    if trange is not None:
+        w = (t> trange[0]) * (t<trange[1])
+        t=t[w] ;  l=l[w]
+        if fosccol is not None:
+            fosc = fosc[w]
+        # print(t.min(), t.max())
     if iffront:
-        xs = lines[:,1] # if we want to correlate the maximum with the mean front position
+        xs = (lines[:,1])[w] # if we want to correlate the maximum with the mean front position
     else:
         xs = l # or, we can calculate a bin-average flux instead
     nsize=size(t)
@@ -253,7 +261,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
     ffreqmax = open(infile+'_fmax.dat', 'w')
     for kt in arange(ntimes):
         wt=(t<tbin[kt+1]) & (t>=tbin[kt])
-        lt=l[wt]
+        lt=xs[wt]
         pfit = polyfit(t[wt], lt, 1)
         if deline:
             fsp=fft.rfft((lt-pfit[0]*t[wt]-pfit[1]), norm="ortho")
@@ -264,17 +272,21 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
         nt=size(lt)
         print("nt ="+str(nt))
         freq = fft.rfftfreq(nt, (t[wt].max()-t[wt].min())/double(nt))
-        pds=abs(fsp*freq)**2
+        pds=real(fsp*freq)**2+imag(fsp*freq)**2
+        # print(pds)
+        # ii = input('P')
         t2[kt,:]=tbin[kt] ; t2[kt+1,:]=tbin[kt+1] 
         binfreq2[kt,:]=binfreq[:] ; binfreq2[kt+1,:]=binfreq[:] 
         for kb in arange(nbins):
             wb=((freq>binfreq[kb]) & (freq<=binfreq[kb+1]))
             nbin[kt,kb] = size(pds[wb])
             #            print("size(f) = "+str(size(freq)))
-            #            print("size(pds) = "+str(size(pds)))
+            print("size(pds) = "+str(size(pds)))
             pds2[kt, kb]=pds[wb].mean() ; dpds2[kt, kb]=pds[wb].std()
             # ascii output:
             fdyns.write(str(tcenter[kt])+' '+str(binfreq[kb])+' '+str(binfreq[kb+1])+' '+str(pds2[kt,kb])+' '+str(dpds2[kt,kb])+" "+str(nbin[kt,kb])+"\n")
+            print(str(tcenter[kt])+' '+str(binfreq[kb])+' '+str(binfreq[kb+1])+' '+str(pds2[kt,kb])+' '+str(dpds2[kt,kb])+" "+str(nbin[kt,kb])+"\n")
+            # ii = input('P')
         # finding maximum:
         nfmax = (pds2[kt,:]).argmax()
         fmax[kt] = (binfreq2[kt,nfmax]+binfreq2[kt+1,nfmax+1])/2. # frequency of the maximum
@@ -287,7 +299,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
     ffreqmax.close()
     print(t2.max())
     if ifplot:
-        frange = plots.plot_dynspec(t2,binfreq2, log10(pds2), outfile=infile+'_dyns', nbin=nbin)
+        frange = plots.plot_dynspec(t2,binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)
         plots.errorplot(tcenter, tsize, fmax, dfmax, outfile = infile + '_ffmax', xtitle = '$t$, s', ytitle = '$f$, Hz')
         if iffront:
             # we need geometry:
@@ -750,3 +762,162 @@ def masstest(indir):
     plots.someplots(t, [m-m[0], macc-mlost-(macc[0]-mlost[0]), (macc-macc[0])*1e-2, (mlost-mlost[0])*1e-2], name = 'mbalance', formatsequence = ['k-', 'r:', 'b--', 'm-', 'c-'],
                     xlog = False, ylog = False, xtitle = r'$t$, s', ytitle = r'$M$')
     print("mass change / mass injected = "+str((m[-1]-m[0])/(macc[-1]-macc[0])))
+
+
+#############################################
+def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
+    '''
+    makes quasi-2D Rt plots or an RT table
+    '''
+    outdir = os.path.dirname(hname)
+    
+    betafun = betafun_define() # defines the interpolated function for beta
+
+    nt=int(floor((n2-n1)/step))
+    # geometry:
+    geofile = outdir+"/geo.dat"
+    print(geofile)
+    r, theta, alpha, across, l, delta = geo.gread(geofile)
+    # first frame
+    entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, n1)
+
+    rstar = glo['rstar']
+    umag = glo['umag']
+    
+    m1 = config[conf].getfloat('m1')
+    tscale = config[conf].getfloat('tscale')*m1
+    rstar = config[conf].getfloat('rstar')
+    mu30 = config[conf].getfloat('mu30')
+    mdot = config[conf].getfloat('mdot') * 4.*pi
+    afac = config[conf].getfloat('afac')
+    realxirad = config[conf].getfloat('xirad')
+    mow = config[conf].getfloat('mow')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    umag1 = b12**2*2.29e6*m1
+    print("mdot = "+str(mdot))
+    # ii = input("M")
+    print("Umag = "+str(umag)+" = "+str(umag1)+"\n")
+    betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
+    
+    nr=size(r)
+    nrnew = 300 # radial mesh interpolated to nrnew
+    rnew = (r.max()/r.min())**(arange(nrnew)/double(nrnew-1))*r.min()
+    sthfun = interp1d(r, sth)
+    sthnew = sthfun(rnew)
+    umagtar = umag * (1.+3.*(1.-sth**2))/4. / (r)**6 # r is already in rstar units
+    umagtarnew = umag * (1.+3.*(1.-sthnew**2))/4. / (rnew)**6 # r is already in rstar units
+    var = zeros([nt, nrnew], dtype=double)
+    uar = zeros([nt, nrnew], dtype=double)
+    par = zeros([nt, nrnew], dtype=double)
+    betar = zeros([nt, nrnew], dtype = double) # this is pgas/ptot
+    qar = zeros([nt, nrnew], dtype=double)
+    lurel = zeros([nt, nrnew], dtype=double)
+    mdar = zeros([nt, nrnew], dtype=double)
+    tar = zeros(nt, dtype=double)
+    rvent = zeros(nt, dtype=double)
+    maxprat = zeros(nt, dtype=double)
+    drvent = zeros(nt, dtype=double)
+    rshock = zeros(nt, dtype=double)
+    betavent = zeros(nt, dtype = double) # this one is BS's beta
+    betaeff = zeros(nt, dtype = double) # and this one, too
+    betaeff_m = zeros(nt, dtype = double) # this, too
+    #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
+    for k in arange(nt):
+        entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, k*step+n1) # hdf5 read
+        vfun = interp1d(r, v, kind = 'linear')
+        var[k, :] = vfun(rnew)
+        qfun = interp1d(r, qloss, kind = 'linear')
+        qar[k, :] = qfun(rnew)
+        ufun = interp1d(r, u, kind = 'linear')
+        uar[k, :] = ufun(rnew)
+        beta = betafun(Fbeta(rho, u, betacoeff))
+        press = u/3./(1.-beta/2.)
+        pfun = interp1d(r, press, kind = 'linear')
+        par[k, :] = pfun(rnew)
+        betar[k, :] = 2.*(1.-uar[k,:]/par[k,:]/3.)
+        mfun = interp1d(r, -rho * v * across, kind = 'linear')
+        wloss = (press>(0.8*umagtar))
+        shock = ((v)[kleap:]-(v)[:-kleap]).argmin()
+        rshock[k] = r[shock+kleap] #+r[minimum(shock+kleap+1, nt-1)])/2.
+        if wloss.sum()> 3:
+            # imfun = interp1d((-rho * v * across)[wloss], r[wloss], kind = 'linear', bounds_error=False, fill_value=NaN)
+            # rvent[k] = imfun(mdot/2.)
+            wvent = (press/umagtar)[(r>r.min())&(r<rshock[k])].argmax()
+            if wvent >= (nr-1):
+                print(nr)
+                wvent -= 1
+            rvent[k] = r[wvent]
+            drvent[k] = r[wvent+1]-r[wvent]
+            maxprat[k] = (press/umagtar)[(r>r.min())&(r<rshock[k])].max()
+            betavent[k] = ((u+press)/rho)[wvent] * rstar
+            #          print("rvent = "+str(rvent[k])+" = "+str(r[wvent]))
+            #            print("drvent = "+str(drvent[k]))
+            #            print("maxprat = "+str(maxprat[k]))
+        # effective BS's beta:
+        betaeff[k] = ((u+press)/rho)[0:1].mean() * rstar
+        betaeff_m[k] = (umagtar/rho)[0:1].mean() * rstar * 4.
+        #  print(rstar)
+        mdar[k, :] = mfun(rnew)
+        # print("mdot[-1] = "+str(mdar[k,-1]))
+        tar[k] = t
+    nv=30
+    vmin = round(var.min(),2)
+    vmax = round(var.max(),2)
+    vmin = maximum(vmin, -1.) ; vmax = minimum(vmax, 1.)
+    vlev=linspace(vmin, vmax, nv, endpoint=True)
+    print(var.min())
+    print(var.max())
+    varmean = var.mean(axis=0)
+    varstd = var.std(axis=0)
+
+    # velocity
+    if ifplot:
+        plots.somemap(rnew, tar*tscale, var, name=outdir+'/q2d_v', levels = vlev, inchsize = [4, 12], cbtitle = r'$v/c$', transpose = True)
+        plots.someplots(rnew, [-sqrt(1./rstar/rnew), rnew*0., varmean, varmean+varstd, varmean-varstd], formatsequence = [':k', '--k', '-k', '-g', '-g'], xlog = True, ylog = False, xtitle = r'$R/R_{\rm *}$', ytitle = r'$\langle v\rangle /c$', inchsize = [3.35, 2.], name=outdir+'/q2d_vmean')
+
+    # internal energy
+    #    print(umag)
+    for k in arange(nrnew):
+        lurel[:,k] = log10(uar[:,k]/umagtarnew[k])
+    if ifplot:
+        umin = round(lurel[uar>0.].min(),2)
+        umax = round(lurel[uar>0.].max(),2)
+        lulev = linspace(umin, umax, nv, endpoint=True)
+        print(lulev)
+        plots.somemap(rnew, tar*tscale, lurel, name=outdir+'/q2d_u', levels = lulev, \
+                inchsize = [4, 12], cbtitle = r'$\log_{10}u/u_{\rm mag}$', \
+                addcontour = [par/umagtarnew/1., par/umagtarnew/0.9,
+                par/umagtarnew/0.8], transpose = True)
+        plots.somemap(rnew, tar*tscale, log10(betar), name=outdir+'/q2d_b',
+                inchsize = [4, 12], cbtitle = r'$\log_{10}\beta$', transpose = True)
+        # Q-:
+        plots.somemap(rnew, tar*tscale, log10(qar), name=outdir+'/q2d_q', \
+                inchsize = [4, 12], cbtitle = r'$\log_{10}Q$', transpose = True)
+        # mdot:
+        mdlev = 3.*arange(nv)/double(nv-2)-1.
+        plots.somemap(rnew, tar*tscale, mdar/mdot, name=outdir+'/q2d_m', \
+                inchsize = [4, 12], cbtitle = r'$s / \dot{M}$', levels = mdlev, \
+                transpose = True)
+
+        # mean mdar
+        mdmean = mdar.mean(axis=0)
+        mdstd = mdar.std(axis=0)
+
+
+        plots.someplots(rnew, [rnew*0.+1., rnew*0., mdmean/mdot, (mdmean+mdstd)/mdot, (mdmean-mdstd)/mdot], formatsequence = [':k', '--k', '-k', '-g', '-g'], xlog = True, ylog = False, xtitle = r'$R/R_{\rm *}$', ytitle = r'$\langle s\rangle /\dot{M}$', inchsize = [3.35, 2.], name=outdir+'/q2d_mdmean')
+ 
+        plots.someplots(tar*tscale, [betaeff, betaeff_m, betavent], xtitle=r'$t$, s', ytitle=r'$\frac{u+P}{\rho}\frac{R_*}{GM_*}$', formatsequence=['k.', 'r-', 'b:'], ylog = False, xlog = False,
+            name=outdir+"/betaeff", yrange = [0., betaeff.max()*1.1])
+        print("mean effective betaBS = "+str(betaeff.mean()))
+        print("using magnetic energy, betaBS = "+str(betaeff_m.mean()))
+        print("gas-to-total pressure ratio at the surface is "+str(betar[tar>0.9*tar.max(),0].mean()))
+        
+    # let us also make an ASCII table
+    ftable = open(outdir+'/ftable.dat', 'w')
+    ftable.write('# format: t[s] -- r/rstar -- rho -- v -- u/umag\n')
+    for kt in arange(nt):
+        for kr in arange(nrnew):
+            ftable.write(str(tar[kt]*tscale)+' '+str(rnew[kr])+' '+str(mdar[kt, kr])+'\n')
+    ftable.flush()
+    ftable.close()
+        
