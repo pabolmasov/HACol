@@ -14,6 +14,10 @@ To run the code without ipython, you need to be sure that all the necessary libr
 
 If you are running the code on a machine that does not support matplotlib, make sure that graphic output is off (ifplot=False in globals.py). 
 
+NUMERICAL ALGORITHMS
+
+The code solves the system of conservation equations for mass, momentum, and energy, taking into account a number of physical effects: radiation losses, photon diffusion, mass loss when the force-free condition is violated. Solution is obtained using HLLE or HLLC Riemann solver. Riemann solvers are defined in solvers.py, and the signal velocities computed by sigvel.py. An elaborate description of the physics and numerical techniques will be given in the paper. 
+
 OUTPUTS
 
 So far, if "ifhdf" flag is False in globals.py, it produces multiple structure snapshots "tireout*.dat" containing density, velocity, energy density etc. as functions of length along the field line. All this information is written to a single HDF file "tireout.hdf5" if the flag is True. In this case, ASCII outputs are also made, but "ascalias" times less often (this parameter is set to 10 by default). Also, total luminosity is always written to "flux.dat" as a function of time. Geometry (including radius, polar angle, and the geometrical cross-section of the flow) is written to a special file "geo.dat" in the output directory. 
