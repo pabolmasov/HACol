@@ -22,7 +22,7 @@ def taufun(tau, taumin, taumax):
 
 def tratfac(x, taumin, taumax):
     '''
-    a smooth and accurate smooth version of (1-e^{-x})/x
+    a smooth and accurate version of (1-e^{-x})/x
     '''
     xmin = taumin ; xmax = taumax # limits the same as for optical depth
     nx = size(x)
@@ -38,7 +38,7 @@ def tratfac(x, taumin, taumax):
         wnan=where(isnan(x))
         if(size(wnan)>0):
             tt[wnan] = 0.
-            print("trat = "+str(x.min())+".."+str(x.max()))
+            print("x = "+str(x[wnan]))
             ip = input('trat')
         return tt
     else:
@@ -50,3 +50,31 @@ def tratfac(x, taumin, taumax):
             else:
                 return (1.-exp(-x))/x
             
+# smoothed step for gravpotential
+def sstep(x, xmin, xmax):
+    '''
+    calculates (1-exp(-x))^2 with smooth limits
+    '''
+    wlow = where(x<xmin)
+    whigh = where(x>xmax)
+    wmed = where((x>=xmin) & (x<=xmax))
+    xx = copy(x)
+    if(size(wlow)>0):
+        xx[wlow] = x[wlow]**2 * (x[wlow] > 0.)
+    if(size(whigh)>0):
+        xx[whigh] = 1.
+    if(size(wmed)>0):
+        xx[wmed] = (1.-exp(-x[wmed]))**2
+    return xx
+
+def scalarstep(x, xmin, xmax):
+    '''
+    calculates 1-exp(-x) with smooth limits for a scalar angument
+    '''
+    if x<0.:
+        return 0.
+    if x<xmin:
+        return x
+    if x>xmax:
+        return 1.
+    return 1.-exp(-x)
