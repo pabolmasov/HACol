@@ -857,6 +857,9 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         # time step: all the domains send dt to first, and then the first sends the minimum value back
         if timectr == 0:
             dt = time_step(prim, g, dl, xirad = xirad, raddiff = raddiff, eta = eta, CFL = CFL, Cdiff = Cdiff, Cth = Cth, taumin = taumin, taumax = taumax, CMloss = CMloss * squeezemode) # this is local dt
+            if eta >0.:
+                ltot = dt[1]
+                dt = dt[0]
             dt = comm.allreduce(dt, op=MPI.MIN) # calculates one minimal dt
         timectr += 1
         if timectr >= timeskip:
@@ -1048,7 +1051,8 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0.):
     if not(ifhdf) or (nout%ascalias == 0):
         if ifplot:
             plots.vplot(gglobal.r, v, sqrt(4./3.*u/rho), name=outdir+'/vtie{:05d}'.format(nout))
-            plots.uplot(gglobal.r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar)
+            plots.uplot(gglobal.r, u, rho, gglobal.sth, v, name=outdir+'/utie{:05d}'.format(nout), umagtar = umagtar,
+                time = t * tscale)
             #plots.someplots(gglobal.r, [beta, 1.-beta], formatsequence=['r-', 'b-'],
             #                name=outdir+'/beta{:05d}'.format(nout), ytitle=r'$\beta$, $1-\beta$', ylog=True)
             plots.someplots(gglobal.r, [qloss*gglobal.r],

@@ -236,18 +236,24 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
             fosc = fosc[w]
         # print(t.min(), t.max())
     if iffront:
-        xs = (lines[:,1])[w] # if we want to correlate the maximum with the mean front position
+        if trange is not None:
+            xs = (lines[:,1])[w] # if we want to correlate the maximum with the mean front position
+        else:
+            xs = (lines[:,1])
     else:
         xs = l # or, we can calculate a bin-average flux instead
     nsize=size(t)
     tbin=linspace(t.min(), t.max(), ntimes+1)
     tcenter=(tbin[1:]+tbin[:-1])/2.
     tsize = (tbin[1:]-tbin[:-1])/2.
-    freq1=1./(t.max())*double(ntimes)/2. ; freq2=freq1*double(nsize)/double(ntimes)/2.
+    freq1=1./(t.max()-t.min())*double(ntimes)/2. ; freq2 = minimum(1./median(t[1:]-t[:-1])/2., 1500.)
+    # print(freq1, freq2)
+    # ii =input('F')
     if(binlogscale):
         binfreq=logspace(log10(freq1), log10(freq2), num=nbins+1)
     else:
         binfreq=linspace(freq1, freq2, nbins+1)
+    freq1 = 0.
     binfreqc=(binfreq[1:]+binfreq[:-1])/2.
     pds2=zeros([ntimes, nbins]) ;   dpds2=zeros([ntimes, nbins])
     t2=zeros([ntimes+1, nbins+1], dtype=double)
@@ -271,27 +277,35 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
             fsp /= lt.std()
         nt=size(lt)
         print("nt ="+str(nt))
-        freq = fft.rfftfreq(nt, (t[wt].max()-t[wt].min())/double(nt))
+        dt = median((t[wt])[1:]-(t[wt])[:-1])
+        freq = fft.rfftfreq(nt, dt)
         pds=real(fsp*freq)**2+imag(fsp*freq)**2
         # print(pds)
         # ii = input('P')
+        # print(freq)
+        # print(binfreq)
+        # ii=input('P')
         t2[kt,:]=tbin[kt] ; t2[kt+1,:]=tbin[kt+1] 
         binfreq2[kt,:]=binfreq[:] ; binfreq2[kt+1,:]=binfreq[:] 
         for kb in arange(nbins):
-            wb=((freq>binfreq[kb]) & (freq<=binfreq[kb+1]))
-            nbin[kt,kb] = size(pds[wb])
+            wb=((freq>=binfreq[kb]) & (freq<=binfreq[kb+1]))
+            nbin[kt,kb] = wb.sum()
             #            print("size(f) = "+str(size(freq)))
             print("size(pds) = "+str(size(pds)))
-            pds2[kt, kb]=pds[wb].mean() ; dpds2[kt, kb]=pds[wb].std()
+            if wb.sum() > 1:
+                pds2[kt, kb]=pds[wb].mean() ; dpds2[kt, kb]=pds[wb].std()
             # ascii output:
             fdyns.write(str(tcenter[kt])+' '+str(binfreq[kb])+' '+str(binfreq[kb+1])+' '+str(pds2[kt,kb])+' '+str(dpds2[kt,kb])+" "+str(nbin[kt,kb])+"\n")
             print(str(tcenter[kt])+' '+str(binfreq[kb])+' '+str(binfreq[kb+1])+' '+str(pds2[kt,kb])+' '+str(dpds2[kt,kb])+" "+str(nbin[kt,kb])+"\n")
             # ii = input('P')
         # finding maximum:
-        nfmax = (pds2[kt,:]).argmax()
-        fmax[kt] = (binfreq2[kt,nfmax]+binfreq2[kt+1,nfmax+1])/2. # frequency of the maximum
-        dfmax[kt] = (-binfreq2[kt,nfmax]+binfreq2[kt+1,nfmax+1])/2. 
+        nfmax = ((pds2*(nbin>1)*(arange(nbins)>0))[kt,:]).argmax()
+        # print((pds2*(nbin>1)*(arange(nbins)>0)))
+        # print("nfmax = "+str(nfmax))
+        fmax[kt] = (binfreq2[kt,nfmax]+binfreq2[kt,nfmax+1])/2. # frequency of the maximum
+        dfmax[kt] = (-binfreq2[kt,nfmax]+binfreq2[kt,nfmax+1])/2.
         ffreqmax.write(str(tcenter[kt])+" "+str(tsize[kt])+" "+str(fmax[kt])+" "+str(dfmax[kt])+"\n")
+        print(str(tcenter[kt])+" "+str(tsize[kt])+" "+str(fmax[kt])+" "+str(dfmax[kt])+"\n")
         xmean[kt] = xs[wt].mean() ; xstd[kt] = xs[wt].std()
         if fosccol is not None:
             foscmean[kt]=fosc[wt].mean() ; foscstd[kt]=fosc[wt].std()
@@ -299,7 +313,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
     ffreqmax.close()
     print(t2.max())
     if ifplot:
-        frange = plots.plot_dynspec(t2,binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)
+        frange = plots.plot_dynspec(t2, binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)
         plots.errorplot(tcenter, tsize, fmax, dfmax, outfile = infile + '_ffmax', xtitle = '$t$, s', ytitle = '$f$, Hz')
         if iffront:
             # we need geometry:
@@ -480,6 +494,8 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     # spherization radius
     rsph =1.5*mdot/4./pi
     eqlum = mdot/rstar*(1.-BSbeta)
+    if size(eqlum) > 0:
+        eqlum = eqlum[0]
     print("m1 = "+str(m1))
     print("mdot = "+str(mdot))
     print("rstar = "+str(rstar))
@@ -526,12 +542,12 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
         fout.write(str(t[k])+" "+str(s[k])+" "+str(v1[k])+" "+str(v2[k])+" "+str(lc_tot[k])+" "+str(lc_part[k])+" "+str(1./dt_current[k])+"\n")
     fout.close()
     fglo = open(outdir + '/sfrontglo.dat', 'w') # BS shock position and equilibrium flux
-    fglo.write('# equilibrium luminosity -- BS shock front position / rstar -- Rcool position / rstar\n')
+    fglo.write('# equilibrium luminosity -- BS shock front position / rstar \n')
 
     if isscalar(xs):
-        fglo.write(str(eqlum)+' '+str(xs)+' '+str(rcool/rstar)+'\n')
+        fglo.write(str(eqlum)+' '+str(xs)+'\n')
     else:
-        fglo.write(str(eqlum)+' '+str(xs[0])+' '+str(rcool/rstar)+'\n')
+        fglo.write(str(eqlum)+' '+str(xs[0])+'\n')
     fglo.close()
     # last 10% average shock position
     wlaten = where(t > (t.max()*0.9))
@@ -765,7 +781,7 @@ def masstest(indir):
 
 
 #############################################
-def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
+def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None):
     '''
     makes quasi-2D Rt plots or an RT table
     '''
@@ -872,7 +888,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
 
     # velocity
     if ifplot:
-        plots.somemap(rnew, tar*tscale, var, name=outdir+'/q2d_v', levels = vlev, inchsize = [4, 12], cbtitle = r'$v/c$', transpose = True)
+        plots.somemap(rnew, tar*tscale, var, name=outdir+'/q2d_v', levels = vlev, inchsize = [4, 12], cbtitle = r'$v/c$', transpose = True, xrange = trange)
         plots.someplots(rnew, [-sqrt(1./rstar/rnew), rnew*0., varmean, varmean+varstd, varmean-varstd], formatsequence = [':k', '--k', '-k', '-g', '-g'], xlog = True, ylog = False, xtitle = r'$R/R_{\rm *}$', ytitle = r'$\langle v\rangle /c$', inchsize = [3.35, 2.], name=outdir+'/q2d_vmean')
 
     # internal energy
@@ -887,17 +903,17 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
         plots.somemap(rnew, tar*tscale, lurel, name=outdir+'/q2d_u', levels = lulev, \
                 inchsize = [4, 12], cbtitle = r'$\log_{10}u/u_{\rm mag}$', \
                 addcontour = [par/umagtarnew/1., par/umagtarnew/0.9,
-                par/umagtarnew/0.8], transpose = True)
+                par/umagtarnew/0.8], transpose = True, xrange = trange)
         plots.somemap(rnew, tar*tscale, log10(betar), name=outdir+'/q2d_b',
-                inchsize = [4, 12], cbtitle = r'$\log_{10}\beta$', transpose = True)
+                inchsize = [4, 12], cbtitle = r'$\log_{10}\beta$', transpose = True, xrange = trange)
         # Q-:
         plots.somemap(rnew, tar*tscale, log10(qar), name=outdir+'/q2d_q', \
-                inchsize = [4, 12], cbtitle = r'$\log_{10}Q$', transpose = True)
+                inchsize = [4, 12], cbtitle = r'$\log_{10}Q$', transpose = True, xrange = trange)
         # mdot:
         mdlev = 3.*arange(nv)/double(nv-2)-1.
         plots.somemap(rnew, tar*tscale, mdar/mdot, name=outdir+'/q2d_m', \
                 inchsize = [4, 12], cbtitle = r'$s / \dot{M}$', levels = mdlev, \
-                transpose = True)
+                transpose = True, xrange = trange) # , yrange=[1.,1.1], ylog = False)
 
         # mean mdar
         mdmean = mdar.mean(axis=0)
@@ -917,7 +933,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5):
     ftable.write('# format: t[s] -- r/rstar -- rho -- v -- u/umag\n')
     for kt in arange(nt):
         for kr in arange(nrnew):
-            ftable.write(str(tar[kt]*tscale)+' '+str(rnew[kr])+' '+str(mdar[kt, kr])+'\n')
+            ftable.write(str(tar[kt]*tscale)+' '+str(rnew[kr])+' '+str(var[kt, kr])+' '+str(lurel[kt, kr])+' '+str(mdar[kt, kr]/mdot)+'\n')
     ftable.flush()
     ftable.close()
         
