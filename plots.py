@@ -238,7 +238,7 @@ def plot_somemap(fname, ncol = -1, xlog = True):
     levs = (lev2-lev1) * arange(nl)/double(nl-1)+lev1
     somemap(x, y, q, name=fname, xlog=xlog, xtitle=r'$r/R_*$', ytitle = r'$t$, s', transpose=True, levels = levs, inchsize = [3,10])
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None, inchsize = None, dys = None, linewidthsequence = None):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None, xrange = None, inchsize = None, dys = None, linewidthsequence = None):
     '''
     plots a series of curves  
     if multix is off, we assume that the independent variable is the same for all the data 
@@ -283,6 +283,8 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         yscale('log')
     if yrange is not None:
         ylim(yrange[0], yrange[1])
+    if xrange is not None:
+        xlim(xrange[0], xrange[1])
     xlabel(xtitle, fontsize=14) ; ylabel(ytitle, fontsize=14)
     plt.tick_params(labelsize=12, length=1, width=1., which='minor')
     plt.tick_params(labelsize=12, length=3, width=1., which='major')
@@ -662,25 +664,29 @@ def binplot(xe, f, df, fname = "binplot", fit = 0):
     savefig(fname+".eps")
     close("all")
 ######################################################
-def multishock_plot(fluxfile, frontfile):
+def multishock_plot(frontfile, trange = None):
     '''
     plots the position of the shock as a function of time and total flux
     '''
-    fluxlines = loadtxt(fluxfile+'.dat', comments="#", delimiter=" ", unpack=False)
+    # fluxlines = loadtxt(fluxfile+'.dat', comments="#", delimiter=" ", unpack=False)
     frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
     frontinfo = loadtxt(frontfile+'glo.dat', comments="#", delimiter=" ", unpack=False)
-    tf=fluxlines[:,0] ; f=fluxlines[:,1]
+    # tf=fluxlines[:,0] ; f=fluxlines[:,1]
     ts=frontlines[1:,0] ; s=frontlines[1:,1] ; ds=frontlines[1:,2]
-    eqlum = frontinfo[0] ; rs = frontinfo[1] ; rcool = frontinfo[2]
+    # eqlum = frontinfo[0] ;
+    rs = frontinfo[1] ; xs = frontinfo[0]
+    tf = ts
+    f = ds=frontlines[1:,5]
 
-    f /= 4.*pi # ; eqlum /= 4.*pi
+    #     f /= 4.*pi # ; eqlum /= 4.*pi
     
     # interpolate!
-    fint = interp1d(tf, f, bounds_error=False)
+    # fint = interp1d(tf, f, bounds_error=False)
     
-    someplots(ts, [s, s*0. + rs, s*0. + rcool], name = frontfile + "_frontcurve", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'])
-    someplots(fint(ts), [s, s*0. + rs, s*0. + rcool], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum)
-    someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
+    someplots(ts, [s, s*0. + rs], name = frontfile + "_frontcurve", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'],
+        xrange = trange)
+    someplots(f, [s, s*0. + rs], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = xs, verticalformatsequence = 'r-')
+    # someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
     
 def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
         # fluxfile1, frontfile1, fluxfile2, frontfile2):
@@ -693,13 +699,15 @@ def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
     tlist = [] ;   flist = [];   slist = [] ;  dslist = []
 
     for k in arange(nf):
-        fluxfile = prefices[k]+'/flux'
+        if not parflux:
+            fluxfile = prefices[k]+'/flux'
+            fluxlines = loadtxt(fluxfile+'.dat', comments="#", delimiter=" ", unpack=False)
+            tf=fluxlines[:,0] # ; f=fluxlines[:,1]
+
         frontfile = prefices[k]+'/sfront'
-        fluxlines = loadtxt(fluxfile+'.dat', comments="#", delimiter=" ", unpack=False)
         frontlines = loadtxt(frontfile+'.dat', comments="#", delimiter=" ", unpack=False)
         frontinfo = loadtxt(frontfile+'glo.dat', comments="#", delimiter=" ", unpack=False)
         
-        tf=fluxlines[:,0] # ; f=fluxlines[:,1]
         if parflux:
             f = frontlines[1:,5]
         else:
@@ -723,8 +731,8 @@ def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
     for k in arange(nf):
         plot(flist[k], slist[k], formatsequence[k])
 
-    plot([minimum(flist[0].min(), flist[1].min()), maximum(flist[0].max(), flist[-1].max())], [rs, rs], 'r-')
-    plot([eqlum, eqlum], [minimum(slist[0].min(), slist[-1].min()), maximum(slist[0].max(), slist[-1].max())], 'r-')
+    plot([minimum(flist[0].min(), flist[0].min()), maximum(flist[0].max(), flist[0].max())], [rs, rs], 'r-')
+    plot([eqlum, eqlum], [minimum(slist[0].min(), slist[0].min()), maximum(slist[0].max(), slist[0].max())], 'r-')
     xlabel(r'$L/L_{\rm Edd}$', fontsize=14) ; ylabel(r'$R_{\rm shock}/R_*$', fontsize=14)
     plt.tick_params(labelsize=12, length=1, width=1., which='minor')
     plt.tick_params(labelsize=12, length=3, width=1., which='major')

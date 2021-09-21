@@ -53,13 +53,16 @@ def galjaread(infile):
     
     return x, u, v, rho, prat
 
-def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf = 'DEFAULT', vone = None):
+def comparer(ingalja, inpasha, nentry = 1000, ifhdf = True, conf = 'DEFAULT', vone = None, nocalc = False):
 
-    xg, ug, vg, rhog, pratg = galjaread(ingalja)
-    if vone is not None:
-        vg *= vone
+    if ifplot:
+        xg, ug, vg, rhog, pratg = galjaread(ingalja)
+        if vone is not None:
+            vg *= vone
+        betag = pratg / (1.+pratg)
     
     rstar = config[conf].getfloat('rstar')
+    rstarg = rstar
     m1 = config[conf].getfloat('m1')
     mu30 = config[conf].getfloat('mu30')
     mdot = config[conf].getfloat('mdot') * 4.*pi
@@ -73,83 +76,104 @@ def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf 
     umag = b12**2*2.29e6*m1
     betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
 
-    if vnorm is not None:
-        vg *= vnorm 
-
-    if ifhdf:
-        inhdf = inpasha + '.hdf5'
-        sintry = size(nentry)
-        if sintry <= 1:
-            entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry)
-            dv = 0.*vp 
+    if not nocalc:
+        if ifhdf:
+            inhdf = inpasha + '.hdf5'
+            sintry = size(nentry)
+            if sintry <= 1:
+                entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry)
+                dv = 0.*vp
+            else:
+                entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry[0])
+                nentries = nentry[1]-nentry[0]
+                dv = copy(vp) * 0.
+                for k in arange(nentries-1)+nentry[0]+1:
+                    entry1, t, l, xp, sth, rho1, up1, vp1, qloss1, glo1  = hdf.read(inhdf, k)
+                    rhop += rho1 ; up += up1 ; vp += vp1 ; qloss += qloss1
+                    dv += vp1**2
+                    if k == nentry[0]+1:
+                        tstart = t
+                    if k == nentry[1]-1:
+                        tend = t
+                rhop /= double(nentries)
+                up /= double(nentries)
+                vp /= double(nentries)
+                qloss /= double(nentries)
+                dv = sqrt(dv/double(nentries) - vp**2)
+                print("time range = "+str(tstart*tscale)+".."+str(tend*tscale)+"s")
         else:
-            entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry[0])
-            nentries = nentry[1]-nentry[0]
-            dv = copy(vp) * 0.
-            for k in arange(nentries-1)+nentry[0]+1:
-                entry1, t, l, xp, sth, rho1, up1, vp1, qloss1, glo1  = hdf.read(inhdf, k)
-                rhop += rho1 ; up += up1 ; vp += vp1 ; qloss += qloss1
-                dv += vp1**2
-                if k == nentry[0]+1:
-                    tstart = t
-                if k == nentry[1]-1:
-                    tend = t
-            rhop /= double(nentries)
-            up /= double(nentries)
-            vp /= double(nentries)
-            qloss /= double(nentries)
-            dv = sqrt(dv/double(nentries) - vp**2)
-            print("time range = "+str(tstart*tscale)+".."+str(tend*tscale)+"s")
-    else:
-        sintry=0
-        xp, qp = readtireout(inpasha, ncol = [3, 2, 1])
-        up, vp, rhop = qp
-    geofile = os.path.dirname(inpasha)+"/geo.dat"
-    r, theta, alpha, across, l, delta = geo.gread(geofile)
+            sintry=0
+            xp, qp = readtireout(inpasha, ncol = [3, 2, 1])
+            up, vp, rhop = qp
+        geofile = os.path.dirname(inpasha)+"/geo.dat"
+        r, theta, alpha, across, l, delta = geo.gread(geofile)
     # lfun = interp1d(r,l)
     # xl = lfun(xp*rstar)/rstar
+    else:
+        lines = loadtxt(os.path.dirname(inpasha) + '/avprofile.dat', comments = '#')
+        xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; pratp = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5]
+        virialbetaP = lines[:,6]
+        sintry = 0
+        betap = pratp / (1.+pratp)
     
-    umagtar = umag * (1.+3.*cos(theta)**2)/4. * xp**(-6.)
-    if ifhdf:
-        up /= umagtar
+    if not nocalc:
+        umagtar = umag * (1.+3.*cos(theta)**2)/4. * xp**(-6.)
+        if ifhdf:
+            up /= umagtar
     
-    betap = Fbeta(rhop, up * umagtar, betacoeff)
-    pratp = betap / (1.-betap)
-    pressp = up / 3. / (1.-betap/2.)
+        betap = Fbeta(rhop, up * umagtar, betacoeff)
+        pratp = betap / (1.-betap)
+        pressp = up / 3. / (1.-betap/2.)
 
-    # internal temperatures:
-    tempp = (up * umagtar / mass1)**(0.25) * 3.35523 # keV
-    umagtar_g = umag * (1.+3.*(1.-xg/xp.max()))/4. * xg**(-6.)
-    tempg = (ug * umagtar_g / mass1)**(0.25) * 3.35523 # keV
-
-    uscale = rhoscale*0.898755
-    print("umagscale = "+str(rhoscale*0.898755)+"x10^{21}erg/c^3")
-    print("physical energy density on the pole and on the column foot:")
-    print(str(umag * uscale*3.)+"; "+str(umagtar[0]*uscale*3.)+"x10^{21}erg/cm^3")
-    print("compare to 4.774648")
+        # internal temperatures:
+        tempp = (up * umagtar / mass1)**(0.25) * 3.35523 # keV
+        uscale = rhoscale*0.898755
+        print("umagscale = "+str(rhoscale*0.898755)+"x10^{21}erg/c^3")
+        print("physical energy density on the pole and on the column foot:")
+        print(str(umag * uscale*3.)+"; "+str(umagtar[0]*uscale*3.)+"x10^{21}erg/cm^3")
+        print("compare to 4.774648")
     
-    # let us estimate post-factum beta:
-    virialbetaP =  (up+pressp) * umagtar / rhop * rstar
-    print("measured in situ (Pasha) betaBS = "+str(virialbetaP[0:5]))
-    rstarg = rstar
-    virialbetaG = (8.+5.*pratg)/(6.+3.*pratg) * ug * umagtar_g / (rhog/rhoscale) * rstarg
-    print("measured in situ (Galja) betaBS = "+str(virialbetaG[0:5]))
-    print("pratg = "+str(pratg[0:5]))
+        # let us estimate post-factum beta:
+        virialbetaP =  (up+pressp) * umagtar / rhop * rstar
+        print("measured in situ (Pasha) betaBS = "+str(virialbetaP[0:5]))
+        rstarg = rstar
     
     if ifplot:
+
+        umagtar_g = umag * (1.+3.*(1.-xg/xp.max()))/4. * xg**(-6.)
+        tempg = (ug * umagtar_g / mass1)**(0.25) * 3.35523 # keV
+
+        virialbetaG = (8.+5.*pratg)/(6.+3.*pratg) * ug * umagtar_g / (rhog/rhoscale) * rstarg
+        print("measured in situ (Galja) betaBS = "+str(virialbetaG[0:5]))
+        print("pratg = "+str(pratg[0:5]))
+
         outdir = os.path.dirname(ingalja)+'/'
         print('writing to '+outdir)
-        plots.someplots([xg, xp], [ug, up], name=outdir+'BScompare_u', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
+        plots.someplots([xg, xp, xp], [ug, up, up*0.+3.], name=outdir+'BScompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
         if sintry >= 1:
             plots.someplots([xp, xg, xp, xp, xp, xp], [-vp, -vg, 1./sqrt(rstar*xp), 1./sqrt(rstar*xp)/7., -vp+dv, -vp-dv], name=outdir+'BScompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
         else:
             plots.someplots([xp, xg, xp, xp], [-vp, -vg, 1./sqrt(rstar*xp), 1./sqrt(rstar*xp)/7.], name=outdir+'BScompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
-        plots.someplots([xg, xp], [pratg, pratp], name=outdir+'BScompare_p', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$P_{\rm gas} / P_{\rm rad}$', multix = True)
+        plots.someplots([xg, xp], [betag, betap], name=outdir+'BScompare_p', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True)
         plots.someplots([xg, xp], [tempg, tempp], name=outdir+'BScompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True)
         plots.someplots([xg, xp], [rhog/rhoscale, rhop], name=outdir+'BScompare_rho', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True)
         plots.someplots([xg, xp], [virialbetaG, virialbetaP], name=outdir+'BScompare_virbeta', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta_{\rm BS}$', multix = True)
-# comparer('galia_F/BS_solution_F', 'titania_nod/tireout', vnorm = -0.000173023, conf = 'FIDU', nentry = [8000,9000])
-
+    if not nocalc:
+        # we need to save the result as an ASCII file, then
+        dirname = os.path.dirname(inpasha)
+        fout = open(dirname + '/avprofile.dat', 'w')
+        fout.write("# R  -- v -- u -- Prat -- rho -- betaBS \n")
+        nx = size(xp)
+        for k in arange(nx):
+            s = str(xp[k]) + " " + str(vp[k]) + " " + str(up[k]) + " " + str(pratp[k]) + " " + str(tempp[k]) + " " + str(rhop[k]) + " " + str(virialbetaP[k]) + "\n"
+            print(s)
+            fout.write(s)
+            fout.flush()
+        fout.close()
+        
+# comparer('galia_F/BS_solution_F', 'titania_bs/tireout', vone = -9.778880e+05/3e10, nentry = [4000,5000])
+# comparer('galia_N/BS_solution_N', 'titania_narrow2/tireout', nentry = [4000,5000], vone = -8.194837e+06/3e10, nocalc = True)
+# comparer('galia_M100/BS_solution_M100', 'titania_mdot100/tireout06000', vone = -1.957280e+06/3e10)
     
 def rcoolfun(geometry, mdot):
     '''
