@@ -550,7 +550,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     if(ifplot):
         ws=where((s>1.0) & (lc_part > lc_part.min()))
         n=ws
-        plots.someplots(t[ws], [lc_tot[ws], lc_part[ws], lc_out[ws], lc_tot[ws]-lc_part[ws], t[ws]*0.+mdot/rstar/4./pi*(1.-BSbeta), t[ws]*0.+mdot/rstar/4./pi, lc_tot[ws]-mdot/rstar/4./pi*(1.-BSbeta)], name = outdir+"/lumshocks", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', formatsequence = ['k-', 'r-', 'b:', 'g-.', 'k:', 'k--', 'm-'], inchsize = [5, 4], ylog = True)
+        plots.someplots(t[ws], [lc_tot[ws], lc_part[ws], lc_out[ws], lc_tot[ws]-lc_part[ws], t[ws]*0.+mdot/rstar/4./pi*(1.-BSbeta), t[ws]*0.+mdot/rstar/4./pi, lc_tot[ws]-mdot/rstar/4./pi*(1.-BSbeta)], name = outdir+"/lumshocks", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', formatsequence = ['k-', 'r-', 'b:', 'g-.', 'k:', 'k--', 'm-'], inchsize = [5, 4], ylog = False)
         plots.someplots(t[ws], [s[ws], s[ws]*0.+xs], name = outdir+"/shockfront", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b:'], vertical = t.max()*0.9, verticalformatsequence = 'b:', inchsize = [5,4])        
         plots.someplots(lc_part[ws], [s[ws], s[ws]*0.+xs], name=outdir+"/fluxshock", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog= (lc_tot[ws].max()/median(lc_tot[ws])) > 10., ylog= (s[ws].max()/s[ws].min()> 10.), formatsequence = ['k-', 'r-', 'b-'], vertical = eqlum, verticalformatsequence = 'r-', inchsize = [5,4])
         # plots.someplots(t[ws], [ff[n], lc_part[ws], ff[n]*0.+eqlum], name = outdir+"/flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False, formatsequence = ['k:', 'k-', 'r-'])
@@ -820,6 +820,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     r, theta, alpha, across, l, delta = geo.gread(geofile)
     # first frame
     entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, n1)
+    cth = sqrt(1.-sth**2)
 
     rstar = glo['rstar']
     umag = glo['umag']
@@ -838,6 +839,11 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     # ii = input("M")
     print("Umag = "+str(umag)+" = "+str(umag1)+"\n")
     betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
+    
+    mcol = across[0] * rstar**2 * umag / m1 * (1.+3.*cth[0]**2)/4.
+    tr = mcol / mdot * tscale
+    print("tr = "+str(tr))
+    # ii =input('tr')
     
     nr=size(r)
     nrnew = 300 # radial mesh interpolated to nrnew
@@ -890,8 +896,11 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
             drvent[k] = r[wvent+1]-r[wvent]
             maxprat[k] = (press/umagtar)[(r>r.min())&(r<rshock[k])].max()
             betavent[k] = ((u+press)/rho)[wvent] * rstar
-            #          print("rvent = "+str(rvent[k])+" = "+str(r[wvent]))
-            #            print("drvent = "+str(drvent[k]))
+            if (rvent[k] >= 1.) & (maxprat[k] >= 1.):
+                print("rvent = "+str(rvent[k])+" = "+str(r[wvent]))
+                print("drvent = "+str(drvent[k]))
+                print("t = "+str(t*tscale))
+                # ii = input('R')
             #            print("maxprat = "+str(maxprat[k]))
         # effective BS's beta:
         betaeff[k] = ((u+press)/rho)[0:1].mean() * rstar
@@ -914,6 +923,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     if ifplot:
         plots.somemap(rnew, tar*tscale, var, name=outdir+'/q2d_v', levels = vlev, inchsize = [4, 12], cbtitle = r'$v/c$', transpose = True, xrange = trange)
         plots.someplots(rnew, [-sqrt(1./rstar/rnew), rnew*0., varmean, varmean+varstd, varmean-varstd], formatsequence = [':k', '--k', '-k', '-g', '-g'], xlog = True, ylog = False, xtitle = r'$R/R_{\rm *}$', ytitle = r'$\langle v\rangle /c$', inchsize = [3.35, 2.], name=outdir+'/q2d_vmean')
+        plots.someplots(tar*tscale, [rvent], name = outdir+'/rvent', xtitle = r'$t$, s', ytitle = r'$R/R_8$')
 
     # internal energy
     #    print(umag)
@@ -942,7 +952,6 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
         # mean mdar
         mdmean = mdar.mean(axis=0)
         mdstd = mdar.std(axis=0)
-
 
         plots.someplots(rnew, [rnew*0.+1., rnew*0., mdmean/mdot, (mdmean+mdstd)/mdot, (mdmean-mdstd)/mdot], formatsequence = [':k', '--k', '-k', '-g', '-g'], xlog = True, ylog = False, xtitle = r'$R/R_{\rm *}$', ytitle = r'$\langle s\rangle /\dot{M}$', inchsize = [3.35, 2.], name=outdir+'/q2d_mdmean')
  

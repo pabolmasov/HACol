@@ -688,7 +688,7 @@ def multishock_plot(frontfile, trange = None):
     someplots(f, [s, s*0. + rs], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = xs, verticalformatsequence = 'r-')
     # someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
     
-def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
+def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None, trange = None):
         # fluxfile1, frontfile1, fluxfile2, frontfile2):
     '''
     plotting many shock fronts together
@@ -697,6 +697,8 @@ def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
 
     nf = size(prefices)
     tlist = [] ;   flist = [];   slist = [] ;  dslist = []
+
+    maxs = 0.
 
     for k in arange(nf):
         if not parflux:
@@ -713,22 +715,31 @@ def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None):
         else:
             f = fluxlines[:,-1]
         ts=frontlines[1:,0] ; s=frontlines[1:,1] ; ds=frontlines[1:,2]
-        tlist.append(ts)
+        # tlist.append(ts)
         if parflux:
             f1 = f # / 4./pi
         else:
             fint = interp1d(tf, f, bounds_error=False)
             f1 = fint(ts)/4./pi
         if smax is None:
-            smax = s.max()
-        slist.append(s[(s>sfilter)&(s<smax)]); flist.append(f1[(s>sfilter)&(s<smax)])
+            maxs = s.max()
+        else:
+            maxs = smax
+        slist.append(s[(s>sfilter)&(s<maxs)]); flist.append(f1[(s>sfilter)&(s<maxs)])
+        tlist.append(ts[(s>sfilter)&(s<maxs)])
 
         if k == 0:
             eqlum = frontinfo[0] ; rs = frontinfo[1]
-    
+        
     clf()
     fig = figure()
     for k in arange(nf):
+        if trange is not None:
+            w = where((tlist[k]>trange[0]) * (tlist[k]<trange[1]))
+            print(size(w))
+            flist[k] = (flist[k])[w]
+            slist[k] = (slist[k])[w]
+            tlist[k] = (tlist[k])[w]
         plot(flist[k], slist[k], formatsequence[k])
 
     plot([minimum(flist[0].min(), flist[0].min()), maximum(flist[0].max(), flist[0].max())], [rs, rs], 'r-')
