@@ -53,6 +53,124 @@ def galjaread(infile):
     
     return x, u, v, rho, prat
 
+def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = False):
+    '''
+    compares the structure of the flow to the analytic solution by B&S76
+    '''
+    
+    sintry = size(nentry)
+    
+    rstar = config[conf].getfloat('rstar')
+    rstarg = rstar
+    m1 = config[conf].getfloat('m1')
+    mu30 = config[conf].getfloat('mu30')
+    mdot = config[conf].getfloat('mdot') * 4.*pi
+    afac = config[conf].getfloat('afac')
+    mass1 = config[conf].getfloat('m1')
+    tscale = config[conf].getfloat('tscale') * mass1
+    rhoscale = config[conf].getfloat('rhoscale') / mass1
+    realxirad = config[conf].getfloat('xirad')
+    mow = config[conf].getfloat('mow')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    umag = b12**2*2.29e6*m1
+    betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
+
+    if not nocalc:
+        if ifhdf:
+            inhdf = infile + '.hdf5'
+            sintry = size(nentry)
+            if sintry <= 1:
+                entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry)
+                dv = 0.*vp
+            else:
+                entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry[0])
+                nentries = nentry[1]-nentry[0]
+                dv = copy(vp) * 0.
+                for k in arange(nentries-1)+nentry[0]+1:
+                    entry1, t, l, xp, sth, rho1, up1, vp1, qloss1, glo1  = hdf.read(inhdf, k)
+                    rhop += rho1 ; up += up1 ; vp += vp1 ; qloss += qloss1
+                    dv += vp1**2
+                    if k == nentry[0]+1:
+                        tstart = t
+                    if k == nentry[1]-1:
+                        tend = t
+                rhop /= double(nentries)
+                up /= double(nentries)
+                vp /= double(nentries)
+                qloss /= double(nentries)
+                dv = sqrt(dv/double(nentries) - vp**2)
+                print("time range = "+str(tstart*tscale)+".."+str(tend*tscale)+"s")
+        else:
+            sintry=0
+            xp, qp = readtireout(infile, ncol = [3, 2, 1])
+            up, vp, rhop = qp
+    else:
+        lines = loadtxt(os.path.dirname(infile) + '/avprofile.dat', comments = '#')
+        xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; pratp = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5]
+        virialbetaP = lines[:,6]
+        sintry = 0
+        betap = pratp / (1.+pratp)
+
+    geofile = os.path.dirname(infile)+"/geo.dat"
+    r, theta, alpha, across, l, delta = geo.gread(geofile)
+
+    umagtar = umag * (1.+3.*cos(theta)**2)/4. * (r/rstar)**(-6.)
+
+    betap = Fbeta(rhop, up * umagtar, betacoeff)
+    pratp = betap / (1.-betap)
+    pressp = up / 3. / (1.-betap/2.)
+
+    BSgamma = (across/delta**2)[0]/mdot*rstar / (realxirad/1.5)
+    # umag is magnetic pressure
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    umag = b12**2*2.29e6*m1
+    
+    BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta[0])/(rstar)**0.125
+    print("BSgamma = "+str(BSgamma))
+    print("BSeta = "+str(BSeta))
+    xs, BSbeta = bs.xis(BSgamma, BSeta, x0=4., ifbeta = True)
+
+    BSr, BSv, BSu = bs.BSsolution(BSgamma, BSeta)
+    BSv *= -1./sqrt(rstar)
+    BSumagtar = umag * BSr**(-6.)
+
+    BSu = 3. * BSu/BSu[0] * BSr**6
+    tempg = (BSu * BSumagtar / mass1)**(0.25) * 3.35523 # keV
+    tempp = (up / mass1)**(0.25) * 3.35523 # keV
+    
+    acrossfun = interp1d(r/rstar, across)
+    BSacross = acrossfun(BSr)
+    BSrho = -mdot / BSacross / BSv
+
+    betag = Fbeta(BSrho, BSu * BSumagtar, betacoeff)
+    pratg = betag / (1.-betag)
+
+    virialbetaP =  (up+pressp) * umagtar / rhop * rstar
+    virialbetaBS = (8.+5.*pratg)/(6.+3.*pratg) * BSu * BSumagtar / (BSrho/rhoscale) * rstar
+
+    if not nocalc:
+        # we need to save the result as an ASCII file, then
+        dirname = os.path.dirname(infile)
+        fout = open(dirname + '/avprofile.dat', 'w')
+        fout.write("# R  -- v -- u -- Prat -- rho -- betaBS \n")
+        nx = size(xp)
+        for k in arange(nx):
+            s = str(xp[k]) + " " + str(vp[k]) + " " + str(up[k]) + " " + str(pratp[k]) + " " + str(tempp[k]) + " " + str(rhop[k]) + " " + str(virialbetaP[k]) + "\n"
+            print(s)
+            fout.write(s)
+            fout.flush()
+        fout.close()
+    if ifplot:
+        if sintry >= 1:
+            plots.someplots([r/rstar, BSr, r/rstar, r/rstar, r/rstar, r/rstar], [-vp, -BSv, 1./sqrt(r), 1./sqrt(r)/7., -vp+dv, -vp-dv], name='acompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
+        else:
+            plots.someplots([r/rstar, BSr, r/rstar, r/rstar], [-vp, -BSv, 1./sqrt(r), 1./sqrt(r)/7.], name='acompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
+        plots.someplots([BSr, r/rstar], [BSrho, rhop], name='acompare_rho', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True)
+        plots.someplots([BSr, r/rstar, r/rstar], [BSu, up/umagtar, up*0.+3.], name='acompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
+        plots.someplots([BSr, r/rstar], [tempg, tempp], name='acompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True)
+        plots.someplots([BSr, r/rstar], [betag, betap], name='acompare_p', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True)
+
+
 def comparer(ingalja, inpasha, nentry = 1000, ifhdf = True, conf = 'DEFAULT', vone = None, nocalc = False):
 
     if ifplot:
