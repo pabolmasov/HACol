@@ -12,6 +12,8 @@ import glob
 import re
 import os
 
+# CHECK new branch
+
 #Uncomment the following if you want to use LaTeX in figures 
 rc('font',**{'family':'serif'})
 rc('mathtext',fontset='cm')
