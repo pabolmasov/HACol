@@ -10,8 +10,9 @@ config.read(conffile)
 
 import bassun as bs
 
-modellist = ['light', 'fidu', 'fidu2']
-# ['mdot100w', 'mdot100w3', 'mdot100w5', 'mdot100w10', 'mdot100w20', 'mdot100w50']
+modellist = ['fidu', 'fidu2', 'nd', 'bs', 'mdot1', 'mdot3', 'wide', 'wi', 'wi1', 'narrow', 'narrow2', 'rot', 'irr', 'RI', 'huge', 'mdot30', 'mdot100', 'mdot100w', 'mdot100w3', 'mdot100w5', 'mdot100w10', 'mdot100w20', 'mdot100w50']
+
+modellist = ['mdot100h_6'] # ,'mdot100w', 'mdot100w3', 'mdot100w5', 'mdot100w10', 'mdot100w20', 'mdot100w50']
 
 def titanfetch():
 
@@ -19,9 +20,49 @@ def titanfetch():
         print("mkdir /Users/pasha/HACol/titania_"+a)
         print("sshpass -p \"i138Sal\" scp pavabo@titan.utu.fi:/home/pavabo/tired/out_"+a+"/\*.\* /Users/pasha/HACol/titania_"+a+"/")
         os.system("mkdir /Users/pasha/HACol/titania_"+a)
-        os.system("sshpass -p \"i138Sal\" scp pavabo@titan.utu.fi:/home/pavabo/tired/out_"+a+"/sfro*.dat /Users/pasha/HACol/titania_"+a+"/")
+        os.system("sshpass -p \"i138Sal\" scp pavabo@titan.utu.fi:/home/pavabo/tired/out_"+a+"/totals.dat /Users/pasha/HACol/titania_"+a+"/")
+        
         
 '''
+# @titan:
+do not forget confs in acomparer!
+postpro.acomparer('out_bs/tireout', nentry = [40000,50000])
+postpro.acomparer('out_narrow2/tireout', nentry = [4000,5000], conf='NARROW2')
+postpro.quasi2d('out_narrow2/tireout.hdf5', 4000,5000, conf = 'NARROW2')
+postpro.acomparer('out_mdot3/tireout', nentry = [15000,20000], conf='M3')
+postpro.acomparer('out_mdot1/tireout', nentry = [20000,26000], conf='M1')
+postpro.quasi2d('out_RI/tireout.hdf5', 0,22000, step=10, conf='irr')
+postpro.quasi2d('out_rot/tireout.hdf5', 0,5000, step=1, conf='rot')
+postpro.quasi2d('out_RI/tireout.hdf5', 0,5000, step=1, conf='RI')
+
+# Fig. 4
+quasi2d_nocalc('titania_mdot1/ftable.dat', conf='M1', trange=[0., 0.05])
+quasi2d_nocalc('titania_fidu2/ftable.dat', trange=[0., 0.05])
+quasi2d_nocalc('titania_mdot100/ftable.dat', conf='M100', trange=[0., 0.05])
+
+#Fig. 7:
+avcompare_list(["titania_light", "titania_fidu", "titania_fidu2", "titania_nd"], rrange=[3.24,3.28])
+cp avtwo_u.png forpaper/av4u_zoom.png
+avcompare_list(["titania_light", "titania_fidu", "titania_fidu2", "titania_nd"])
+cp avtwo_u.png forpaper/av4u_full.png
+
+# Fig. 8
+avcompare_list(["titania_wide", "titania_wi", "titania_wi1"])
+cp avtwo_v.png forpaper/av3_full.png
+avcompare_list(["titania_wide", "titania_wi", "titania_wi1"], rrange=[1.85,2.1])
+cp avtwo_v.png forpaper/av3_zoom.png
+
+
+# Fig. 9
+acomparer('titania_bs/tireout', nocalc=True)
+# Fig. 10
+acomparer('titania_narrow2/tireout', nocalc=True, conf='NARROW2')
+# Fig. 11:
+dynspec(infile = 'titania_huge/sfront', nbins = 20, ntimes=15, iffront = True,deline=False, fosccol = -1, trange = [0.,0.5], stnorm = False)
+
+# junkplots
+quasi2d_nocalc('titania_fidu2/ftable.dat')
+
 # stitching together:
 stitch('titania_dhuge/tireout.hdf5','titania_dhuge1/tireout.hdf5') 
 system('mv titania_dhuge/tirecombine.hdf5 titania_dhuge/tire123.hdf5')
@@ -29,9 +70,9 @@ stitch('titania_dhuge/tire1234.hdf5','titania_dhuge/tireout.hdf5')
   
 multishock_plot('titania_bs/sfront', trange=[0.,0.3])
   
-quasi2d('titania_fidu/tireout.hdf5', 0,600)
-quasi2d('titania_mdot30/tireout.hdf5', 0,1500, conf = 'M30')
-quasi2d('titania_mdot1/tireout.hdf5', 0,1500, conf = 'M1')
+quasi2d('out_fidu/tireout.hdf5', 0,1500)
+quasi2d('out_mdot100/tireout.hdf5', 0,1500, conf = 'M100')
+quasi2d('out_mdot1/tireout.hdf5', 0,1500, conf = 'M1')
 
 
 postpro.multishock(0,1399, 1, prefix = 'out_mdot100w/tireout', dat=False, conf='M100W', xest=7.)
@@ -39,6 +80,7 @@ postpro.multishock(0,1129, 1, prefix = 'out_mdot100w3/tireout', dat=False, conf=
 postpro.multishock(0,1911, 1, prefix = 'out_mdot100w5/tireout', dat=False, conf='M100Wdr5', xest=5.)
 postpro.multishock(0,4000, 1, prefix = 'out_mdot100w10/tireout', dat=False, conf='M100Wdr10', xest=4.)
 postpro.multishock(0,5000, 1, prefix = 'out_mdot100w20/tireout', dat=False, conf='M100Wdr20', xest=3.)
+postpro.multishock(0,5000, 1, prefix = 'out_mdot100w50/tireout', dat=False, conf='M100Wdr50', xest=3.)
 
 multishock(0,5000, 1, prefix = 'titania_light/tireout', dat=False, conf='LIGHT')
 multishock(0,5000, 1, prefix = 'titania_fidu/tireout', dat=False)
@@ -159,7 +201,8 @@ def figkakkonen():
         print(x0)
 
     rmax = 13.53
-    plots.someplots([beta, beta_BS, beta_BS], [xs, xs_BS, beta_BS*0.+rmax], xtitle=r'$\beta_{\rm BS}$', ytitle=r'$R_{\rm shock}/R_*$', multix = True, formatsequence = ['k.', 'r-', 'b:'], name = 'forpaper/figkakkonen', xlog = False, ylog = False, dys = dxs, vertical=2./3.)
+    plots.someplots([beta, beta_BS, beta_BS], [xs, xs_BS, beta_BS*0.+rmax], xtitle=r'$\beta_{\rm BS}$', ytitle=r'$R_{\rm shock}/R_*$', multix = True, formatsequence = ['k.', 'r-', 'b:'], name = 'forpaper/figkakkonen', xlog = False, ylog = False, dys = dxs, vertical=2./3., inchsize = [5.,4.])
+    plots.someplots([beta, beta_BS], [xs, xs_BS], xtitle=r'$\beta_{\rm BS}$', ytitle=r'$R_{\rm shock}/R_*$', multix = True, formatsequence = ['k.', 'r-', 'b:'], name = 'forpaper/figkakkonen_noblue', xlog = False, ylog = False, dys = dxs, inchsize = [5.,4.])
 
 
 def massrace():

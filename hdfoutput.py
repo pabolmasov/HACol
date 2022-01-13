@@ -35,7 +35,7 @@ def init(hname, g, configactual): # , m1, mdot, eta, afac, re, dre, omega):
     hfile.flush()
     return hfile # returns file stream reference
     
-def dump(hfile, nout, t, rho, v, u, qloss):
+def dump(hfile, nout, t, rho, v, u, qloss, ediff):
     '''
     writing one snapshot
     '''
@@ -46,6 +46,8 @@ def dump(hfile, nout, t, rho, v, u, qloss):
     grp.create_dataset("v", data=v)
     grp.create_dataset("u", data=u)
     grp.create_dataset("qloss", data=qloss)
+    if size(ediff) > 1:
+        grp.create_dataset("ediff", data=ediff)
     hfile.flush()
     print("HDF5 output, entry"+entry+"\n", flush=True)
 

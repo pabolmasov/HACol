@@ -286,8 +286,8 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     if xrange is not None:
         xlim(xrange[0], xrange[1])
     xlabel(xtitle, fontsize=14) ; ylabel(ytitle, fontsize=14)
-    plt.tick_params(labelsize=12, length=1, width=1., which='minor')
-    plt.tick_params(labelsize=12, length=3, width=1., which='major')
+    plt.tick_params(labelsize=12, length=1, width=1., which='minor', direction='in')
+    plt.tick_params(labelsize=12, length=3, width=1., which='major', direction='in')
     if inchsize is not None:
         fig.set_size_inches(inchsize[0], inchsize[1])
     else:
@@ -362,11 +362,14 @@ def errorplot(x, dx, y, dy, outfile = 'errorplot', xtitle = None, ytitle = None,
     savefig(outfile+'.png')
     close()
     
-def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
+def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None, logscale=True):
 
     nbin0=2
     
-    lpds=log10(pds2)
+    if logscale:
+        lpds=log10(pds2)
+    else:
+        lpds = pds2
     # print(lpds)
     lmin=lpds[nbin>=nbin0].min() ; lmax=lpds[nbin>=nbin0].max()
     binfreqc=(binfreq2[1:,1:]+binfreq2[1:,:-1])/2.
@@ -374,10 +377,13 @@ def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None):
     fmax=binfreqc[nbin>=nbin0].max()
     clf()
     fig = figure()
-    pcolormesh(t2, binfreq2, lpds, cmap='hot', vmin=lmin-0.1, vmax=lmax+0.1)
+    pcolormesh(t2, binfreq2, lpds, cmap='hot') #, vmin=lmin-0.1, vmax=lmax+0.1)
     cbar = colorbar()
     cbar.ax.tick_params(labelsize=10, length=3, width=1., which='major', direction ='in')
-    cbar.set_label(r'$\log_{10}PDS$, relative units', fontsize=12)
+    if logscale:
+        cbar.set_label(r'$\log_{10}f^2 PDS$, relative units', fontsize=12)
+    else:
+        cbar.set_label(r'$f^2 PDS$, relative units', fontsize=12)
     if omega != None:
         plot([t2.min(), t2.max()], [omega/2./pi, omega/2./pi], color='k')
     xlim(t2.min(), t2.max())
@@ -745,8 +751,8 @@ def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None, tr
     plot([minimum(flist[0].min(), flist[0].min()), maximum(flist[0].max(), flist[0].max())], [rs, rs], 'r-')
     plot([eqlum, eqlum], [minimum(slist[0].min(), slist[0].min()), maximum(slist[0].max(), slist[0].max())], 'r-')
     xlabel(r'$L/L_{\rm Edd}$', fontsize=14) ; ylabel(r'$R_{\rm shock}/R_*$', fontsize=14)
-    plt.tick_params(labelsize=12, length=1, width=1., which='minor')
-    plt.tick_params(labelsize=12, length=3, width=1., which='major')
+    plt.tick_params(labelsize=12, length=1, width=1., which='minor', direction='in')
+    plt.tick_params(labelsize=12, length=3, width=1., which='major', direction='in')
     fig.set_size_inches(6, 6)
     fig.tight_layout()
     savefig("manyfluxfronts.png") ;   savefig("manyfluxfronts.pdf")
