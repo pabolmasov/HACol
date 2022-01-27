@@ -53,13 +53,15 @@ def galjaread(infile):
     
     return x, u, v, rho, prat
 
-def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf = 'DEFAULT', vone = None):
-
-    xg, ug, vg, rhog, pratg = galjaread(ingalja)
-    if vone is not None:
-        vg *= vone
+def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = False):
+    '''
+    compares the structure of the flow to the analytic solution by B&S76
+    '''
+    
+    sintry = size(nentry)
     
     rstar = config[conf].getfloat('rstar')
+    rstarg = rstar
     m1 = config[conf].getfloat('m1')
     mu30 = config[conf].getfloat('mu30')
     mdot = config[conf].getfloat('mdot') * 4.*pi
@@ -73,83 +75,274 @@ def comparer(ingalja, inpasha, nentry = 1000, ifhdf = False, vnorm = None, conf 
     umag = b12**2*2.29e6*m1
     betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
 
-    if vnorm is not None:
-        vg *= vnorm 
+    if not nocalc:
+        if ifhdf:
+            inhdf = infile + '.hdf5'
+            sintry = size(nentry)
+            if sintry <= 1:
+                entry, t, l, xp, sth, rhop, up, vp, qloss, glo, ediff  = hdf.read(inhdf, nentry)
+                betap = Fbeta(rhop, up, betacoeff)
+                dv = vp *0.
+                du = up *0.
+                drho = rhop*0.
+                dbeta = betap*0.
+                dqloss = qloss * 0.
+            else:
+                entry, t, l, xp, sth, rhop, up, vp, qloss, glo, ediff = hdf.read(inhdf, nentry[0])
+                beta1 = Fbeta(rhop, up, betacoeff)
+                betap = copy(beta1)
+                nentries = nentry[1]-nentry[0]
+                dv = copy(vp)**2
+                du = copy(up)**2
+                drho = copy(rhop)**2
+                dbeta = copy(beta1)**2
+                dqloss = copy(qloss)**2
+                for k in arange(nentries-1)+nentry[0]+1:
+                    entry1, t, l, xp, sth, rho1, up1, vp1, qloss1, glo1, ediff1  = hdf.read(inhdf, k)
+                    beta1 = Fbeta(rho1, up1, betacoeff)
+                    rhop += rho1 ; up += up1 ; vp += vp1 ; qloss += qloss1 ; betap += beta1
+                    dv += vp1**2
+                    du += up1**2
+                    drho += rho1**2
+                    dbeta += beta1**2
+                    dqloss += qloss1**2
+                    if k == nentry[0]+1:
+                        tstart = t
+                    if k == nentry[1]-1:
+                        tend = t
+                betap /= double(nentries)
+                rhop /= double(nentries)
+                up /= double(nentries)
+                vp /= double(nentries)
+                qloss /= double(nentries)
+                dv = sqrt(dv/double(nentries) - vp**2)
+                du = sqrt(du/double(nentries) - up**2)
+                drho = sqrt(drho/double(nentries) - rhop**2)
+                dbeta = sqrt(dbeta/double(nentries) - betap**2)
+                dqloss = sqrt(dqloss/double(nentries) - qloss**2)
 
-    if ifhdf:
-        inhdf = inpasha + '.hdf5'
-        sintry = size(nentry)
-        if sintry <= 1:
-            entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry)
-            dv = 0.*vp 
+                dv[isnan(dv)] = 0. ; du[isnan(du)] = 0.
+                print("time range = "+str(tstart*tscale)+".."+str(tend*tscale)+"s")
         else:
-            entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry[0])
-            nentries = nentry[1]-nentry[0]
-            dv = copy(vp) * 0.
-            for k in arange(nentries-1)+nentry[0]+1:
-                entry1, t, l, xp, sth, rho1, up1, vp1, qloss1, glo1  = hdf.read(inhdf, k)
-                rhop += rho1 ; up += up1 ; vp += vp1 ; qloss += qloss1
-                dv += vp1**2
-                if k == nentry[0]+1:
-                    tstart = t
-                if k == nentry[1]-1:
-                    tend = t
-            rhop /= double(nentries)
-            up /= double(nentries)
-            vp /= double(nentries)
-            qloss /= double(nentries)
-            dv = sqrt(dv/double(nentries) - vp**2)
-            print("time range = "+str(tstart*tscale)+".."+str(tend*tscale)+"s")
+            sintry=0
+            xp, qp = readtireout(infile, ncol = [3, 2, 1])
+            up, vp, rhop = qp
     else:
-        sintry=0
-        xp, qp = readtireout(inpasha, ncol = [3, 2, 1])
-        up, vp, rhop = qp
-    geofile = os.path.dirname(inpasha)+"/geo.dat"
+        lines = loadtxt(os.path.dirname(infile) + '/avprofile.dat', comments = '#')
+        xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; betap = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5]
+        dv = lines[:,6] ; du = lines[:,7] ; dbeta = lines[:,8]
+        sintry = 0
+        #  betap = pratp / (1.+pratp)
+
+    geofile = os.path.dirname(infile)+"/geo.dat"
     r, theta, alpha, across, l, delta = geo.gread(geofile)
+    perimeter = 2. * (across/delta + 2.*delta)
+    
+    qloss /= perimeter ; dqloss /= perimeter # flux from unit surface area
+
+    umagtar = umag * (1.+3.*cos(theta)**2)/4. * (r/rstar)**(-6.)
+
+    BSgamma = (across/delta**2)[0]/mdot*rstar / (realxirad/1.5)
+    # umag is magnetic pressure
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    # umag = b12**2*2.29e6*m1
+    
+    BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(delta[0])/(rstar)**0.125
+    print("BSgamma = "+str(BSgamma))
+    print("BSeta = "+str(BSeta))
+    xs, BSbeta = bs.xis(BSgamma, BSeta, x0=4., ifbeta = True)
+
+    BSr, BSv, BSu = bs.BSsolution(BSgamma, BSeta)
+    BSv *= -1./sqrt(rstar)
+    BSumagtar = umag * BSr**(-6.)
+
+    BSu = 3. * BSu/BSu[0] * BSr**6
+    tempg = (BSu * BSumagtar / mass1)**(0.25) * 3.35523 # keV
+    tempp = (up * umagtar / mass1)**(0.25) * 3.35523 # keV
+    
+    acrossfun = interp1d(r/rstar, across, bounds_error=False)
+    BSacross = acrossfun(BSr)
+    BSrho = -mdot / BSacross / BSv
+
+    betag = Fbeta(BSrho, BSu * BSumagtar, betacoeff)
+    pratg = copy(betag / (1.-betag))
+
+    # virialbetaP =  (up+pressp) * umagtar / rhop * rstar
+    # virialbetaBS = (8.+5.*pratg)/(6.+3.*pratg) * BSu * BSumagtar / (BSrho/rhoscale) * rstar
+
+    dirname = os.path.dirname(infile)
+
+    if not nocalc:
+        # we need to save the result as an ASCII file, then
+        fout = open(dirname + '/avprofile.dat', 'w')
+        fout.write("# R  -- v -- u -- Prat -- T -- rho -- qloss -- dv -- du -- dqloss \n")
+        nx = size(xp)
+        for k in arange(nx):
+            s = str(xp[k]) + " " + str(vp[k]) + " " + str((up/umagtar)[k]) + " " + str(betap[k]) + " " + str(tempp[k]) + " " + str(rhop[k]) + " " + str(qloss[k]) + " " + str(dv[k])+ " "+str((du/umagtar)[k])+" "+str(dbeta[k])+" "+str(dqloss[k])+"\n"
+            print(s)
+            fout.write(s)
+            fout.flush()
+        fout.close()
+    if ifplot:
+        if (sintry > 1) or nocalc:
+            plots.someplots([r/rstar, BSr, r/rstar, r/rstar, r/rstar, r/rstar], [-vp, -BSv, 1./sqrt(r), 1./sqrt(r)/7., -vp+dv, -vp-dv], name=dirname+'/acompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True, yrange= [-BSv.max()/2., -BSv.min()*7.*2.])
+            print(str(sintry)+' = sintry')
+            # print(du.max())
+            plots.someplots([BSr, r/rstar, r/rstar, r/rstar, r/rstar], [BSu, up, up*0.+3., up+du, up-du], name=dirname+'/acompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True, yrange = [BSu.min()/10., maximum(BSu.max()*2.,5.)])
+            plots.someplots([BSr, r/rstar, r/rstar, r/rstar], [betag, betap, betap+dbeta, betap-dbeta], name=dirname+'/acompare_p', ylog=True, formatsequence=['k-', 'r--', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True)
+            #     plots.someplots([BSr, r/rstar, r/rstar, r/rstar], [BSrho, rhop, rhop+drho, rhop-drho], name=dirname+'/acompare_rho', ylog=True, formatsequence=['k-', 'r--', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True)
+        else:
+            plots.someplots([r/rstar, BSr, r/rstar, r/rstar], [-vp, -BSv, 1./sqrt(r), 1./sqrt(r)/7.], name=dirname+'/acompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True, yrange= [-BSv.max()/2., -BSv.min()*7.*2.])
+            plots.someplots([BSr, r/rstar, r/rstar], [BSu, up, up*0.+3.], name=dirname+'/acompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True, yrange = [BSu.min()/10., maximum(BSu.max()*2.,5.)])
+            plots.someplots([BSr, r/rstar], [BSrho, rhop], name=dirname+'/acompare_rho', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True)
+        plots.someplots([BSr, r/rstar], [tempg, tempp], name=dirname+'/acompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True)
+        teff = 4.75 * mass1**(-0.25) * qloss**0.25 # keV
+        dteff = dqloss / qloss * teff * 0.25
+        plots.someplots([r/rstar], [teff], name=dirname+'/acompare_Teff', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T_{\rm eff}$, keV', multix = True)
+ #        plots.someplots([BSr, r/rstar], [betag, betap], name=dirname+'/acompare_p', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True)
+
+def avcompare_list(dirlist, rrange = None):
+
+    nf = size(dirlist)
+    
+    xlist = [] ; vlist = [] ; ulist = [] ; plist = []
+    
+    for k in arange(nf):
+        lines = loadtxt(dirlist[k] + '/avprofile.dat', comments = '#')
+        xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; pratp = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5]
+        xlist.append(xp) ; vlist.append(vp) ; ulist.append(up)  ; plist.append(pratp/(1.+pratp))
+        
+    if rrange is None:
+        plots.someplots(xlist, vlist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', name='avtwo_v', inchsize=[5,3])
+        plots.someplots(xlist, ulist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', name='avtwo_u', ylog=True, inchsize=[5,3])
+        plots.someplots(xlist, plist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', name='avtwo_p', ylog=True, inchsize=[5,3])
+    else:
+        plots.someplots(xlist, vlist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', name='avtwo_v', xrange = rrange, xlog = False, inchsize=[5,3])
+        urange = [ulist[-1][(xlist[-1]>rrange[0]) & (xlist[-1]<rrange[1])].min(), ulist[-1][(xlist[-1]>rrange[0]) & (xlist[-1]<rrange[1])].max()]
+        plots.someplots(xlist, ulist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', name='avtwo_u', xrange = rrange, xlog = False, yrange = urange, inchsize=[5,3])
+
+
+def comparer(ingalja, inpasha, nentry = 1000, ifhdf = True, conf = 'DEFAULT', vone = None, nocalc = False):
+
+    if ifplot:
+        xg, ug, vg, rhog, pratg = galjaread(ingalja)
+        if vone is not None:
+            vg *= vone
+        betag = pratg / (1.+pratg)
+    
+    rstar = config[conf].getfloat('rstar')
+    rstarg = rstar
+    m1 = config[conf].getfloat('m1')
+    mu30 = config[conf].getfloat('mu30')
+    mdot = config[conf].getfloat('mdot') * 4.*pi
+    afac = config[conf].getfloat('afac')
+    mass1 = config[conf].getfloat('m1')
+    tscale = config[conf].getfloat('tscale') * mass1
+    rhoscale = config[conf].getfloat('rhoscale') / mass1
+    realxirad = config[conf].getfloat('xirad')
+    mow = config[conf].getfloat('mow')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    umag = b12**2*2.29e6*m1
+    betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
+
+    if not nocalc:
+        if ifhdf:
+            inhdf = inpasha + '.hdf5'
+            sintry = size(nentry)
+            if sintry <= 1:
+                entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry)
+                dv = 0.*vp
+            else:
+                entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry[0])
+                nentries = nentry[1]-nentry[0]
+                dv = copy(vp) * 0.
+                for k in arange(nentries-1)+nentry[0]+1:
+                    entry1, t, l, xp, sth, rho1, up1, vp1, qloss1, glo1  = hdf.read(inhdf, k)
+                    rhop += rho1 ; up += up1 ; vp += vp1 ; qloss += qloss1
+                    dv += vp1**2
+                    if k == nentry[0]+1:
+                        tstart = t
+                    if k == nentry[1]-1:
+                        tend = t
+                rhop /= double(nentries)
+                up /= double(nentries)
+                vp /= double(nentries)
+                qloss /= double(nentries)
+                dv = sqrt(dv/double(nentries) - vp**2)
+                print("time range = "+str(tstart*tscale)+".."+str(tend*tscale)+"s")
+        else:
+            sintry=0
+            xp, qp = readtireout(inpasha, ncol = [3, 2, 1])
+            up, vp, rhop = qp
+        geofile = os.path.dirname(inpasha)+"/geo.dat"
+        r, theta, alpha, across, l, delta = geo.gread(geofile)
     # lfun = interp1d(r,l)
     # xl = lfun(xp*rstar)/rstar
+    else:
+        lines = loadtxt(os.path.dirname(inpasha) + '/avprofile.dat', comments = '#')
+        xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; pratp = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5]
+        virialbetaP = lines[:,6]
+        sintry = 0
+        betap = pratp / (1.+pratp)
     
-    umagtar = umag * (1.+3.*cos(theta)**2)/4. * xp**(-6.)
-    if ifhdf:
-        up /= umagtar
+    if not nocalc:
+        umagtar = umag * (1.+3.*cos(theta)**2)/4. * xp**(-6.)
+        if ifhdf:
+            up /= umagtar
     
-    betap = Fbeta(rhop, up * umagtar, betacoeff)
-    pratp = betap / (1.-betap)
-    pressp = up / 3. / (1.-betap/2.)
+        betap = Fbeta(rhop, up * umagtar, betacoeff)
+        pratp = betap / (1.-betap)
+        pressp = up / 3. / (1.-betap/2.)
 
-    # internal temperatures:
-    tempp = (up * umagtar / mass1)**(0.25) * 3.35523 # keV
-    umagtar_g = umag * (1.+3.*(1.-xg/xp.max()))/4. * xg**(-6.)
-    tempg = (ug * umagtar_g / mass1)**(0.25) * 3.35523 # keV
-
-    uscale = rhoscale*0.898755
-    print("umagscale = "+str(rhoscale*0.898755)+"x10^{21}erg/c^3")
-    print("physical energy density on the pole and on the column foot:")
-    print(str(umag * uscale*3.)+"; "+str(umagtar[0]*uscale*3.)+"x10^{21}erg/cm^3")
-    print("compare to 4.774648")
+        # internal temperatures:
+        tempp = (up * umagtar / mass1)**(0.25) * 3.35523 # keV
+        uscale = rhoscale*0.898755
+        print("umagscale = "+str(rhoscale*0.898755)+"x10^{21}erg/c^3")
+        print("physical energy density on the pole and on the column foot:")
+        print(str(umag * uscale*3.)+"; "+str(umagtar[0]*uscale*3.)+"x10^{21}erg/cm^3")
+        print("compare to 4.774648")
     
-    # let us estimate post-factum beta:
-    virialbetaP =  (up+pressp) * umagtar / rhop * rstar
-    print("measured in situ (Pasha) betaBS = "+str(virialbetaP[0:5]))
-    rstarg = rstar
-    virialbetaG = (8.+5.*pratg)/(6.+3.*pratg) * ug * umagtar_g / (rhog/rhoscale) * rstarg
-    print("measured in situ (Galja) betaBS = "+str(virialbetaG[0:5]))
-    print("pratg = "+str(pratg[0:5]))
+        # let us estimate post-factum beta:
+        virialbetaP =  (up+pressp) * umagtar / rhop * rstar
+        print("measured in situ (Pasha) betaBS = "+str(virialbetaP[0:5]))
+        rstarg = rstar
     
     if ifplot:
+
+        umagtar_g = umag * (1.+3.*(1.-xg/xp.max()))/4. * xg**(-6.)
+        tempg = (ug * umagtar_g / mass1)**(0.25) * 3.35523 # keV
+
+        virialbetaG = (8.+5.*pratg)/(6.+3.*pratg) * ug * umagtar_g / (rhog/rhoscale) * rstarg
+        print("measured in situ (Galja) betaBS = "+str(virialbetaG[0:5]))
+        print("pratg = "+str(pratg[0:5]))
+
         outdir = os.path.dirname(ingalja)+'/'
         print('writing to '+outdir)
-        plots.someplots([xg, xp], [ug, up], name=outdir+'BScompare_u', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
+        plots.someplots([xg, xp, xp], [ug, up, up*0.+3.], name=outdir+'BScompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True)
         if sintry >= 1:
             plots.someplots([xp, xg, xp, xp, xp, xp], [-vp, -vg, 1./sqrt(rstar*xp), 1./sqrt(rstar*xp)/7., -vp+dv, -vp-dv], name=outdir+'BScompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
         else:
             plots.someplots([xp, xg, xp, xp], [-vp, -vg, 1./sqrt(rstar*xp), 1./sqrt(rstar*xp)/7.], name=outdir+'BScompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True)
-        plots.someplots([xg, xp], [pratg, pratp], name=outdir+'BScompare_p', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$P_{\rm gas} / P_{\rm rad}$', multix = True)
+        plots.someplots([xg, xp], [betag, betap], name=outdir+'BScompare_p', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True)
         plots.someplots([xg, xp], [tempg, tempp], name=outdir+'BScompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True)
         plots.someplots([xg, xp], [rhog/rhoscale, rhop], name=outdir+'BScompare_rho', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True)
         plots.someplots([xg, xp], [virialbetaG, virialbetaP], name=outdir+'BScompare_virbeta', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta_{\rm BS}$', multix = True)
-# comparer('galia_F/BS_solution_F', 'titania_nod/tireout', vnorm = -0.000173023, conf = 'FIDU', nentry = [8000,9000])
-
+    if not nocalc:
+        # we need to save the result as an ASCII file, then
+        dirname = os.path.dirname(inpasha)
+        fout = open(dirname + '/avprofile.dat', 'w')
+        fout.write("# R  -- v -- u -- Prat -- rho -- betaBS \n")
+        nx = size(xp)
+        for k in arange(nx):
+            s = str(xp[k]) + " " + str(vp[k]) + " " + str(up[k]) + " " + str(pratp[k]) + " " + str(tempp[k]) + " " + str(rhop[k]) + " " + str(virialbetaP[k]) + "\n"
+            print(s)
+            fout.write(s)
+            fout.flush()
+        fout.close()
+        
+# comparer('galia_F/BS_solution_F', 'titania_bs/tireout', vone = -9.778880e+05/3e10, nentry = [4000,5000])
+# comparer('galia_N/BS_solution_N', 'titania_narrow2/tireout', nentry = [4000,5000], vone = -8.194837e+06/3e10, nocalc = True)
+# comparer('galia_M100/BS_solution_M100', 'titania_mdot100/tireout06000', vone = -1.957280e+06/3e10)
     
 def rcoolfun(geometry, mdot):
     '''
@@ -255,12 +448,16 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
         binfreq=linspace(freq1, freq2, nbins+1)
     freq1 = 0.
     binfreqc=(binfreq[1:]+binfreq[:-1])/2.
+    binfreqs=(binfreq[1:]-binfreq[:-1])/2.
     pds2=zeros([ntimes, nbins]) ;   dpds2=zeros([ntimes, nbins])
     t2=zeros([ntimes+1, nbins+1], dtype=double)
     nbin=zeros([ntimes, nbins], dtype=double)
     binfreq2=zeros([ntimes+1, nbins+1], dtype=double)
     fmax = zeros(ntimes) ;   dfmax = zeros(ntimes)
     xmean = zeros(ntimes) ; xstd = zeros(ntimes)
+    # average PDS
+    taver = [0.25, 0.4] # averaging interval for meansp
+    
     if fosccol is not None:
         foscmean = zeros(ntimes) ; foscstd = zeros(ntimes)
     fdyns=open(infile+'_dyns.dat', 'w')
@@ -270,11 +467,13 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
         lt=xs[wt]
         pfit = polyfit(t[wt], lt, 1)
         if deline:
-            fsp=fft.rfft((lt-pfit[0]*t[wt]-pfit[1]), norm="ortho")
+            fsp=fft.rfft((lt-pfit[0]*t[wt]-pfit[1])) #, norm="ortho")
         else:
-            fsp=fft.rfft((lt-lt.mean()), norm="ortho")
+            fsp=fft.rfft((lt-lt.mean())) #, norm="ortho")
         if stnorm:
             fsp /= lt.std()
+        else:
+            fsp *= 2./lt.sum() # Miyamoto normalization, see Nowak et al.(1999) The Astrophysical Journal, Volume 510, Issue 2, pp. 874-891
         nt=size(lt)
         print("nt ="+str(nt))
         dt = median((t[wt])[1:]-(t[wt])[:-1])
@@ -313,8 +512,12 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
     ffreqmax.close()
     print(t2.max())
     if ifplot:
-        frange = plots.plot_dynspec(t2, binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin)
+        frange = plots.plot_dynspec(t2, binfreq2, pds2, outfile=infile+'_dyns', nbin=nbin, logscale = True)
         plots.errorplot(tcenter, tsize, fmax, dfmax, outfile = infile + '_ffmax', xtitle = '$t$, s', ytitle = '$f$, Hz')
+        tfilter  = (t2[1:,1:]<taver[1])&(t2[:-1,1:]>taver[0])
+        pds1 = (pds2* tfilter).sum(axis = 0) / (tfilter).sum(axis = 0)
+        dpds1 = (pds2* tfilter).std(axis = 0) / sqrt((tfilter).sum(axis = 0))
+        plots.errorplot(binfreqc, binfreqs, pds1/binfreqc**2, dpds1/binfreqc**2, outfile = infile + '_msp', xtitle = '$f$, Hz', ytitle = 'PDS', ylog = True)
         if iffront:
             # we need geometry:
             outdir = os.path.dirname(infile)
@@ -484,12 +687,12 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     # umag is magnetic pressure
     BSeta = (8./21./sqrt(2.) * umag * 3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
     xs, BSbeta = bs.xis(BSgamma, BSeta, x0=xest, ifbeta = True)
-    dt_BS = tscale * rstar**1.5 * bs.dtint(BSgamma, xs, cthfun)
     print("eta = "+str(BSeta))
     print("gamma = "+str(BSgamma))
     print("eta gamma^{1/4} = "+str(BSeta*BSgamma**0.25))
     print("beta = "+str(BSbeta))
     print("predicted shock position = "+str(xs))
+    dt_BS = tscale * rstar**1.5 * bs.dtint(BSgamma, xs, cthfun)
     ii = input("xs")
     # spherization radius
     rsph =1.5*mdot/4./pi
@@ -623,16 +826,30 @@ def taus(n, prefix = 'out/tireout', ifhdf = True, conf = 'DEFAULT'):
         hname = prefix + ".hdf5"
         entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, n)
     else:
-        entryname = hdf.entryname(n, ndig=5)
-        fname = prefix + entryname + ".dat"
-        lines = loadtxt(fname, comments="#")
-        rho = lines[:,1]
+        lines = loadtxt( os.path.dirname(prefix) + '/avprofile.dat', comments = '#')
+        r = lines[:,0] ; v = lines[:,1] ; u = lines[:,2] ; prat = lines[:,3] ; temp = lines[:,4] ; rho = lines[:,5]
+        # entryname = hdf.entryname(n, ndig=5)
+        # fname = prefix + entryname + ".dat"
+        # lines = loadtxt(fname, comments="#")
+        # rho = lines[:,1]
     taucross = delta * rho  # across the flow
     dr = (r[1:]-r[:-1])  ;   rc = (r[1:]+r[:-1])/2.
     taualong = (rho[1:]+rho[:-1])/2. * dr
     taucrossfun = interp1d(r, taucross, kind = 'linear')
     if(ifplot):
         plots.someplots(rc-1., [taucrossfun(rc), taualong], name = prefix+"_tau", xtitle=r'$r/R_{\rm NS}-1$', ytitle=r'$\tau$', xlog=True, ylog=True, formatsequence=['k-', 'r-'])
+        plots.someplots(rc-1., [2./(rho[1:]+rho[:-1])/rc/rstar, (delta[1:]+delta[:-1])/2./rc/rstar, dr/rc], name = prefix+"_d", xtitle=r'$r/R_{\rm NS}-1$', ytitle=r'$\delta/R$, $1/\varkappa \rho R$', xlog=True, ylog=True, formatsequence=['k-', 'r--', 'b:'])
+    else:
+        # ASCII output
+        fout = open(os.path.dirname(prefix)+'/tauprofile.dat', 'w')
+        fout.write("# R  -- tperp -- tparallel \n")
+        nx = size(rc)
+        for k in arange(nx):
+            s = str(rc[k]) + " " + str(taucrossfun(rc[k])) + " " + str(taualong[k]) + "\n"
+            print(s)
+            fout.write(s)
+            fout.flush()
+        fout.close()
 
 def filteredflux(hfile, n1, n2, rfraction = 0.9, conf = 'DEFAULT'):
     '''
@@ -767,7 +984,10 @@ def energytest(infile, n1, n2, dn, conf = 'DEFAULT'):
                     name = os.path.dirname(infile)+'/energytest_d', xlog = False, 
                     xtitle = r'$t$, s', ytitle = r'$dE/dt$', yrange = [-ltot.max(), ltot.max()*2.])
 
-def masstest(indir):
+def masstest(indir, conf='DEFAULT'):
+
+    mass1 = config[conf].getfloat('m1')
+    massscale = config[conf].getfloat('massscale') * mass1
 
     massfile = indir + '/totals.dat'
     
@@ -778,6 +998,29 @@ def masstest(indir):
     plots.someplots(t, [m-m[0], macc-mlost-(macc[0]-mlost[0]), (macc-macc[0])*1e-2, (mlost-mlost[0])*1e-2], name = 'mbalance', formatsequence = ['k-', 'r:', 'b--', 'm-', 'c-'],
                     xlog = False, ylog = False, xtitle = r'$t$, s', ytitle = r'$M$')
     print("mass change / mass injected = "+str((m[-1]-m[0])/(macc[-1]-macc[0])))
+    
+    plots.someplots((t[1:]+t[:-1])/2., [(mlost[1:]-mlost[:-1])/(t[1:]-t[:-1])], name='mdot', xtitle = r'$t$, s', ytitle = r'$\dot{M}$, g s$^{-1}$', xlog = False, xrange=[1.5,1.6], ylog = True)
+
+
+def quasi2d_nocalc(infile, conf = 'DEFAULT', trange = None):
+    
+    outdir = os.path.dirname(infile)
+    
+    lines = loadtxt(infile, comments="#", delimiter=" ", unpack=False)
+    
+    t = lines[:,0] ;  r = lines[:,1] ;  v = lines[:,2] ;  lurel = lines[:,3];  m = lines[:,4]
+    
+    nt = size(unique(t)) ; nr = size(unique(r))
+    
+    t = unique(t) ; r = unique(r)
+    v = reshape(v, [nt, nr]) ;  lurel = reshape(lurel, [nt, nr]) ;  m = reshape(m, [nt, nr])
+    u = 10.**lurel
+    
+    if ifplot:
+        plots.somemap(r, t, v, name=outdir+'/q2d_v', inchsize = [4, 12], cbtitle = r'$v/c$',  xrange = trange,transpose=True)
+        plots.somemap(r, t, lurel, name=outdir+'/q2d_u', inchsize = [4, 12], cbtitle = r'$\log_{10}\left(u/u_{\rm mag}\right)$', xrange = trange, addcontour = [u/3./1., u/3./0.9, u/3./0.8],transpose=True)
+        nv = 30
+        plots.somemap(r, t, m, name=outdir+'/q2d_m', inchsize = [4, 12], cbtitle = r'$s / \dot{M}$', xrange = trange, transpose=True, levels = 3.*arange(nv)/double(nv-2)-1.)
 
 
 #############################################
@@ -795,7 +1038,8 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile)
     # first frame
-    entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, n1)
+    entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(hname, n1)
+    cth = sqrt(1.-sth**2)
 
     rstar = glo['rstar']
     umag = glo['umag']
@@ -815,8 +1059,13 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     print("Umag = "+str(umag)+" = "+str(umag1)+"\n")
     betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
     
+    mcol = across[0] * rstar**2 * umag / m1 * (1.+3.*cth[0]**2)/4.
+    tr = mcol / mdot * tscale
+    print("tr = "+str(tr))
+    # ii =input('tr')
+    
     nr=size(r)
-    nrnew = 300 # radial mesh interpolated to nrnew
+    nrnew = 1000 # radial mesh interpolated to nrnew
     rnew = (r.max()/r.min())**(arange(nrnew)/double(nrnew-1))*r.min()
     sthfun = interp1d(r, sth)
     sthnew = sthfun(rnew)
@@ -827,6 +1076,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     par = zeros([nt, nrnew], dtype=double)
     betar = zeros([nt, nrnew], dtype = double) # this is pgas/ptot
     qar = zeros([nt, nrnew], dtype=double)
+    ear = zeros([nt, nrnew], dtype=double)
     lurel = zeros([nt, nrnew], dtype=double)
     mdar = zeros([nt, nrnew], dtype=double)
     tar = zeros(nt, dtype=double)
@@ -839,11 +1089,14 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     betaeff_m = zeros(nt, dtype = double) # this, too
     #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
     for k in arange(nt):
-        entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, k*step+n1) # hdf5 read
+        entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(hname, k*step+n1) # hdf5 read
         vfun = interp1d(r, v, kind = 'linear')
         var[k, :] = vfun(rnew)
         qfun = interp1d(r, qloss, kind = 'linear')
         qar[k, :] = qfun(rnew)
+        # print("size(ediff) = ",size(ediff))
+        efun = interp1d(r, ediff, kind = 'linear')
+        ear[k, :] = efun(rnew)
         ufun = interp1d(r, u, kind = 'linear')
         uar[k, :] = ufun(rnew)
         beta = betafun(Fbeta(rho, u, betacoeff))
@@ -866,8 +1119,11 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
             drvent[k] = r[wvent+1]-r[wvent]
             maxprat[k] = (press/umagtar)[(r>r.min())&(r<rshock[k])].max()
             betavent[k] = ((u+press)/rho)[wvent] * rstar
-            #          print("rvent = "+str(rvent[k])+" = "+str(r[wvent]))
-            #            print("drvent = "+str(drvent[k]))
+            if (rvent[k] >= 1.) & (maxprat[k] >= 1.):
+                print("rvent = "+str(rvent[k])+" = "+str(r[wvent]))
+                print("drvent = "+str(drvent[k]))
+                print("t = "+str(t*tscale))
+                # ii = input('R')
             #            print("maxprat = "+str(maxprat[k]))
         # effective BS's beta:
         betaeff[k] = ((u+press)/rho)[0:1].mean() * rstar
@@ -890,6 +1146,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     if ifplot:
         plots.somemap(rnew, tar*tscale, var, name=outdir+'/q2d_v', levels = vlev, inchsize = [4, 12], cbtitle = r'$v/c$', transpose = True, xrange = trange)
         plots.someplots(rnew, [-sqrt(1./rstar/rnew), rnew*0., varmean, varmean+varstd, varmean-varstd], formatsequence = [':k', '--k', '-k', '-g', '-g'], xlog = True, ylog = False, xtitle = r'$R/R_{\rm *}$', ytitle = r'$\langle v\rangle /c$', inchsize = [3.35, 2.], name=outdir+'/q2d_vmean')
+        plots.someplots(tar*tscale, [rvent], name = outdir+'/rvent', xtitle = r'$t$, s', ytitle = r'$R/R_8$')
 
     # internal energy
     #    print(umag)
@@ -909,6 +1166,8 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
         # Q-:
         plots.somemap(rnew, tar*tscale, log10(qar), name=outdir+'/q2d_q', \
                 inchsize = [4, 12], cbtitle = r'$\log_{10}Q$', transpose = True, xrange = trange)
+        plots.somemap(rnew, tar*tscale, log10(ear), name=outdir+'/q2d_qe', \
+                inchsize = [10, 12], cbtitle = r'$\log_{10}F_{\rm diff}$', transpose = True, xrange = trange, yrange = [2.7, 3.3], ylog = False)
         # mdot:
         mdlev = 3.*arange(nv)/double(nv-2)-1.
         plots.somemap(rnew, tar*tscale, mdar/mdot, name=outdir+'/q2d_m', \
@@ -918,7 +1177,6 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
         # mean mdar
         mdmean = mdar.mean(axis=0)
         mdstd = mdar.std(axis=0)
-
 
         plots.someplots(rnew, [rnew*0.+1., rnew*0., mdmean/mdot, (mdmean+mdstd)/mdot, (mdmean-mdstd)/mdot], formatsequence = [':k', '--k', '-k', '-g', '-g'], xlog = True, ylog = False, xtitle = r'$R/R_{\rm *}$', ytitle = r'$\langle s\rangle /\dot{M}$', inchsize = [3.35, 2.], name=outdir+'/q2d_mdmean')
  
@@ -937,3 +1195,50 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     ftable.flush()
     ftable.close()
         
+#####################################
+        
+def diffuseplot(flist, nlist, rrange = [2.86, 2.9]):
+    '''
+    reads several outputs and makes the plots of radiation fluxes and diffusive photon fluxes along the field line
+    '''
+
+    nf = size(flist)
+    
+    rs = [] # radial coords
+    qs = [] # radiation flux (outcoming)
+    ds = [] # diffusion flux (along the line)
+    vs = []
+    csqs = []
+    taulist = [] # radial optical depth
+    
+    for k in arange(nf):
+        entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(flist[k], nlist[k])
+        wfront = (v[1:]-v[:-1]).argmin()
+        wfront += 1
+        taucoord = cumulative_trapezoid(rho, x=l, initial = 0.)
+        taucoord -= taucoord[wfront]
+        geofile = os.path.dirname(flist[k])+"/geo.dat"
+        r1, theta, alpha, across, l1, delta = geo.gread(geofile)
+        perimeter = 2. * (across/delta + 2. * delta)
+        rs.append(r)
+        qs.append(qloss / perimeter)
+        ds.append(ediff)
+        taulist.append(taucoord)
+        vs.append(v)
+        csqs.append(u/rho)
+        
+    taufun = interp1d(r, taucoord)
+    taurange = [taufun(rrange[0]), taufun(rrange[1])]
+        
+    dsrange = [(ds[-1])[(r>rrange[0]) & (r<rrange[1])].min(), (ds[-1])[(r>rrange[0]) & (r<rrange[1])].max()]
+    # rs.append(r)
+    # qs.append(1./r**2)
+        
+    plots.someplots(rs, qs, name = 'diffuse_qs', xtitle = r'$R/R_*$', ytitle = r'$Q^-$', multix = True, xrange = rrange, xlog = False, ylog = False, formatsequence = [':k', '-r', '-g', 'b--', 'r-'])
+    plots.someplots(taulist, qs, name = 'diffuse_tqs', xtitle = r'$\tau_l$', ytitle = r'$Q^-$', multix = True, xrange = taurange, xlog = False, formatsequence = [':k', '-r', '-g', 'b--'], yrange = [0., 0.1])
+    plots.someplots(rs, ds, name = 'diffuse_ds', xtitle = r'$R/R_*$', ytitle = r'$Q_{\rm D}$', multix = True, xrange = rrange, yrange = dsrange, xlog = False, formatsequence = [':k', '-r', '-g', 'b--'])
+    plots.someplots(taulist, ds, name = 'diffuse_tds', xtitle = r'$\tau_l$', ytitle = r'$Q_{\rm D}$', multix = True, xrange = taurange, yrange = dsrange, xlog = False, formatsequence = [':k', '-r', '-g', 'b--'])
+    plots.someplots(taulist, vs, name = 'diffuse_tv', xtitle = r'$\tau_l$', ytitle = r'$v/c$', multix = True, xrange = taurange, xlog = False, formatsequence = [':k', '-r', '-g', 'b--'])
+    plots.someplots(taulist, csqs, name = 'diffuse_tcs', xtitle = r'$\tau_l$', ytitle = r'$P/\rho c^2$', multix = True, xrange = taurange, xlog = False, formatsequence = [':k', '-r', '-g', 'b--'])
+    plots.someplots(taulist, rs, name = 'diffuse_tr', xtitle = r'$\tau_l$', ytitle = r'$R/R_*$', multix = True, xrange = taurange, yrange = rrange, xlog = False, formatsequence = ['.k', '-k', '-g', 'b--'])
+
