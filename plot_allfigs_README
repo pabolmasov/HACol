@@ -1,0 +1,22 @@
+USAGE
+
+perl collect_pdf.pl [folder_template]
+
+has to be run in a directory that contains folders with png files
+resulted from different models. 
+
+folder_template is the optional argument (default is "*") to plot only figures from folders whose names begin with this string.
+
+EXAMPLE 
+
+perl collect_pdf.pl tit
+
+It collects all png figures made by HACOL from
+all subdirectories tit*/ in the current folder
+in one latex-file (all_figures.tex) 
+which is compiled into PDF.
+
+Needs:
+ collect_pdf.pl
+ begin.tex
+ end.tex

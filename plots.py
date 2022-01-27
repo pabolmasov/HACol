@@ -238,7 +238,7 @@ def plot_somemap(fname, ncol = -1, xlog = True):
     levs = (lev2-lev1) * arange(nl)/double(nl-1)+lev1
     somemap(x, y, q, name=fname, xlog=xlog, xtitle=r'$r/R_*$', ytitle = r'$t$, s', transpose=True, levels = levs, inchsize = [3,10])
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None, xrange = None, inchsize = None, dys = None, linewidthsequence = None):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, legendsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None, xrange = None, inchsize = None, dys = None, linewidthsequence = None):
     '''
     plots a series of curves  
     if multix is off, we assume that the independent variable is the same for all the data 
@@ -253,6 +253,8 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
 
     if formatsequence is None:
         formatsequence = ["." for x in range(ny)]
+    if legendsequence is None:
+        legendsequence = ["" for x in range(ny)]
     if linewidthsequence is None:
         linewidthsequence = [1 for x in range(ny)]
         
@@ -269,9 +271,9 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
                 for kv in arange(nv):
                     plot([vertical[kv], vertical[kv]], [ys[k].min(), ys[k].max()], verticalformatsequence)
         if multix:
-            plot(x[k], ys[k], formatsequence[k], linewidth = linewidthsequence[k])
+            plot(x[k], ys[k], formatsequence[k], linewidth = linewidthsequence[k], label = legendsequence[k])
         else:
-            plot(x, ys[k], formatsequence[k], linewidth = linewidthsequence[k])
+            plot(x, ys[k], formatsequence[k], linewidth = linewidthsequence[k], label = legendsequence[k])
     if dys is not None:
         if multix:
             errorbar(x[0], ys[0], fmt = formatsequence[0], yerr = dys)
@@ -292,6 +294,12 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         fig.set_size_inches(inchsize[0], inchsize[1])
     else:
         fig.set_size_inches(5, 4)
+    if legendsequence is not None:
+        fig.legend(loc='lower right', borderaxespad=0.,)    
+        #loc='upper center',ncol=4,
+               #fancybox=True,   bbox_to_anchor=(0.9, 0.5),
+    
+            
     fig.tight_layout()
     savefig(name+'.png')
     savefig(name+'.pdf')
