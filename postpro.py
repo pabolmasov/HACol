@@ -80,14 +80,15 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
             inhdf = infile + '.hdf5'
             sintry = size(nentry)
             if sintry <= 1:
-                entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry)
+                entry, t, l, xp, sth, rhop, up, vp, qloss, glo, ediff  = hdf.read(inhdf, nentry)
                 betap = Fbeta(rhop, up, betacoeff)
                 dv = vp *0.
                 du = up *0.
                 drho = rhop*0.
                 dbeta = betap*0.
+                dqloss = qloss * 0.
             else:
-                entry, t, l, xp, sth, rhop, up, vp, qloss, glo  = hdf.read(inhdf, nentry[0])
+                entry, t, l, xp, sth, rhop, up, vp, qloss, glo, ediff = hdf.read(inhdf, nentry[0])
                 beta1 = Fbeta(rhop, up, betacoeff)
                 betap = copy(beta1)
                 nentries = nentry[1]-nentry[0]
@@ -95,14 +96,16 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
                 du = copy(up)**2
                 drho = copy(rhop)**2
                 dbeta = copy(beta1)**2
+                dqloss = copy(qloss)**2
                 for k in arange(nentries-1)+nentry[0]+1:
-                    entry1, t, l, xp, sth, rho1, up1, vp1, qloss1, glo1  = hdf.read(inhdf, k)
+                    entry1, t, l, xp, sth, rho1, up1, vp1, qloss1, glo1, ediff1  = hdf.read(inhdf, k)
                     beta1 = Fbeta(rho1, up1, betacoeff)
                     rhop += rho1 ; up += up1 ; vp += vp1 ; qloss += qloss1 ; betap += beta1
                     dv += vp1**2
                     du += up1**2
                     drho += rho1**2
                     dbeta += beta1**2
+                    dqloss += qloss1**2
                     if k == nentry[0]+1:
                         tstart = t
                     if k == nentry[1]-1:
@@ -116,6 +119,7 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
                 du = sqrt(du/double(nentries) - up**2)
                 drho = sqrt(drho/double(nentries) - rhop**2)
                 dbeta = sqrt(dbeta/double(nentries) - betap**2)
+                dqloss = sqrt(dqloss/double(nentries) - qloss**2)
 
                 dv[isnan(dv)] = 0. ; du[isnan(du)] = 0.
                 print("time range = "+str(tstart*tscale)+".."+str(tend*tscale)+"s")
@@ -132,6 +136,9 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
 
     geofile = os.path.dirname(infile)+"/geo.dat"
     r, theta, alpha, across, l, delta = geo.gread(geofile)
+    perimeter = 2. * (across/delta + 2.*delta)
+    
+    qloss /= perimeter ; dqloss /= perimeter # flux from unit surface area
 
     umagtar = umag * (1.+3.*cos(theta)**2)/4. * (r/rstar)**(-6.)
 
@@ -168,10 +175,10 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
     if not nocalc:
         # we need to save the result as an ASCII file, then
         fout = open(dirname + '/avprofile.dat', 'w')
-        fout.write("# R  -- v -- u -- Prat -- rho -- betaBS  -- dv \n")
+        fout.write("# R  -- v -- u -- Prat -- T -- rho -- qloss -- dv -- du -- dqloss \n")
         nx = size(xp)
         for k in arange(nx):
-            s = str(xp[k]) + " " + str(vp[k]) + " " + str((up/umagtar)[k]) + " " + str(betap[k]) + " " + str(tempp[k]) + " " + str(rhop[k]) + " " + str(dv[k])+ " "+str((du/umagtar)[k])+" "+str(dbeta[k])+"\n"
+            s = str(xp[k]) + " " + str(vp[k]) + " " + str((up/umagtar)[k]) + " " + str(betap[k]) + " " + str(tempp[k]) + " " + str(rhop[k]) + " " + str(qloss[k]) + " " + str(dv[k])+ " "+str((du/umagtar)[k])+" "+str(dbeta[k])+" "+str(dqloss[k])+"\n"
             print(s)
             fout.write(s)
             fout.flush()
@@ -189,6 +196,9 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
             plots.someplots([BSr, r/rstar, r/rstar], [BSu, up, up*0.+3.], name=dirname+'/acompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True, yrange = [BSu.min()/10., maximum(BSu.max()*2.,5.)])
             plots.someplots([BSr, r/rstar], [BSrho, rhop], name=dirname+'/acompare_rho', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True)
         plots.someplots([BSr, r/rstar], [tempg, tempp], name=dirname+'/acompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True)
+        teff = 4.75 * mass1**(-0.25) * qloss**0.25 # keV
+        dteff = dqloss / qloss * teff * 0.25
+        plots.someplots([r/rstar], [teff], name=dirname+'/acompare_Teff', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T_{\rm eff}$, keV', multix = True)
  #        plots.someplots([BSr, r/rstar], [betag, betap], name=dirname+'/acompare_p', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True)
 
 def avcompare_list(dirlist, rrange = None):
@@ -1028,7 +1038,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile)
     # first frame
-    entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, n1)
+    entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(hname, n1)
     cth = sqrt(1.-sth**2)
 
     rstar = glo['rstar']
@@ -1055,7 +1065,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     # ii =input('tr')
     
     nr=size(r)
-    nrnew = 300 # radial mesh interpolated to nrnew
+    nrnew = 1000 # radial mesh interpolated to nrnew
     rnew = (r.max()/r.min())**(arange(nrnew)/double(nrnew-1))*r.min()
     sthfun = interp1d(r, sth)
     sthnew = sthfun(rnew)
@@ -1066,6 +1076,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     par = zeros([nt, nrnew], dtype=double)
     betar = zeros([nt, nrnew], dtype = double) # this is pgas/ptot
     qar = zeros([nt, nrnew], dtype=double)
+    ear = zeros([nt, nrnew], dtype=double)
     lurel = zeros([nt, nrnew], dtype=double)
     mdar = zeros([nt, nrnew], dtype=double)
     tar = zeros(nt, dtype=double)
@@ -1078,11 +1089,14 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     betaeff_m = zeros(nt, dtype = double) # this, too
     #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
     for k in arange(nt):
-        entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(hname, k*step+n1) # hdf5 read
+        entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(hname, k*step+n1) # hdf5 read
         vfun = interp1d(r, v, kind = 'linear')
         var[k, :] = vfun(rnew)
         qfun = interp1d(r, qloss, kind = 'linear')
         qar[k, :] = qfun(rnew)
+        # print("size(ediff) = ",size(ediff))
+        efun = interp1d(r, ediff, kind = 'linear')
+        ear[k, :] = efun(rnew)
         ufun = interp1d(r, u, kind = 'linear')
         uar[k, :] = ufun(rnew)
         beta = betafun(Fbeta(rho, u, betacoeff))
@@ -1152,6 +1166,8 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
         # Q-:
         plots.somemap(rnew, tar*tscale, log10(qar), name=outdir+'/q2d_q', \
                 inchsize = [4, 12], cbtitle = r'$\log_{10}Q$', transpose = True, xrange = trange)
+        plots.somemap(rnew, tar*tscale, log10(ear), name=outdir+'/q2d_qe', \
+                inchsize = [10, 12], cbtitle = r'$\log_{10}F_{\rm diff}$', transpose = True, xrange = trange, yrange = [2.7, 3.3], ylog = False)
         # mdot:
         mdlev = 3.*arange(nv)/double(nv-2)-1.
         plots.somemap(rnew, tar*tscale, mdar/mdot, name=outdir+'/q2d_m', \
@@ -1179,3 +1195,50 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     ftable.flush()
     ftable.close()
         
+#####################################
+        
+def diffuseplot(flist, nlist, rrange = [2.86, 2.9]):
+    '''
+    reads several outputs and makes the plots of radiation fluxes and diffusive photon fluxes along the field line
+    '''
+
+    nf = size(flist)
+    
+    rs = [] # radial coords
+    qs = [] # radiation flux (outcoming)
+    ds = [] # diffusion flux (along the line)
+    vs = []
+    csqs = []
+    taulist = [] # radial optical depth
+    
+    for k in arange(nf):
+        entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(flist[k], nlist[k])
+        wfront = (v[1:]-v[:-1]).argmin()
+        wfront += 1
+        taucoord = cumulative_trapezoid(rho, x=l, initial = 0.)
+        taucoord -= taucoord[wfront]
+        geofile = os.path.dirname(flist[k])+"/geo.dat"
+        r1, theta, alpha, across, l1, delta = geo.gread(geofile)
+        perimeter = 2. * (across/delta + 2. * delta)
+        rs.append(r)
+        qs.append(qloss / perimeter)
+        ds.append(ediff)
+        taulist.append(taucoord)
+        vs.append(v)
+        csqs.append(u/rho)
+        
+    taufun = interp1d(r, taucoord)
+    taurange = [taufun(rrange[0]), taufun(rrange[1])]
+        
+    dsrange = [(ds[-1])[(r>rrange[0]) & (r<rrange[1])].min(), (ds[-1])[(r>rrange[0]) & (r<rrange[1])].max()]
+    # rs.append(r)
+    # qs.append(1./r**2)
+        
+    plots.someplots(rs, qs, name = 'diffuse_qs', xtitle = r'$R/R_*$', ytitle = r'$Q^-$', multix = True, xrange = rrange, xlog = False, ylog = False, formatsequence = [':k', '-r', '-g', 'b--', 'r-'])
+    plots.someplots(taulist, qs, name = 'diffuse_tqs', xtitle = r'$\tau_l$', ytitle = r'$Q^-$', multix = True, xrange = taurange, xlog = False, formatsequence = [':k', '-r', '-g', 'b--'], yrange = [0., 0.1])
+    plots.someplots(rs, ds, name = 'diffuse_ds', xtitle = r'$R/R_*$', ytitle = r'$Q_{\rm D}$', multix = True, xrange = rrange, yrange = dsrange, xlog = False, formatsequence = [':k', '-r', '-g', 'b--'])
+    plots.someplots(taulist, ds, name = 'diffuse_tds', xtitle = r'$\tau_l$', ytitle = r'$Q_{\rm D}$', multix = True, xrange = taurange, yrange = dsrange, xlog = False, formatsequence = [':k', '-r', '-g', 'b--'])
+    plots.someplots(taulist, vs, name = 'diffuse_tv', xtitle = r'$\tau_l$', ytitle = r'$v/c$', multix = True, xrange = taurange, xlog = False, formatsequence = [':k', '-r', '-g', 'b--'])
+    plots.someplots(taulist, csqs, name = 'diffuse_tcs', xtitle = r'$\tau_l$', ytitle = r'$P/\rho c^2$', multix = True, xrange = taurange, xlog = False, formatsequence = [':k', '-r', '-g', 'b--'])
+    plots.someplots(taulist, rs, name = 'diffuse_tr', xtitle = r'$\tau_l$', ytitle = r'$R/R_*$', multix = True, xrange = taurange, yrange = rrange, xlog = False, formatsequence = ['.k', '-k', '-g', 'b--'])
+

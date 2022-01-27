@@ -3,7 +3,7 @@ import numpy.random
 from numpy.random import rand
 from numpy import *
 
-from numba import jit
+# from numba import jit
 
 # libraries:scipy
 from scipy.integrate import *
@@ -188,9 +188,8 @@ from beta import *
 betafun = betafun_define() # defines the interpolated function for beta (\rho, U)
 betafun_p = betafun_press_define() # defines the interpolated function for beta (\rho, P)
 
-from timestep import * 
+from timestep import *
 
-@jit
 def gphi(g, dr = 0.):
     # gravitational potential
     # dr0 = (g.r[1]-g.r[0])/2. * 0.
@@ -205,7 +204,7 @@ def gphi(g, dr = 0.):
     phi = -1./r - 0.5*(r*g.sth*omega)**2 
     return phi
 
-@jit
+# @jit
 def gforce(sinsum, g, dr):
     # gravitational force calculated self-consistently using gphi on cell boundaries
     #    if crank == first:
@@ -214,7 +213,6 @@ def gforce(sinsum, g, dr):
     return sinsum * (( phi1 - phi ) / dr)[1:-1] # subefficient!
 # ( phi[1:-1] - phi[2:] ) / dr[1:-1] /2.
     
-@jit
 def regularize(u, rho, press):
     '''
     if internal energy goes below ufloor, we heat the matter up artificially
@@ -236,7 +234,6 @@ def regularize(u, rho, press):
 
 # conversion between conserved and primitive variables for separate arrays and for a single domain
 
-@jit
 def toprim_separate(m, s, e, g):
     '''
     conversion to primitives, given mass (m), momentum (s), and energy (e) densities as arrays; g is geometry structure
@@ -254,7 +251,6 @@ def toprim_separate(m, s, e, g):
     beta = betafun(Fbeta(rho, u, betacoeff))
     return rho, v, u, u*(1.-beta)/(1.-beta/2.), beta, press
 
-@jit
 def tocon_separate(rho, v, u, g, gin = False):
     '''
     conversion from primitivies (density rho, velcity v, internal energy u) to conserved quantities m, s, e; g is geometry (structure)
@@ -271,7 +267,6 @@ def tocon_separate(rho, v, u, g, gin = False):
     return m, s, e
 
 # conversion between conserved and primitive variables using dictionaries and multiple domains
-@jit
 def tocon(prim, gnd = None):
     '''
     computes conserved quantities from primitives
@@ -286,7 +281,6 @@ def tocon(prim, gnd = None):
     e=(prim['u']+prim['rho']*(prim['v']**2/2.+phi*potfrac))*gnd.across  # total energy (thermal + mechanic) per unit length
     return {'m': m, 's': s, 'e': e}
 
-@jit
 def toprim(con, gnd = None):
     '''
     convert conserved quantities to primitives for one domain
@@ -307,26 +301,66 @@ def toprim(con, gnd = None):
     prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press}
     return prim
 
-@jit
-def diffuse(rho, urad, v, dl, across):
+#  @jit
+def diffuse(rho, urad, v, dl, across, taueff):
     '''
     radial energy diffusion;
     calculates energy flux contribution already at the cell boundary
     across should be set at half-steps
     '''
-    rtau_exp = tratfac(dl * (rho[1:]+rho[:-1])/2., taumin, taumax)
-    
-    duls_half =  nubulk  * (( urad * v)[1:] - ( urad * v)[:-1])\
-                 *(across[1:]+across[:-1]) / 6. * rtau_exp #  / (rtau_left + rtau_right)
+    # rtau_exp =  tratfac(3. * (rho[1:]+rho[:-1])/2. * dl, taumin, taumax)
+    rtau_exp = 1./(3.*dl* (rho[1:]+rho[:-1])/2.)
+    # rtau_exp1 =  tratfac(3. * (rho)[1:] * dl/2., taumin, taumax)
+    # rtau_exp2 =  tratfac(3. * (rho)[:-1] * dl/2., taumin, taumax)
+    # rtau_exp1 = 1./(3. * (rho)[1:] * dl/2.)
+    # rtau_exp2 = 1./(3. * (rho)[:-1] * dl/2.)
+
+    duls_half =  -nubulk  * (( urad * v)[1:] - ( urad * v)[:-1])\
+                 *(across[1:]+across[:-1]) / 2. * rtau_exp #  / (rtau_left + rtau_right)
     # -- photon bulk viscosity
-    dule_half = ((urad)[1:] - (urad)[:-1])\
-                *(across[1:]+across[:-1]) / 6. * rtau_exp # / (rtau_left + rtau_right)
-    dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux
+    # dule_half = -((urad)[1:] - (urad)[:-1])\
+    #             *(across[1:]+across[:-1]) / 2. * rtau_exp # / (rtau_left + rtau_right)
+    
+    du = (urad*across/rho)[1:] - (urad*across/rho)[:-1]
+    
+    # du[1:-1] = (-urad[3:]+8.*urad[2:-1]-8.*urad[1:-2]+urad[:-3])/12.
+    
+    ttau = taufun(taueff, taumin, taumax)
+    dule_half = -du / 3. / dl * ttau
+    # (across[1:]+across[:-1]) / 2. /(3.*dl)/ ((rho[1:]+rho[:-1])/2.) # (rtau_exp1 + rtau_exp2)  # * rtau_exp # / (rtau_left + rtau_right)
+
+    # dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux
     # -- radial diffusion
 
-    return -duls_half, -dule_half 
+    # flux limiting
+    # dule_half = minimum(dule_half, maximum((urad*across/rho)[:-1],(urad*across/rho)[1:])/dl) # radiation going to the right
+    dule_half = maximum(dule_half, -maximum((urad*across/rho)[:-1],(urad*across/rho)[1:])/dl) # radiation going to the left
+    dule_half = minimum(dule_half, (urad*across)[:-1])
+    dule_half = maximum(dule_half, -(urad*across)[1:])
+    # smoothing the diffusive flux
+    edepth = 0.5
+    ddepth = 10
+    if edepth > 0.:
+        # taul = cumtrapz((rho[1:]+rho[:-1])/2., x=dl, initial = 0.)
+        
+        for k in arange(ddepth):
+            dule_half[1:-1] += edepth * ((dule_half[2:]-dule_half[1:-1]) * exp(-rho[2:-1]/2. * dl[1:-1])+ (dule_half[:-2]-dule_half[1:-1])*exp(-rho[1:-2]/2. * dl[:-2])) * exp(-ttau[1:-1])
+        
+        '''
+        for k in arange(ddepth)+1:
+            dule_half[k:-k] += (dule_half[(k+1):-(k-1)]*exp(-taul[])) ((urad*across)[(2*k+1):]-(urad*across)[(k+1):-k])*exp(-abs(taul[k:-k]-taul[(2*k):]))
+            dule_half[k:-k] += ((urad*across)[:-(2*k+1)]-(urad*across)[(k+1):-k])*exp(-abs(taul[k:-k]-taul[:-(2*k)]))
+        '''
+
+    #n0 = (urad <= 0.).sum()
+    #if n0>0:
+    ##    print(n0)
+    #    print(urad.min())
+        # ii = input('N')
+
+
+    return duls_half, dule_half
            
-@jit
 def fluxes(g, rho, v, u, press):
     '''
     computes the fluxes of conserved quantities, given primitives; 
@@ -345,7 +379,6 @@ def fluxes(g, rho, v, u, press):
     fe = g.across * ( (u + press) * v + (v**2/2.+potfrac*phi)*(rho*v)) # energy flux without diffusion    
     return s, p, fe
 
-@jit
 def qloss_separate(rho, urad, g, gin = False, dt = None):
     '''
     standalone estimate for flux distribution
@@ -393,7 +426,6 @@ def qloss_separate(rho, urad, g, gin = False, dt = None):
     
     return qloss
 
-@jit
 def sources(m, g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0., desqueeze = 0., dt = None):
     # prim, ltot=0., dmsqueeze = 0., desqueeze = 0., forcecheck = False):
     '''
@@ -471,7 +503,7 @@ def sources(m, g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0.
     #    return dm, force, dudt, qloss, ueq
     return dm, ds, de
 
-@jit(nopython=True)
+#  @jit(nopython=True)
 def derivo(l_half, s_half, p_half, fe_half, dm, ds, de):
     #, dlleft, dlright,
     #sleft, sright, pleft, pright, feleft, feright):
@@ -655,16 +687,16 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
     if(raddiff):
         #        dl = gnd.l[1:]-gnd.l[:-1]
         #  across = gnd.across
-        duls_half, dule_half = diffuse(rho, urad, v, gnd.l[1:]-gnd.l[:-1], gnd.across)
         # radial diffusion suppressed, if transverse optical depth is small:
         delta = (gnd.delta[1:]+gnd.delta[:-1])/2.
         across = (gnd.across[1:]+gnd.across[:-1])/2.
         if cooltwosides:
             taueff = delta  * (rho[1:]+rho[:-1])/2.
         else:
-            taueff = (rho[1:]+rho[:-1])/2. / (1./delta + 2. * delta /  across) 
-        duls_half *= taufun(taueff, taumin, taumax) 
-        dule_half *= taufun(taueff, taumin, taumax)
+            taueff = (rho[1:]+rho[:-1])/2. / (1./delta + 2. * delta /  across)
+        duls_half, dule_half = diffuse(rho, urad, v, gnd.l[1:]-gnd.l[:-1], gnd.across, taueff)
+        # duls_half *= taufun(taueff, taumin, taumax)
+        # dule_half *= taufun(taueff, taumin, taumax)
         if leftpack is None:
             dule_half[0] = 0.
         # duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
@@ -1011,8 +1043,11 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         thetimer.start("step") #refresh lap counter (avoids IO profiling)
         thetimer.purge_comps()
     nout += 1
-
-    return nout, t, con, rightpack_save, dmlost, dcon1['DEF']
+    
+    if raddiff:
+        return nout, t, con, rightpack_save, dmlost, dcon1['DEF']
+    else:
+        return nout, t, con, rightpack_save, dmlost, 0.
     
 ##########################################################
 def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 0.):
@@ -1023,6 +1058,9 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
     m = con['m'] ; e = con['e'] ; umagtar = con['umagtar']
     rho = prim['rho'] ; v = prim['v'] ; u = prim['u'] ; urad = prim['urad'] ; beta = prim['beta'] ; press = prim['press']
     r = g.r
+
+    if size(ediff) > 1:
+        ediff = (ediff[1:]+ediff[:-1])/2.
 
     if csize > 1:
         for k in arange(csize-1)+1:
@@ -1041,7 +1079,8 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
             print(str(dmlost)+" += "+str(outblock['dmlost']))
             dmlost += outblock['dmlost']
             if size(ediff) > 1:
-                ediff = concatenate([ediff,outblock['ediff']])
+                ediff_tmp = outblock['ediff']
+                ediff = concatenate([ediff,(ediff_tmp[1:]+ediff_tmp[:-1])/2.])
     # wsort = argsort(r) # restoring the proper order of inputs
     #    r = r[wsort] ;  m = m[wsort] ;  e = e[wsort]
     # rho = rho[wsort] ; v = v[wsort] ; u = u[wsort] ; urad = urad[wsort] ; beta = beta[wsort] ; umagtar = umagtar[wsort]
@@ -1065,6 +1104,8 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
     print("characteristic Mach number: "+str(mach))
     fflux.flush() ; ftot.flush()
     if hfile is not None:
+        # print("qloss = ", qloss)
+        # print("ediff = ", ediff)
         hdf.dump(hfile, nout, t, rho, v, u, qloss, ediff)
         hfile.flush()
     if not(ifhdf) or (nout%ascalias == 0):
@@ -1084,7 +1125,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
                             xlog = True, formatsequence = ['k-', 'k:'])
             if size(ediff) > 1:
                 # print(size(ediff))
-                plots.someplots(gglobal.r, [(ediff[1:]+ediff[:-1])/2., v * (u + press + rho * v**2/2.)],
+                plots.someplots(gglobal.r, [ediff, v * (u + press + rho * v**2/2.)],
                                 name=outdir+'/ediff{:05d}'.format(nout),
                                 ytitle=r'$F_e$', ylog=False, yrange = [ediff.min(), ediff.max()],
                                 formatsequence = ['k-', 'r-'])
@@ -1224,7 +1265,7 @@ def alltire():
             if(ifhdf_restart):
                 # restarting from a HDF5 file
                 restartfile = configactual.get('restartfile')
-                entryname, t, l1, r1, sth1, rho1, u1, v1, qloss1, glosave = hdf.read(restartfile, restartn)
+                entryname, t, l1, r1, sth1, rho1, u1, v1, qloss1, glosave, ediff = hdf.read(restartfile, restartn)
                 print("restarted from file "+restartfile+", entry "+entryname)
             else:
                 # restarting from an ascii output
@@ -1392,7 +1433,8 @@ def alltire():
 
     rightpack_save = None
 
-    dmlost = 0. ; ediff = 0.
+    dmlost = 0.
+    ediff = 0.
     
     while (t<tmax):
         print("t = "+str(t*tscale)+" (crank = "+str(crank)+")")

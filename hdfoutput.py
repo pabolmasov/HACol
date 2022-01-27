@@ -48,6 +48,8 @@ def dump(hfile, nout, t, rho, v, u, qloss, ediff):
     grp.create_dataset("qloss", data=qloss)
     if size(ediff) > 1:
         grp.create_dataset("ediff", data=ediff)
+    else:
+        grp.create_dataset("ediff", data=qloss * 0.)
     hfile.flush()
     print("HDF5 output, entry"+entry+"\n", flush=True)
 
@@ -82,10 +84,11 @@ def read(hname, nentry):
     data=hfile["entry"+entry]
     rho=data["rho"][:] ; u=data["u"][:] ; v=data["v"][:] # reading the snapshot
     qloss = data["qloss"][:]
+    ediff = data["ediff"][:]
     t=data.attrs["t"]
     print("t="+str(t)+" ("+str(nentry)+")")
     hfile.close()
-    return entry, t, l, r/rstar, sth, rho, u, v, qloss, glosave
+    return entry, t, l, r/rstar, sth, rho, u, v, qloss, glosave, ediff
 
 def liststitch(hnamelist):
     '''
