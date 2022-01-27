@@ -1374,6 +1374,11 @@ def alltire():
         fflux=open(outdir+'/'+'flux.dat', 'w')
         ftot=open(outdir+'/'+'totals.dat', 'w')
 
+        fflux.write("# t, s  --  luminosity, Ledd/4pi")
+        ftot.write("# t, s -- mass, "+" -- energy -- lost mass -- accreted mass -- current mdot\n ")
+        ftot.write("#  mass units "+str(mscale)+"g")
+        ftot.write("#  energy units units "+str(escale)+"erg")
+
         ### splitting ###
         inds = parallelfactor
         
