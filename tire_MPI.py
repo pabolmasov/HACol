@@ -143,14 +143,17 @@ config.set(conf,'vout', str(vout))
 tscale = configactual.getfloat('tscale') * m1
 rscale = configactual.getfloat('rscale') * m1
 rhoscale = configactual.getfloat('rhoscale') / m1
+massscale = configactual.getfloat('massscale') * m1**2
+energyscale = configactual.getfloat('energyscale') * m1**2
 
 if verbose & (omega>0.):
     print(conf+": spin period "+str(2.*pi/omega*tscale)+"s")
-tr = 2.**1.5/pi*afac * dr_e/r_e / xifac * (r_e/xifac/rstar)**2.5 / rstar # replenishment time scale of the column
+tr = afac / sqrt(2.) / xifac**3.5 * r_e**1.5 * (dr_e/r_e)
+# 2.**1.5/pi*afac * dr_e/r_e / xifac * (r_e/xifac/rstar)**2.5 / rstar # replenishment time scale of the column
 if verbose:
     print("r_e = "+str(r_e))
     print(conf+": replenishment time "+str(tr*tscale*2.*pi*rstar**1.5))
-    # ii =input("R")
+    ii =input("R")
 tmax = tr * configactual.getfloat('tmax') 
 dtout = tr * configactual.getfloat('dtout')    # tr * configactual.getfloat('dtout')
 ifplot = configactual.getboolean('ifplot')
@@ -1225,7 +1228,8 @@ def alltire():
         cthfun = interp1d(g.r/r[0], g.cth) # we need a function allowing to calculate cos\theta (x)
 
         print(" t_s = "+str(tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, xs, cthfun)))
-        input("BS")
+        if verbose:
+            input("BS")
         # magnetic field energy density:
         umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
         #
@@ -1376,8 +1380,8 @@ def alltire():
 
         fflux.write("# t, s  --  luminosity, Ledd/4pi")
         ftot.write("# t, s -- mass, "+" -- energy -- lost mass -- accreted mass -- current mdot\n ")
-        ftot.write("#  mass units "+str(mscale)+"g")
-        ftot.write("#  energy units units "+str(escale)+"erg")
+        ftot.write("#  mass units "+str(massscale)+"g")
+        ftot.write("#  energy units units "+str(energyscale)+"erg")
 
         ### splitting ###
         inds = parallelfactor
