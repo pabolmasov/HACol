@@ -1,14 +1,11 @@
 from scipy.interpolate import interp1d
 from numpy import *
 
-from numba import jit
-
 # TODO: merge these values with the config file
 ufloor = 1e-15
 rhofloor = 1e-15
 
 # speed of sound multiplier (see Chandrasekhar 1967 or Johnson 2008):
-@jit(nopython=True)
 def Gamma1(gamma, beta):
     g1 = gamma - 1.
     return beta + 9. * g1 * (beta-4./3.)**2/(beta+12.*g1 * (1.-beta))
@@ -33,7 +30,6 @@ def Fbeta(rho, u, betacoeff):
             beta[wpos]=betacoeff * rho[wpos] / u[wpos]**0.75
     return beta 
 
-@jit
 def Fbeta_press(rho, press, betacoeff):
     '''
     calculates a function of 
