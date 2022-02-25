@@ -79,7 +79,7 @@ ttest = configactual.getboolean('ttest') # topology test output
 # physics:
 mu30 = configactual.getfloat('mu30') # magnetic moment, 10^{30} Gs cm^3 units 
 m1 = configactual.getfloat('m1') # NS mass (solar units)
-mdot = configactual.getfloat('mdot') * 4. *pi # internal units, GM/varkappa c
+mdot = configactual.getfloat('mdot') * 4. * pi # internal units, GM/varkappa c
 mdotsink = configactual.getfloat('mdotsink') * 4. *pi # internal units
 rstar = configactual.getfloat('rstar') # GM/c^2 units
 b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
@@ -148,11 +148,11 @@ energyscale = configactual.getfloat('energyscale') * m1**2
 
 if verbose & (omega>0.):
     print(conf+": spin period "+str(2.*pi/omega*tscale)+"s")
-tr = afac / sqrt(2.) / xifac**3.5 * r_e**1.5 * (dr_e/r_e)
+tr = 4. * afac / sqrt(2.) / xifac**3.5 * r_e**1.5 * (dr_e/rstar)
 # 2.**1.5/pi*afac * dr_e/r_e / xifac * (r_e/xifac/rstar)**2.5 / rstar # replenishment time scale of the column
 if verbose:
     print("r_e = "+str(r_e))
-    print(conf+": replenishment time "+str(tr*tscale*2.*pi*rstar**1.5))
+    print(conf+": replenishment time "+str(tr*tscale)) #*2.*pi*rstar**1.5))
     ii =input("R")
 tmax = tr * configactual.getfloat('tmax') 
 dtout = tr * configactual.getfloat('dtout')    # tr * configactual.getfloat('dtout')
@@ -1079,7 +1079,8 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
             urad = concatenate([urad, prim['urad']])
             beta = concatenate([beta, prim['beta']])
             umagtar = concatenate([umagtar, con['umagtar']])
-            print(str(dmlost)+" += "+str(outblock['dmlost']))
+            if verbose:
+                print(str(dmlost)+" += "+str(outblock['dmlost']))
             dmlost += outblock['dmlost']
             if size(ediff) > 1:
                 ediff_tmp = outblock['ediff']
@@ -1204,7 +1205,7 @@ def alltire():
         if verbose:
             print(conf+": Across(0) = "+str(g.across[0]))
             # basic estimate for the replenishment time scale:
-            print(conf+": t_r = A_\perp u_mag / g / dot{M} = "+str(g.across[0] * umag/3. * rstar**2 / mdot * tscale)+"s")
+            print(conf+": t_r = A_\perp u_mag / g / dot{M} = "+str(g.across[0] * umag * rstar**2 / mdot * tscale)+"s")
             ii =input("R")
         r=rnew # set a grid uniform in l=luni
         r_half=rfun(luni_half) # half-step radial coordinates
@@ -1378,10 +1379,10 @@ def alltire():
         fflux=open(outdir+'/'+'flux.dat', 'w')
         ftot=open(outdir+'/'+'totals.dat', 'w')
 
-        fflux.write("# t, s  --  luminosity, Ledd/4pi")
+        fflux.write("# t, s  --  luminosity, Ledd/4pi\n ")
         ftot.write("# t, s -- mass, "+" -- energy -- lost mass -- accreted mass -- current mdot\n ")
-        ftot.write("#  mass units "+str(massscale)+"g")
-        ftot.write("#  energy units units "+str(energyscale)+"erg")
+        ftot.write("#  mass units "+str(massscale)+"g\n")
+        ftot.write("#  energy units units "+str(energyscale)+"erg\n")
 
         ### splitting ###
         inds = parallelfactor
@@ -1446,7 +1447,8 @@ def alltire():
     ediff = 0.
     
     while (t<tmax):
-        print("t = "+str(t*tscale)+" (crank = "+str(crank)+")")
+        if verbose:
+            print("t = "+str(t*tscale)+" (crank = "+str(crank)+")")
         if crank ==0:
             nout, t, con, rightpack_save, dmlost1, ediff1 = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot, t=t, nout = nout, thetimer = timer, rightpack_save = rightpack_save, dmlost = dmlost, ediff = ediff)
         else:

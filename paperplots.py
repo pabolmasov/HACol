@@ -12,7 +12,7 @@ import bassun as bs
 
 modellist = ['fidu', 'fidu2', 'nd', 'bs', 'mdot1', 'mdot3', 'wide', 'wi', 'wi1', 'narrow', 'narrow2', 'rot', 'irr', 'RI', 'huge', 'mdot30', 'mdot100', 'mdot100w', 'mdot100w3', 'mdot100w5', 'mdot100w10', 'mdot100w20', 'mdot100w50']
 
-modellist = ['mdot100'] # ,'mdot100w', 'mdot100w3', 'mdot100w5', 'mdot100w10', 'mdot100w20', 'mdot100w50']
+modellist = ['mdot100h', 'mdot100h_1'] # ,'mdot100w', 'mdot100w3', 'mdot100w5', 'mdot100w10', 'mdot100w20', 'mdot100w50']
 
 def titanfetch():
 
@@ -41,10 +41,14 @@ quasi2d_nocalc('titania_fidu2/ftable.dat', trange=[0., 0.05])
 quasi2d_nocalc('titania_mdot100/ftable.dat', conf='M100', trange=[0., 0.05])
 
 #Fig. 7:
-avcompare_list(["titania_light", "titania_fidu", "titania_fidu2", "titania_nd"], rrange=[3.24,3.28])
+avcompare_list(["titania_light", "titania_fidu", "titania_rfidu2", "titania_nd"], rrange=[3.21,3.3])
 cp avtwo_u.png forpaper/av4u_zoom.png
-avcompare_list(["titania_light", "titania_fidu", "titania_fidu2", "titania_nd"])
+cp avtwo_q.png forpaper/av4q_zoom.png
+cp avtwo_teff.png forpaper/av4teff_zoom.png
+avcompare_list(["titania_light", "titania_fidu", "titania_rfidu2", "titania_nd"])
 cp avtwo_u.png forpaper/av4u_full.png
+cp avtwo_q.png forpaper/av4q_full.png
+cp avtwo_teff.png forpaper/av4teff_full.png
 
 # Fig. 8
 avcompare_list(["titania_wide", "titania_wi", "titania_wi1"])

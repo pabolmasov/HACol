@@ -53,7 +53,7 @@ def galjaread(infile):
     
     return x, u, v, rho, prat
 
-def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = False):
+def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = False, trange = None):
     '''
     compares the structure of the flow to the analytic solution by B&S76
     '''
@@ -91,25 +91,30 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
                 entry, t, l, xp, sth, rhop, up, vp, qloss, glo, ediff = hdf.read(inhdf, nentry[0])
                 beta1 = Fbeta(rhop, up, betacoeff)
                 betap = copy(beta1)
-                nentries = nentry[1]-nentry[0]
+                nentries = 0 # nentry[1]-nentry[0]
                 dv = copy(vp)**2
                 du = copy(up)**2
                 drho = copy(rhop)**2
                 dbeta = copy(beta1)**2
                 dqloss = copy(qloss)**2
-                for k in arange(nentries-1)+nentry[0]+1:
+                for k in arange(nentry[1]-nentry[0])+nentry[0]+1:
                     entry1, t, l, xp, sth, rho1, up1, vp1, qloss1, glo1, ediff1  = hdf.read(inhdf, k)
                     beta1 = Fbeta(rho1, up1, betacoeff)
-                    rhop += rho1 ; up += up1 ; vp += vp1 ; qloss += qloss1 ; betap += beta1
-                    dv += vp1**2
-                    du += up1**2
-                    drho += rho1**2
-                    dbeta += beta1**2
-                    dqloss += qloss1**2
-                    if k == nentry[0]+1:
-                        tstart = t
-                    if k == nentry[1]-1:
-                        tend = t
+                    t *= tscale
+                    # print("t="+str(t))
+                    # print(k)
+                    if (trange is None) or ((t-trange[0])*(t-trange[1]) <= 0.):
+                        rhop += rho1 ; up += up1 ; vp += vp1 ; qloss += qloss1 ; betap += beta1
+                        dv += vp1**2
+                        du += up1**2
+                        drho += rho1**2
+                        dbeta += beta1**2
+                        dqloss += qloss1**2
+                        if k == nentry[0]+1:
+                            tstart = t
+                        if k == nentry[1]-1:
+                            tend = t
+                        nentries += 1
                 betap /= double(nentries)
                 rhop /= double(nentries)
                 up /= double(nentries)
@@ -122,15 +127,16 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
                 dqloss = sqrt(dqloss/double(nentries) - qloss**2)
 
                 dv[isnan(dv)] = 0. ; du[isnan(du)] = 0.
-                print("time range = "+str(tstart*tscale)+".."+str(tend*tscale)+"s")
+                # print("time range = "+str(tstart*tscale)+".."+str(tend*tscale)+"s")
+                # ii = input("T")
         else:
             sintry=0
             xp, qp = readtireout(infile, ncol = [3, 2, 1])
             up, vp, rhop = qp
     else:
         lines = loadtxt(os.path.dirname(infile) + '/avprofile.dat', comments = '#')
-        xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; betap = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5]
-        dv = lines[:,6] ; du = lines[:,7] ; dbeta = lines[:,8]
+        xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; betap = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5] ; qloss = lines[:,6]
+        dv = lines[:,7] ; du = lines[:,8] ; dbeta = lines[:,9] ; dqloss = lines[:,10]
         sintry = 0
         #  betap = pratp / (1.+pratp)
 
@@ -175,7 +181,7 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
     if not nocalc:
         # we need to save the result as an ASCII file, then
         fout = open(dirname + '/avprofile.dat', 'w')
-        fout.write("# R  -- v -- u -- Prat -- T -- rho -- qloss -- dv -- du -- dqloss \n")
+        fout.write("# R  -- v -- u -- Prat -- T -- rho -- qloss -- dv -- du -- dbeta -- dqloss \n")
         nx = size(xp)
         for k in arange(nx):
             s = str(xp[k]) + " " + str(vp[k]) + " " + str((up/umagtar)[k]) + " " + str(betap[k]) + " " + str(tempp[k]) + " " + str(rhop[k]) + " " + str(qloss[k]) + " " + str(dv[k])+ " "+str((du/umagtar)[k])+" "+str(dbeta[k])+" "+str(dqloss[k])+"\n"
@@ -201,26 +207,58 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
         plots.someplots([r/rstar], [teff], name=dirname+'/acompare_Teff', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T_{\rm eff}$, keV', multix = True)
  #        plots.someplots([BSr, r/rstar], [betag, betap], name=dirname+'/acompare_p', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True)
 
-def avcompare_list(dirlist, rrange = None):
+def avcompare_list(dirlist, rrange = None, conf = 'DEFAULT', tauscale = None):
+    '''
+    tauscale is the number of the profile used to calculate the optical depth
+    '''
+    mass1 = config[conf].getfloat('m1')
 
     nf = size(dirlist)
     
-    xlist = [] ; vlist = [] ; ulist = [] ; plist = []
+    xlist = [] ; vlist = [] ; ulist = [] ; plist = [] ; qlist = [] ; tefflist = []
+    
+    if tauscale is not None:
+        taulist = []
     
     for k in arange(nf):
         lines = loadtxt(dirlist[k] + '/avprofile.dat', comments = '#')
-        xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; pratp = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5]
+        xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; pratp = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5] ; qloss = lines[:,6]
+        teff = 4.75 * mass1**(-0.25) * qloss**0.25 # keV
         xlist.append(xp) ; vlist.append(vp) ; ulist.append(up)  ; plist.append(pratp/(1.+pratp))
+        qlist.append(qloss) ; tefflist.append(teff)
         
+        if tauscale is not None:
+            geofile = dirlist[k]+'/geo.dat'
+            r, theta, alpha, across, l, delta = geo.gread(geofile)
+            # r/r[0] shd coincide with xp
+            tau = cumtrapz(rhop, x=r)
+            # position of the shock front:
+            dvdl = abs((vp[1:]-vp[:-1])/(l[1:]-l[:-1]))
+            wfront = dvdl.argmax()
+            tau -= tau[wfront]
+            taulist.append(tau)
+            if k == tauscale:
+                tau2x = interp1d(tau, (xp[1:]+xp[:-1])/2., bounds_error = False, fill_value = (tau[0], tau[-1]))
+                x2tau = interp1d((xp[1:]+xp[:-1])/2., tau, bounds_error = False, fill_value = (xp[0], xp[-1]))
+
     if rrange is None:
         plots.someplots(xlist, vlist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', name='avtwo_v', inchsize=[5,3])
         plots.someplots(xlist, ulist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', name='avtwo_u', ylog=True, inchsize=[5,3])
         plots.someplots(xlist, plist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', name='avtwo_p', ylog=True, inchsize=[5,3])
+        plots.someplots(xlist, qlist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$Q^-$', name = 'avtwo_q', xlog = True, ylog = True, inchsize=[5,3])
+        plots.someplots(xlist, tefflist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T_{\rm eff}$, keV', name = 'avtwo_teff', xlog = True, ylog = False, inchsize=[5,3])
     else:
         plots.someplots(xlist, vlist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', name='avtwo_v', xrange = rrange, xlog = False, inchsize=[5,3])
-        urange = [ulist[-1][(xlist[-1]>rrange[0]) & (xlist[-1]<rrange[1])].min(), ulist[-1][(xlist[-1]>rrange[0]) & (xlist[-1]<rrange[1])].max()]
+        urange = [ulist[-1][(xlist[-1]>rrange[0]) & (xlist[-1]<rrange[1])].min()*0., ulist[-1][(xlist[-1]>rrange[0]) & (xlist[-1]<rrange[1])].max()*1.1]
         plots.someplots(xlist, ulist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', name='avtwo_u', xrange = rrange, xlog = False, yrange = urange, inchsize=[5,3])
-
+        qrange = [qlist[-1][(xlist[-1]>rrange[0]) & (xlist[-1]<rrange[1])].min()*0., qlist[-1][(xlist[-1]>rrange[0]) & (xlist[-1]<rrange[1])].max()*1.1]
+        teffrange = [tefflist[-1][(xlist[-1]>rrange[0]) & (xlist[-1]<rrange[1])].min()*0., tefflist[-1][(xlist[-1]>rrange[0]) & (xlist[-1]<rrange[1])].max()*1.1]
+        plots.someplots(xlist, qlist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$Q^-$', name = 'avtwo_q', xrange = rrange, yrange = qrange, xlog = False, inchsize=[5,3])
+        if tauscale is not None:
+            plots.someplots(xlist, tefflist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T_{\rm eff}$, keV', name = 'avtwo_teff', xrange = rrange, yrange = teffrange, xlog = False, inchsize=[5,3], secaxfunpair = (x2tau, tau2x))
+            print(tau2x(-1.), tau2x(0.), tau2x(1.))
+        else:
+            plots.someplots(xlist, tefflist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T_{\rm eff}$, keV', name = 'avtwo_teff', xrange = rrange, xlog = False, inchsize=[5,3])
 
 def comparer(ingalja, inpasha, nentry = 1000, ifhdf = True, conf = 'DEFAULT', vone = None, nocalc = False):
 
@@ -587,7 +625,7 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
     finds the position of the shock in a given entry of the infile
     kleap allows to measure the velocity difference using several cells
     '''
-    entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(infile, n)
+    entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(infile, n)
     n=size(r)
     #    v=medfilt(v, kernel_size=3)
     # v1=savgol_filter(copy(v), 2*kleap+1, 1) # Savitzky-Golay filter
@@ -708,8 +746,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
         if(dat):
             stmp, dstmp, v1tmp, v2tmp = shock_dat(n[k], prefix=prefix, kleap = kleap)
         else:
-            ttmp, stmp, dstmp, v1tmp, v2tmp, ltot, lpart, lshock, uvtmp = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap,
-                                                                            uvcheck = (k == (size(n)-1)), uvcheckfile = outdir+"/uvcheck")
+            ttmp, stmp, dstmp, v1tmp, v2tmp, ltot, lpart, lshock, uvtmp = shock_hdf(n[k], infile = prefix+".hdf5", kleap = kleap, uvcheck = (k == (size(n)-1)), uvcheckfile = outdir+"/uvcheck")
         s[k] = stmp ; ds[k] = dstmp
         v1[k] = v1tmp   ; v2[k] =  v2tmp
         dv[k] = v1tmp - v2tmp
@@ -1005,21 +1042,26 @@ def masstest(indir, conf='DEFAULT'):
 def quasi2d_nocalc(infile, conf = 'DEFAULT', trange = None):
     
     outdir = os.path.dirname(infile)
-    
+
+    mdot = config[conf].getfloat('mdot')
+
     lines = loadtxt(infile, comments="#", delimiter=" ", unpack=False)
     
     t = lines[:,0] ;  r = lines[:,1] ;  v = lines[:,2] ;  lurel = lines[:,3];  m = lines[:,4]
+    q = lines[:,5]  ; qd = lines[:,6]
     
     nt = size(unique(t)) ; nr = size(unique(r))
     
     t = unique(t) ; r = unique(r)
     v = reshape(v, [nt, nr]) ;  lurel = reshape(lurel, [nt, nr]) ;  m = reshape(m, [nt, nr])
+    q = reshape(q, [nt, nr])
     u = 10.**lurel
     
     if ifplot:
+        nv = 30
+        plots.somemap(r, t, 4.*pi *q*r**2/mdot, name=outdir+'/q2d_q', inchsize = [4, 12], cbtitle = r'$R^2 Q^- / L_{\rm Edd}$', xrange = trange, transpose=True) #, levels = 3.*arange(nv)/double(nv-2)-1.)
         plots.somemap(r, t, v, name=outdir+'/q2d_v', inchsize = [4, 12], cbtitle = r'$v/c$',  xrange = trange,transpose=True)
         plots.somemap(r, t, lurel, name=outdir+'/q2d_u', inchsize = [4, 12], cbtitle = r'$\log_{10}\left(u/u_{\rm mag}\right)$', xrange = trange, addcontour = [u/3./1., u/3./0.9, u/3./0.8],transpose=True)
-        nv = 30
         plots.somemap(r, t, m, name=outdir+'/q2d_m', inchsize = [4, 12], cbtitle = r'$s / \dot{M}$', xrange = trange, transpose=True, levels = 3.*arange(nv)/double(nv-2)-1.)
 
 
@@ -1037,6 +1079,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     geofile = outdir+"/geo.dat"
     print(geofile)
     r, theta, alpha, across, l, delta = geo.gread(geofile)
+    perimeter = 2. * (across/delta + 2.*delta)
     # first frame
     entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(hname, n1)
     cth = sqrt(1.-sth**2)
@@ -1065,7 +1108,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
     # ii =input('tr')
     
     nr=size(r)
-    nrnew = 1000 # radial mesh interpolated to nrnew
+    nrnew = 300 # radial mesh interpolated to nrnew
     rnew = (r.max()/r.min())**(arange(nrnew)/double(nrnew-1))*r.min()
     sthfun = interp1d(r, sth)
     sthnew = sthfun(rnew)
@@ -1092,7 +1135,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
         entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(hname, k*step+n1) # hdf5 read
         vfun = interp1d(r, v, kind = 'linear')
         var[k, :] = vfun(rnew)
-        qfun = interp1d(r, qloss, kind = 'linear')
+        qfun = interp1d(r, qloss/perimeter, kind = 'linear')
         qar[k, :] = qfun(rnew)
         # print("size(ediff) = ",size(ediff))
         efun = interp1d(r, ediff, kind = 'linear')
@@ -1188,13 +1231,22 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
         
     # let us also make an ASCII table
     ftable = open(outdir+'/ftable.dat', 'w')
-    ftable.write('# format: t[s] -- r/rstar -- rho -- v -- u/umag\n')
+    ftable.write('# format: t[s] -- r/rstar -- rho -- v -- u/umag -- s/mdot -- Q- -- Qdiff \n')
     for kt in arange(nt):
         for kr in arange(nrnew):
-            ftable.write(str(tar[kt]*tscale)+' '+str(rnew[kr])+' '+str(var[kt, kr])+' '+str(lurel[kt, kr])+' '+str(mdar[kt, kr]/mdot)+'\n')
+            ftable.write(str(tar[kt]*tscale)+' '+str(rnew[kr])+' '+str(var[kt, kr])+' '+str(lurel[kt, kr])+' '+str(mdar[kt, kr]/mdot)+' '+str(qar[kt,kr])+' '+str(ear[kt,kr])+'\n')
     ftable.flush()
     ftable.close()
-        
+
+    # rvent output
+    frvent = open(outdir+'/rvent.dat', 'w')
+    frvent.write('# format: t[s] -- rvent/rstar\n')
+    for kt in arange(nt):
+        if rvent[kt]>1.:
+            frvent.write(str(tar[kt]*tscale)+' '+str(rvent[kt])+'\n')
+    frvent.flush()
+    frvent.close()
+
 #####################################
         
 def diffuseplot(flist, nlist, rrange = [2.86, 2.9]):
