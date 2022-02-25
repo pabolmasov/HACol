@@ -253,6 +253,8 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
 
     if formatsequence is None:
         formatsequence = ["." for x in range(ny)]
+    if legendsequence is None:
+        legendsequence = ["" for x in range(ny)]
     if linewidthsequence is None:
         linewidthsequence = [1 for x in range(ny)]
         
@@ -269,7 +271,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
                 for kv in arange(nv):
                     plot([vertical[kv], vertical[kv]], [ys[k].min(), ys[k].max()], verticalformatsequence)
         if multix:
-            plot(x[k], ys[k], formatsequence[k], linewidth = linewidthsequence[k])
+            plot(x[k], ys[k], formatsequence[k], linewidth = linewidthsequence[k], label = legendsequence[k])
         else:
             plot(x, ys[k], formatsequence[k], linewidth = linewidthsequence[k])
             
@@ -278,6 +280,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
             secax.set_xlabel(r'$\tau$', fontsize = 14)
             secax.set_xticks([-10., -5., 0., 1., 2., 3., 4.])
 
+            plot(x, ys[k], formatsequence[k], linewidth = linewidthsequence[k], label = legendsequence[k])
     if dys is not None:
         if multix:
             errorbar(x[0], ys[0], fmt = formatsequence[0], yerr = dys)
@@ -298,6 +301,12 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         fig.set_size_inches(inchsize[0], inchsize[1])
     else:
         fig.set_size_inches(5, 4)
+    if legendsequence is not None:
+        fig.legend(loc='lower right', borderaxespad=0.,)    
+        #loc='upper center',ncol=4,
+               #fancybox=True,   bbox_to_anchor=(0.9, 0.5),
+    
+            
     fig.tight_layout()
     savefig(name+'.png')
     savefig(name+'.pdf')

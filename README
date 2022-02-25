@@ -1,29 +1,37 @@
 
 INSTALLATION AND RUNNING
-To run the code, make sure you have python3 (checked for python3.6) and
-ipython. The main
-file is tire_new.py, and the main procedure is alltire(). Tune all the
-global parameters in globals.py and then run your ipython or python. From
-ipython, compile the code
-> %run tire_new
-and then run the main routine
-> alltire()
-if everything is fine, the directory should immediately start filling with
-files like tireout..png and tireout..dat containing the snapshots of the
-simulation. Also, current total flux (namely, luminosity in L_Edd/4\pi units)
-will be writted to "flux.dat".
 
-I have not set the code up without ipython, certain libraries like scipy are
-not available then. 
+To run the code, make sure you have python3 (checked for python3.6 and 3.7), MPI, MPI4py, numpy, scipy, and preferrably ipython and HDF5 support. Sequential version of the code is currently not supported. The configuration file is globals.conf. Probably, you would not need to change anything in the code, only in the configuration. globals.conf contains different configurations of the code, differing in physical and numerical parameters.
+The main working file is tire_MPI.py, and the main routine in it is alltire(). Tune all the global parameters in globals.conf and then run the code from the command line with 
+> mpirun -np <N> python tire_MPI.py <CONF>,
+where <N> stands for the number of processers in use (it should coincide with the value of parallelfactor in globals.conf), and <CONF> is the configuration set up name (in square brackets in globals.conf). If the configuration file is omitted, all the parameters are set to the default values from globals.conf.
+
+If everything is fine, you will get a lot of output to your stdout, nothing to stderr, and the "out/" directory (or the output directory set by "outdir" in the "globals" configuration file) should immediately (unless you turned the graphical output off by setting ifplot = False in globals.py) start filling with files like vtie..png and tireout..dat containing the snapshots of your simulation. Also, current total flux (namely, luminosity in L_Edd/4\pi units) will be written to "flux.dat". Total mass, momentum, and energy will be outputted to "totals.dat" in the same directory. 
+The main output is either tireout.hdf5 (if "ifhdf" flag is True in globals.conf) or, alternatively, a series of ..dat files with snapshots. 
+Make sure that different simulations write to different directories. For this, set different "outdir" names for different configurations. Then, several simulations may be run simultaneously. 
+
+To run the code without ipython, you need to be sure that all the necessary libraries like scipy are imported. 
+
+If you are running the code on a machine that does not support matplotlib, make sure that graphic output is off (ifplot=False in globals.py). 
+
+NUMERICAL ALGORITHMS
+
+The code solves the system of conservation equations for mass, momentum, and energy, taking into account a number of physical effects: radiation losses, photon diffusion, mass loss when the force-free condition is violated. Solution is obtained using HLLE or HLLC Riemann solver. Riemann solvers are defined in solvers.py, and the signal velocities computed by sigvel.py. An elaborate description of the physics and numerical techniques will be given in the paper. 
 
 OUTPUTS
 
-So far, if "ifhdf" flag is False in globals.py, it produces multiple structure snapshots "tireout*.dat" containing density, velocity, and energy density as functions of length along the field line. Also, total luminosity is written in "flux.dat" as a function of time. 
+So far, if "ifhdf" flag is False in globals.py, it produces multiple structure snapshots "tireout*.dat" containing density, velocity, energy density etc. as functions of length along the field line. All this information is written to a single HDF file "tireout.hdf5" if the flag is True. In this case, ASCII outputs are also made, but "ascalias" times less often (this parameter is set to 10 by default). Also, total luminosity is always written to "flux.dat" as a function of time. Geometry (including radius, polar angle, and the geometrical cross-section of the flow) is written to a special file "geo.dat" in the output directory. 
 
-Alternatively, if "ifhdf" is True, it will write the same information in the HDF5 file "tireout.hdf5". Individual snapshots are stored as individual datasets "entry000000", "entry000001" etc. 
+In the HDF5 file, individual snapshots are stored as individual datasets "entry000000", "entry000001" etc. All the globals are written to a special dataset "globals", and the contents of "geo.dat" is also saved as a "geometry" dataset in "tireout.hdf5", making the file self-consistent. 
+
+HDF5 outputs with the same set of globals and the same geometry may be combined using "liststitch" routine defined in hdfoutput.py. 
+
+RESTART
+
+Currently, there is a support for restart with identical or different spatial resolution. If the size of the radial mesh (number of points) is identical, no interpolation is used. If the number of points is different, all the quantities will be remapped. If the outer radius of the simulation is larger than the outer radius of the restart file, the code will report an error. 
 
 POSSIBLE PROBLEMS
 
-As the code produces a lot of individual output files, you may encounter problems with file indexers. Notably, baloo file extractor easily hangs the system, hence it is instructive to turn it off by "balooctl disable" in the session you are running. 
+As the code produces a lot of individual output files, you may encounter problems with file indexers. Notably, under most KDE-using systems, baloo file extractor easily hangs the system, hence it is instructive to turn it off by "balooctl disable" in the session you are running. 
 
-The code is designed in a way to make the results accessable as soon as possible. You do not need to wait until the simulation ends to read and reduce the output entries. If you need to kill the code during the simulation, all the results would be saved. The output files are not accessable for reading from the same ipython session then. 
+The code is designed in a way to make the results accessable as soon as possible. All the ASCII files and all the HDF5 entries are flushed as soon as the snapshot is written. You do not need to wait until the simulation ends to read and reduce the output entries (though there could be issues with simultaneous access). If you need to kill the code during the simulation, all the results would be saved. However, the output files are not accessable for reading from the same ipython session, and there may be problems with reading the HDF5 simultaneously with writing to it. 
