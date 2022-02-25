@@ -238,7 +238,7 @@ def plot_somemap(fname, ncol = -1, xlog = True):
     levs = (lev2-lev1) * arange(nl)/double(nl-1)+lev1
     somemap(x, y, q, name=fname, xlog=xlog, xtitle=r'$r/R_*$', ytitle = r'$t$, s', transpose=True, levels = levs, inchsize = [3,10])
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, legendsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None, xrange = None, inchsize = None, dys = None, linewidthsequence = None):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None, xrange = None, inchsize = None, dys = None, linewidthsequence = None, secaxfunpair = None):
     '''
     plots a series of curves  
     if multix is off, we assume that the independent variable is the same for all the data 
@@ -259,7 +259,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         linewidthsequence = [1 for x in range(ny)]
         
     clf()
-    fig = figure()
+    fig, ax = subplots()
     for k in arange(ny):
         if vertical is not None:
             if verticalformatsequence is None:
@@ -273,6 +273,13 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         if multix:
             plot(x[k], ys[k], formatsequence[k], linewidth = linewidthsequence[k], label = legendsequence[k])
         else:
+            plot(x, ys[k], formatsequence[k], linewidth = linewidthsequence[k])
+            
+        if secaxfunpair is not None:
+            secax = ax.secondary_xaxis('top', functions=secaxfunpair)
+            secax.set_xlabel(r'$\tau$', fontsize = 14)
+            secax.set_xticks([-10., -5., 0., 1., 2., 3., 4.])
+
             plot(x, ys[k], formatsequence[k], linewidth = linewidthsequence[k], label = legendsequence[k])
     if dys is not None:
         if multix:
