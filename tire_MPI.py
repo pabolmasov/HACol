@@ -91,6 +91,7 @@ BSmode = configactual.getboolean('BSmode')
 coolNS = configactual.getboolean('coolNS')
 ufixed = configactual.getboolean('ufixed')
 squeezemode = configactual.getboolean('squeezemode')
+venttest = configactual.getboolean('venttest') # turns off mass loss above the surface (only SECOND cell is allowed)
 zeroeloss = configactual.getboolean('zeroeloss') # mass is lost without thermal energy (kinetic is lost)
 
 squeezeothersides = configactual.getboolean('squeezeothersides')
@@ -555,6 +556,11 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         if crank == first:
             dmsqueeze[0] = 0. # no losses from the innermost cell (difficult to fit with the BC)
             desqueeze[0] = 0.
+        if venttest: # if we want to suppress mass loss above the NS surface
+            if crank == first:
+                dmsqueeze[2:]=0.
+            else:
+                dmsqueese *= 0.
         dmloss = trapz(dmsqueeze, x= gnd.r[1:-1])
     else:
         dmsqueeze = 0.
@@ -1238,7 +1244,7 @@ def alltire():
         ##### IC initial conditions: ####
         if not(ifrestart):
             m=zeros(nx) ; s=zeros(nx) ; e=zeros(nx)
-            vinit=vout *sqrt(rmax/g.r) # initial velocity        
+            vinit=vout *sqrt(rmax/g.r) # first estimate of initial velocity (not matching the v[0]=0 condition)
             # setting the initial distributions of the primitive variables:
             rho = copy(abs(mdot) / (abs(vout)+abs(vinit)) / g.across)
             #   rho *= 1. + (g.r/rstar)**2
@@ -1249,11 +1255,12 @@ def alltire():
             # ii = input('M')
             rho *= meq/mass * minitfactor # normalizing to the initial mass
             vinit = vout * sqrt(rmax/g.r) * ((g.r-rstar)/(rmax-rstar)) # to fit the v=0 condition at the surface of the star
-            vinit *= abs(mdot / (rho * vinit * g.across)[-1])
+            vinit *= abs(mdot / (rho * vinit * g.across)[-1]) # renormalise for a ~const mdot
             v = copy(vinit)
             #        print("umagout = "+str(umagout))
             #        ii = input("vout * mdot = "+str(vout*mdot/g.across[-1]))
             press =  (umagout-vout*mdot/2./g.across[-1]) * (g.r[-1]/g.r) * (rho/rho[-1]+1.)/2. * 0.25
+            # pressure approximately fits the energy density = magnetic energy density
             rhonoize = 1.e-3 * random.random_sample(nx) # noise (entropic)
             rho *= (rhonoize+1.)
             beta = betafun_p(Fbeta_press(rho, press, betacoeff))
@@ -1379,7 +1386,7 @@ def alltire():
         fflux=open(outdir+'/'+'flux.dat', 'w')
         ftot=open(outdir+'/'+'totals.dat', 'w')
 
-        fflux.write("# t, s  --  luminosity, Ledd/4pi\n ")
+        fflux.write("# t, s  --  luminosity, Ledd/4pi\n")
         ftot.write("# t, s -- mass, "+" -- energy -- lost mass -- accreted mass -- current mdot\n ")
         ftot.write("#  mass units "+str(massscale)+"g\n")
         ftot.write("#  energy units units "+str(energyscale)+"erg\n")

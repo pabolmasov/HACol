@@ -12,7 +12,7 @@ import bassun as bs
 
 modellist = ['fidu', 'fidu2', 'nd', 'bs', 'mdot1', 'mdot3', 'wide', 'wi', 'wi1', 'narrow', 'narrow2', 'rot', 'irr', 'RI', 'huge', 'mdot30', 'mdot100', 'mdot100w', 'mdot100w3', 'mdot100w5', 'mdot100w10', 'mdot100w20', 'mdot100w50']
 
-modellist = ['mdot100h', 'mdot100h_1'] # ,'mdot100w', 'mdot100w3', 'mdot100w5', 'mdot100w10', 'mdot100w20', 'mdot100w50']
+modellist = ['mdot100h_1'] # ,'mdot100w', 'mdot100w3', 'mdot100w5', 'mdot100w10', 'mdot100w20', 'mdot100w50']
 
 def titanfetch():
 
@@ -40,7 +40,11 @@ quasi2d_nocalc('titania_mdot1/ftable.dat', conf='M1', trange=[0., 0.05])
 quasi2d_nocalc('titania_fidu2/ftable.dat', trange=[0., 0.05])
 quasi2d_nocalc('titania_mdot100/ftable.dat', conf='M100', trange=[0., 0.05])
 
-#Fig. 7:
+## Fig. 5
+multishock_plot('titania_bs/sfront', trange=[0.,0.3])
+  
+
+#Fig. 9:
 avcompare_list(["titania_light", "titania_fidu", "titania_rfidu2", "titania_nd"], rrange=[3.21,3.3])
 cp avtwo_u.png forpaper/av4u_zoom.png
 cp avtwo_q.png forpaper/av4q_zoom.png
@@ -50,19 +54,21 @@ cp avtwo_u.png forpaper/av4u_full.png
 cp avtwo_q.png forpaper/av4q_full.png
 cp avtwo_teff.png forpaper/av4teff_full.png
 
-# Fig. 8
+# Fig. 10
 avcompare_list(["titania_wide", "titania_wi", "titania_wi1"])
 cp avtwo_v.png forpaper/av3_full.png
 avcompare_list(["titania_wide", "titania_wi", "titania_wi1"], rrange=[1.85,2.1])
 cp avtwo_v.png forpaper/av3_zoom.png
 
 
-# Fig. 9
+# Fig. 7
 acomparer('titania_bs/tireout', nocalc=True)
-# Fig. 10
+# Fig. 8
 acomparer('titania_narrow2/tireout', nocalc=True, conf='NARROW2')
 # Fig. 11:
-dynspec(infile = 'titania_huge/sfront', nbins = 20, ntimes=15, iffront = True,deline=False, fosccol = -1, trange = [0.,0.5], stnorm = False)
+dynspec(infile = 'titania_huge/sfront', nbins = 10, ntimes=15, iffront = True,deline=False, fosccol = -1, trange = [0.,0.5], stnorm = True)
+dynspec(infile = 'sai_huge/sfront', nbins = 10, ntimes=15, iffront = True,deline=False, fosccol = -1, trange = [0.,0.25], stnorm = True)
+dynspec(infile = 'sai_dhuge/sfront', nbins = 10, ntimes=15, iffront = True,deline=False, fosccol = -1, trange = [0.,0.25], stnorm = True)
 
 # junkplots
 quasi2d_nocalc('titania_fidu2/ftable.dat')
@@ -71,8 +77,6 @@ quasi2d_nocalc('titania_fidu2/ftable.dat')
 stitch('titania_dhuge/tireout.hdf5','titania_dhuge1/tireout.hdf5') 
 system('mv titania_dhuge/tirecombine.hdf5 titania_dhuge/tire123.hdf5')
 stitch('titania_dhuge/tire1234.hdf5','titania_dhuge/tireout.hdf5')
-  
-multishock_plot('titania_bs/sfront', trange=[0.,0.3])
   
 quasi2d('out_fidu/tireout.hdf5', 0,1500)
 quasi2d('out_mdot100/tireout.hdf5', 0,1500, conf = 'M100')
@@ -169,10 +173,10 @@ comparer('galia_N/BS_solution_N', 'titania_narrow2/tireout', vone = -8.194837e+0
 
 '''
 def figkakkonen():
-    drr = asarray([0.3, 0.25, 0.2, 0.1, 0.05, 0.02])
-    xs = asarray([12.450, 8.869, 6.485, 3.733, 2.458, 1.656])
-    dxs = asarray([0.010, 0.016, 0.009, 0.005, 0.003, 0.002])
-    beta = asarray([0.63, 0.60, 0.56, 0.43, 0.308, 0.177])
+    drr = asarray([0.3, 0.25, 0.2, 0.1, 0.05, 0.02, 0.5])
+    xs = asarray([12.450, 8.869, 6.485, 3.733, 2.458, 1.656, 10.73])
+    dxs = asarray([0.010, 0.016, 0.009, 0.005, 0.003, 0.002, 0.04])
+    beta = asarray([0.63, 0.60, 0.56, 0.43, 0.308, 0.177, 0.715])
     
     conf = 'M100W'
     rstar = config[conf].getfloat('rstar')
@@ -211,11 +215,17 @@ def figkakkonen():
 
 def massrace():
     dirlist = ['titania_mdot100w3', 'titania_mdot100w', 'titania_mdot100w5',
-               'titania_mdot100w10', 'titania_mdot100w20', 'titania_mdot100w50']
-    nlist = size(dirlist)
-    tlist = [] ;  mlist = []
+               'titania_mdot100w10', 'titania_mdot100w20', 'titania_mdot100w50', 'out_mdot100xi']
 
-    confs = ['M100Wdr3','M100W', 'M100Wdr5', 'M100Wdr10', 'M100Wdr20', 'M100Wdr50']
+    beta = asarray([0.63, 0.60, 0.56, 0.43, 0.308, 0.177, 0.715])
+    drr = asarray([0.3, 0.25, 0.2, 0.1, 0.05, 0.02, 0.5])
+    # delta0 = [0.0419, 0.035, 0.028, 0.014, 0.07, 0.0028]
+    # across0 = [0.143, 0.119, 0.0955, 0.0478, 0.0239, 0.00955]
+
+    nlist = size(dirlist)
+    tlist = [] ;  mlist = [] ; ttlist = []
+
+    confs = ['M100Wdr3','M100W', 'M100Wdr5', 'M100Wdr10', 'M100Wdr20', 'M100Wdr50', 'M100xi']
     
     for k in arange(nlist):
         rstar = config[confs[k]].getfloat('rstar')
@@ -228,20 +238,27 @@ def massrace():
         b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
         umag = b12**2*2.29e6*m1
         totalfile = dirlist[k]+'/totals.dat'
-        lines = loadtxt(totalfile, comments="#", delimiter=" ", unpack=False)
+        lines = loadtxt(totalfile, comments="#") #, delimiter=" ", unpack=False)
         t = lines[:,0] ; mass = lines[:,1]
         geometry = loadtxt(dirlist[k]+"/geo.dat", comments="#", delimiter=" ", unpack=False)
-        across0 = geometry[0,3] ; cth0 = cos(geometry[0,1])
+        across0 = geometry[0,3] ; cth0 = cos(geometry[0,1]) ; delta0 = geometry[0,5]
         mcol = across0 * rstar**2 * umag / m1 * (1.+3.*cth0**2)/4.
         print("mcol = "+str(mcol*mscale)+"g")
         tr = mcol / mdot * tscale
-        tlist.append(t/tr) ; mlist.append(mass/mcol)
+        tth = tr * 24./rstar * delta0**2/across0 * mdot / beta[k]
+        print(tth/tr)
+        tlist.append(t/tr) ; mlist.append(mass/mcol) ; ttlist.append(t/tth)
     
     plots.someplots(tlist, mlist, xtitle=r'$t/t_{\rm r}$', ytitle=r'$M/M_{\rm col}$',
                     multix = True, formatsequence = ["k-" for x in range(nlist)],
                     linewidthsequence = nlist - arange(nlist),
                     xlog = False, ylog = False, name = 'forpaper/massrace',
                     xrange=[0,10])
+    plots.someplots(ttlist, mlist, xtitle=r'$t/t_{\rm th}(R_*)$', ytitle=r'$M/M_{\rm col}$',
+                    multix = True, formatsequence = ["k-" for x in range(nlist)],
+                    linewidthsequence = nlist - arange(nlist),
+                    xlog = False, ylog = False, name = 'forpaper/massrace_th',
+                    xrange=[0,1])
 
 def geotest():
     gfile = loadtxt("out/geo.dat", comments="#", delimiter=" ", unpack=False)
