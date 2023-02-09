@@ -1387,7 +1387,7 @@ def alltire():
         ftot=open(outdir+'/'+'totals.dat', 'w')
 
         fflux.write("# t, s  --  luminosity, Ledd/4pi\n")
-        ftot.write("# t, s -- mass, "+" -- energy -- lost mass -- accreted mass -- current mdot\n ")
+        ftot.write("# t, s -- mass, "+" -- energy -- lost mass -- accreted mass -- current mdot\n")
         ftot.write("#  mass units "+str(massscale)+"g\n")
         ftot.write("#  energy units units "+str(energyscale)+"erg\n")
 
