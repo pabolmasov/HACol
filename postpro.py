@@ -135,8 +135,10 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
             up, vp, rhop = qp
     else:
         lines = loadtxt(os.path.dirname(infile) + '/avprofile.dat', comments = '#')
+        ls = shape(lines)
+        # print(ls)
         xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; betap = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5] ; qloss = lines[:,6]
-        dv = lines[:,7] ; du = lines[:,8] ; dbeta = lines[:,9] ; dqloss = lines[:,10]
+        dv = lines[:,7] ; du = lines[:,8] ; dbeta = lines[:,minimum(10, ls[1]-1)] ; dqloss = lines[:,minimum(10, ls[1]-1)]
         sintry = 0
         #  betap = pratp / (1.+pratp)
 
@@ -164,15 +166,17 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
 
     BSu = 3. * BSu/BSu[0] * BSr**6
     tempg = (BSu * BSumagtar / mass1)**(0.25) * 3.35523 # keV
-    tempp = (up * umagtar / mass1)**(0.25) * 3.35523 # keV
-    
+    if nocalc:
+        tempp = (up * umagtar / mass1)**(0.25) * 3.35523 # keV
+    else:
+        tempp = (up / mass1)**(0.25) * 3.35523 # keV
     acrossfun = interp1d(r/rstar, across, bounds_error=False)
     BSacross = acrossfun(BSr)
     BSrho = -mdot / BSacross / BSv
 
     betag = Fbeta(BSrho, BSu * BSumagtar, betacoeff)
     pratg = copy(betag / (1.-betag))
-
+    
     # virialbetaP =  (up+pressp) * umagtar / rhop * rstar
     # virialbetaBS = (8.+5.*pratg)/(6.+3.*pratg) * BSu * BSumagtar / (BSrho/rhoscale) * rstar
 
@@ -190,22 +194,28 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
             fout.flush()
         fout.close()
     if ifplot:
+        press = up / 3. / (1.-betap/2.)
         if (sintry > 1) or nocalc:
-            plots.someplots([r/rstar, BSr, r/rstar, r/rstar, r/rstar, r/rstar], [-vp, -BSv, 1./sqrt(r), 1./sqrt(r)/7., -vp+dv, -vp-dv], name=dirname+'/acompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True, yrange= [-BSv.max()/2., -BSv.min()*7.*2.])
+            plots.someplots([r/rstar, BSr, r/rstar, r/rstar, r/rstar, r/rstar], [-vp, -BSv, 1./sqrt(r), 1./sqrt(r)/7., -vp+dv, -vp-dv], name=dirname+'/acompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True, yrange= [-BSv.max()/2., -BSv.min()*7.*2.], inchsize=[5,3])
             print(str(sintry)+' = sintry')
             # print(du.max())
-            plots.someplots([BSr, r/rstar, r/rstar, r/rstar, r/rstar], [BSu, up, up*0.+3., up+du, up-du], name=dirname+'/acompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True, yrange = [BSu.min()/10., maximum(BSu.max()*2.,5.)])
-            plots.someplots([BSr, r/rstar, r/rstar, r/rstar], [betag, betap, betap+dbeta, betap-dbeta], name=dirname+'/acompare_p', ylog=True, formatsequence=['k-', 'r--', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True)
+            # plots pressure:
+            plots.someplots([BSr, r/rstar, r/rstar, r/rstar, r/rstar], [BSu/3., press, up*0.+1., press+du/up*press, press-du/up*press], name=dirname+'/acompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$p/p_{\rm mag}$', multix = True, yrange = [BSu.min()/10., maximum(BSu.max()*2.,5.)], inchsize=[5,3])
+            plots.someplots([BSr, r/rstar, r/rstar, r/rstar], [betag, betap, betap+dbeta, betap-dbeta], name=dirname+'/acompare_p', ylog=True, formatsequence=['k-', 'r--', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True, inchsize=[5,3])
             #     plots.someplots([BSr, r/rstar, r/rstar, r/rstar], [BSrho, rhop, rhop+drho, rhop-drho], name=dirname+'/acompare_rho', ylog=True, formatsequence=['k-', 'r--', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True)
         else:
-            plots.someplots([r/rstar, BSr, r/rstar, r/rstar], [-vp, -BSv, 1./sqrt(r), 1./sqrt(r)/7.], name=dirname+'/acompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True, yrange= [-BSv.max()/2., -BSv.min()*7.*2.])
-            plots.someplots([BSr, r/rstar, r/rstar], [BSu, up, up*0.+3.], name=dirname+'/acompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', multix = True, yrange = [BSu.min()/10., maximum(BSu.max()*2.,5.)])
-            plots.someplots([BSr, r/rstar], [BSrho, rhop], name=dirname+'/acompare_rho', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True)
-        plots.someplots([BSr, r/rstar], [tempg, tempp], name=dirname+'/acompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True)
+            plots.someplots([r/rstar, BSr, r/rstar, r/rstar], [-vp, -BSv, 1./sqrt(r), 1./sqrt(r)/7.], name=dirname+'/acompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True, yrange= [-BSv.max()/2., -BSv.min()*7.*2.], inchsize=[5,3])
+            press = up / 3. / (1.-betap/2.)
+            # plots pressure:
+            plots.someplots([BSr, r/rstar, r/rstar], [BSu/3., press, up*0.+1.], name=dirname+'/acompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$p/p_{\rm mag}$', multix = True, yrange = [BSu.min()/10., maximum(BSu.max()*2.,5.)], inchsize=[5,3])
+            plots.someplots([BSr, r/rstar], [BSrho, rhop], name=dirname+'/acompare_rho', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True, inchsize=[5,3])
+        plots.someplots([BSr, r/rstar], [tempg, tempp], name=dirname+'/acompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True, inchsize=[5,3])
         teff = 4.75 * mass1**(-0.25) * qloss**0.25 # keV
         dteff = dqloss / qloss * teff * 0.25
-        plots.someplots([r/rstar], [teff], name=dirname+'/acompare_Teff', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T_{\rm eff}$, keV', multix = True)
+        plots.someplots([r/rstar], [teff], name=dirname+'/acompare_Teff', ylog=False, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T_{\rm eff}$, keV', multix = True, inchsize=[5,3])
  #        plots.someplots([BSr, r/rstar], [betag, betap], name=dirname+'/acompare_p', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True)
+
+    print(dirname)
 
 def avcompare_list(dirlist, rrange = None, conf = 'DEFAULT', tauscale = None):
     '''
@@ -592,7 +602,7 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
                 fth = foscmean
                 fth[xmean > 10.] = sqrt(-1.)
                 xtmp = xmean
-            plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', yrange = frange, xrange = [maximum(quantile(xmean-xstd, 0.2), 1.), minimum(xmean[xmean<xmean.max()].max(), geo_r.max()/rstar)], addline = [xtmp,fth], xlog=True, ylog=False, lticks = [4, 5, 6, 8, 10])
+            plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_xfmax', xtitle = r'$R_{\rm shock}/R_{*}$', ytitle = '$f$, Hz', yrange = frange, xrange = [maximum(quantile(xmean-xstd, 0.2), 1.), minimum((xmean+xstd)[xmean<xmean.max()].max(), geo_r.max()/rstar)], addline = [xtmp,fth], xlog=True, ylog=False, lticks = [4, 5, 6, 8, 10])
         else:
             plots.errorplot(xmean, xstd, fmax, dfmax, outfile = infile + '_lfmax', xtitle = r'$L/L_{\rm Edd}$', ytitle = '$f$, Hz')
             
@@ -1048,25 +1058,27 @@ def quasi2d_nocalc(infile, conf = 'DEFAULT', trange = None):
     lines = loadtxt(infile, comments="#", delimiter=" ", unpack=False)
     
     t = lines[:,0] ;  r = lines[:,1] ;  v = lines[:,2] ;  lurel = lines[:,3];  m = lines[:,4]
-    q = lines[:,5]  ; qd = lines[:,6]
-    
+    q = lines[:,5] #  ; qd = lines[:,6]
+
+    q *= r**3
+
     nt = size(unique(t)) ; nr = size(unique(r))
     
     t = unique(t) ; r = unique(r)
-    v = reshape(v, [nt, nr]) ;  lurel = reshape(lurel, [nt, nr]) ;  m = reshape(m, [nt, nr])
-    q = reshape(q, [nt, nr])
+    v = reshape(v, [nt, nr]) ;  lurel = reshape(lurel, [nt, nr]) ;  m = reshape(m, [nt, nr]) ;  q = reshape(q, [nt, nr])
     u = 10.**lurel
+    
     
     if ifplot:
         nv = 30
-        plots.somemap(r, t, 4.*pi *q*r**2/mdot, name=outdir+'/q2d_q', inchsize = [4, 12], cbtitle = r'$R^2 Q^- / L_{\rm Edd}$', xrange = trange, transpose=True) #, levels = 3.*arange(nv)/double(nv-2)-1.)
-        plots.somemap(r, t, v, name=outdir+'/q2d_v', inchsize = [4, 12], cbtitle = r'$v/c$',  xrange = trange,transpose=True)
-        plots.somemap(r, t, lurel, name=outdir+'/q2d_u', inchsize = [4, 12], cbtitle = r'$\log_{10}\left(u/u_{\rm mag}\right)$', xrange = trange, addcontour = [u/3./1., u/3./0.9, u/3./0.8],transpose=True)
-        plots.somemap(r, t, m, name=outdir+'/q2d_m', inchsize = [4, 12], cbtitle = r'$s / \dot{M}$', xrange = trange, transpose=True, levels = 3.*arange(nv)/double(nv-2)-1.)
-
+        #  plots.somemap(r, t, log10(4.*pi *q*r**2/mdot), name=outdir+'/q2d_q', inchsize = [4, 12], cbtitle = r'$R^2 Q^- / L_{\rm Edd}$', xrange = trange, transpose=True) #, levels = 3.*arange(nv)/double(nv-2)-1.)
+        plots.somemap(r, t, v, name=outdir+'/q2d_v', inchsize = [3, 15], cbtitle = r'$v/c$',  xrange = trange,transpose=True, levels = 0.125 * (arange(nv)/double(nv-1)-0.7))
+        plots.somemap(r, t, lurel - log(3.), name=outdir+'/q2d_u', inchsize = [3, 15], cbtitle = r'$\log_{10} p/p_{\rm mag}$', xrange = trange, addcontour = [u/3./0.99, u/3./0.9, u/3./0.8],transpose=True)
+        plots.somemap(r, t, m, name=outdir+'/q2d_m', inchsize = [3, 15], cbtitle = r'$s / \dot{M}$', xrange = trange, transpose=True, levels = 3.*arange(nv)/double(nv-2)-1.)
+        plots.somemap(r, t, q, name=outdir+'/q2d_q', inchsize = [3, 15], cbtitle = r'$Q R^3$', xrange = trange, transpose=True)
 
 #############################################
-def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None):
+def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None, iflog=False):
     '''
     makes quasi-2D Rt plots or an RT table
     '''
@@ -1141,6 +1153,8 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
         efun = interp1d(r, ediff, kind = 'linear')
         ear[k, :] = efun(rnew)
         ufun = interp1d(r, u, kind = 'linear')
+        # print(u.min(), u.max())
+        # ii = input('U')
         uar[k, :] = ufun(rnew)
         beta = betafun(Fbeta(rho, u, betacoeff))
         press = u/3./(1.-beta/2.)
@@ -1148,10 +1162,10 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
         par[k, :] = pfun(rnew)
         betar[k, :] = 2.*(1.-uar[k,:]/par[k,:]/3.)
         mfun = interp1d(r, -rho * v * across, kind = 'linear')
-        wloss = (press>(0.8*umagtar))
+        wloss = (press>(0.9*umagtar))
         shock = ((v)[kleap:]-(v)[:-kleap]).argmin()
         rshock[k] = r[shock+kleap] #+r[minimum(shock+kleap+1, nt-1)])/2.
-        if wloss.sum()> 3:
+        if wloss.sum()> 1:
             # imfun = interp1d((-rho * v * across)[wloss], r[wloss], kind = 'linear', bounds_error=False, fill_value=NaN)
             # rvent[k] = imfun(mdot/2.)
             wvent = (press/umagtar)[(r>r.min())&(r<rshock[k])].argmax()
@@ -1187,9 +1201,9 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
 
     # velocity
     if ifplot:
-        plots.somemap(rnew, tar*tscale, var, name=outdir+'/q2d_v', levels = vlev, inchsize = [4, 12], cbtitle = r'$v/c$', transpose = True, xrange = trange)
+        plots.somemap(rnew, tar*tscale, var, name=outdir+'/q2d_v', levels = vlev, inchsize = [4, 12], cbtitle = r'$v/c$', transpose = True, xrange = trange, ylog=iflog, xlog=True)
         plots.someplots(rnew, [-sqrt(1./rstar/rnew), rnew*0., varmean, varmean+varstd, varmean-varstd], formatsequence = [':k', '--k', '-k', '-g', '-g'], xlog = True, ylog = False, xtitle = r'$R/R_{\rm *}$', ytitle = r'$\langle v\rangle /c$', inchsize = [3.35, 2.], name=outdir+'/q2d_vmean')
-        plots.someplots(tar*tscale, [rvent], name = outdir+'/rvent', xtitle = r'$t$, s', ytitle = r'$R/R_8$')
+        plots.someplots(tar*tscale, [rvent], name = outdir+'/rvent', xtitle = r'$t$, s', ytitle = r'$R/R_8$', xlog=iflog)
 
     # internal energy
     #    print(umag)
@@ -1203,19 +1217,19 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None)
         plots.somemap(rnew, tar*tscale, lurel, name=outdir+'/q2d_u', levels = lulev, \
                 inchsize = [4, 12], cbtitle = r'$\log_{10}u/u_{\rm mag}$', \
                 addcontour = [par/umagtarnew/1., par/umagtarnew/0.9,
-                par/umagtarnew/0.8], transpose = True, xrange = trange)
+                par/umagtarnew/0.8], transpose = True, xrange = trange, ylog=iflog, xlog=True)
         plots.somemap(rnew, tar*tscale, log10(betar), name=outdir+'/q2d_b',
-                inchsize = [4, 12], cbtitle = r'$\log_{10}\beta$', transpose = True, xrange = trange)
+                inchsize = [4, 12], cbtitle = r'$\log_{10}\beta$', transpose = True, xrange = trange, xlog=iflog, ylog=True)
         # Q-:
         plots.somemap(rnew, tar*tscale, log10(qar), name=outdir+'/q2d_q', \
-                inchsize = [4, 12], cbtitle = r'$\log_{10}Q$', transpose = True, xrange = trange)
+                inchsize = [4, 12], cbtitle = r'$\log_{10}Q$', transpose = True, xrange = trange, ylog=iflog, xlog=True)
         plots.somemap(rnew, tar*tscale, log10(ear), name=outdir+'/q2d_qe', \
-                inchsize = [10, 12], cbtitle = r'$\log_{10}F_{\rm diff}$', transpose = True, xrange = trange, yrange = [2.7, 3.3], ylog = False)
+                inchsize = [10, 12], cbtitle = r'$\log_{10}F_{\rm diff}$', transpose = True, xrange = trange, yrange = [2.7, 3.3], xlog = False, ylog=iflog)
         # mdot:
         mdlev = 3.*arange(nv)/double(nv-2)-1.
         plots.somemap(rnew, tar*tscale, mdar/mdot, name=outdir+'/q2d_m', \
                 inchsize = [4, 12], cbtitle = r'$s / \dot{M}$', levels = mdlev, \
-                transpose = True, xrange = trange) # , yrange=[1.,1.1], ylog = False)
+                transpose = True, xrange = trange, xlog=iflog) # , yrange=[1.,1.1], ylog = False)
 
         # mean mdar
         mdmean = mdar.mean(axis=0)

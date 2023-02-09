@@ -344,7 +344,13 @@ def errorplot(x, dx, y, dy, outfile = 'errorplot', xtitle = None, ytitle = None,
     '''
     clf()
     fig, ax = subplots()
-    ax.errorbar(x, y, xerr=dx, yerr=dy, fmt='.k')
+    if xrange is not None:
+        w = where(((x+dx)<xrange[1]) * ((x-dx)> xrange[0]))
+        if yrange is not None:
+            w = where(((x+dx/2.)<xrange[1]) * ((x-dx/2.)> xrange[0]) * ((y+dy/2.)<yrange[1]) * ((y-dy/2.)> yrange[0]))
+        ax.errorbar(x[w], y[w], xerr=dx[w], yerr=dy[w], fmt='.k')
+    else:
+        ax.errorbar(x, y, xerr=dx, yerr=dy, fmt='.k')
     if addline is not None:
         ax.plot(addline[0], addline[1], 'r:')
     if fit is not None:
@@ -372,7 +378,7 @@ def errorplot(x, dx, y, dy, outfile = 'errorplot', xtitle = None, ytitle = None,
     if lticks is not None:
         ax.set_xticks(lticks)
         ax.get_xaxis().set_major_formatter(ticker.ScalarFormatter())
-    fig.set_size_inches(4., 6.)
+    fig.set_size_inches(4., 7.)
     fig.tight_layout()
     savefig(outfile+'.png')
     close()
@@ -408,7 +414,7 @@ def plot_dynspec(t2,binfreq2, pds2, outfile='flux_dyns', nbin=None, omega=None, 
     ylabel('$f$, Hz', fontsize = 16)
     plt.tick_params(labelsize=14, length=1, width=1., which='minor', direction = "in")
     plt.tick_params(labelsize=14, length=3, width=1., which='major', direction = "in")
-    fig.set_size_inches(6., 6.)
+    fig.set_size_inches(7., 7.)
     fig.tight_layout()
     savefig(outfile+'.png')
     savefig(outfile+'.eps')
@@ -706,7 +712,7 @@ def multishock_plot(frontfile, trange = None):
     
     someplots(ts, [s, s*0. + rs], name = frontfile + "_frontcurve", xtitle=r'$t$, s', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, formatsequence = ['k-', 'r-', 'b-'],
         xrange = trange)
-    someplots(f, [s, s*0. + rs], name = frontfile + "_fluxfront", xtitle=r'$L/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = xs, verticalformatsequence = 'r-')
+    someplots(f, [s, s*0. + rs], name = frontfile + "_fluxfront", xtitle=r'$L_{\rm X}/L_{\rm Edd}$', ytitle=r'$R_{\rm shock}/R_*$', xlog=False, ylog=False, formatsequence = ['k-', 'r-', 'b-'], vertical = xs, verticalformatsequence = 'r-')
     # someplots(tf, [f, eqlum], name = frontfile+"_flux", xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
     
 def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None, trange = None):
@@ -768,7 +774,7 @@ def multimultishock_plot(prefices, parflux = True, sfilter = 1., smax = None, tr
     xlabel(r'$L/L_{\rm Edd}$', fontsize=14) ; ylabel(r'$R_{\rm shock}/R_*$', fontsize=14)
     plt.tick_params(labelsize=12, length=1, width=1., which='minor', direction='in')
     plt.tick_params(labelsize=12, length=3, width=1., which='major', direction='in')
-    fig.set_size_inches(6, 6)
+    fig.set_size_inches(6, 4)
     fig.tight_layout()
     savefig("manyfluxfronts.png") ;   savefig("manyfluxfronts.pdf")
     close('all')
