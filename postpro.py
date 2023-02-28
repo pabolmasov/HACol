@@ -194,7 +194,10 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
             fout.flush()
         fout.close()
     if ifplot:
-        press = up / 3. / (1.-betap/2.)
+        if nocalc:
+            press = up / 3. / (1.-betap/2.)
+        else:
+            press = up / 3. / (1.-betap/2.) / (umagtar)
         if (sintry > 1) or nocalc:
             plots.someplots([r/rstar, BSr, r/rstar, r/rstar, r/rstar, r/rstar], [-vp, -BSv, 1./sqrt(r), 1./sqrt(r)/7., -vp+dv, -vp-dv], name=dirname+'/acompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True, yrange= [-BSv.max()/2., -BSv.min()*7.*2.], inchsize=[5,3])
             print(str(sintry)+' = sintry')
@@ -226,6 +229,7 @@ def avcompare_list(dirlist, rrange = None, conf = 'DEFAULT', tauscale = None):
     nf = size(dirlist)
     
     xlist = [] ; vlist = [] ; ulist = [] ; plist = [] ; qlist = [] ; tefflist = []
+    presslist = []
     
     if tauscale is not None:
         taulist = []
@@ -235,6 +239,7 @@ def avcompare_list(dirlist, rrange = None, conf = 'DEFAULT', tauscale = None):
         xp = lines[:,0] ; vp = lines[:,1] ; up = lines[:,2] ; pratp = lines[:,3] ; tempp = lines[:,4] ; rhop = lines[:,5] ; qloss = lines[:,6]
         teff = 4.75 * mass1**(-0.25) * qloss**0.25 # keV
         xlist.append(xp) ; vlist.append(vp) ; ulist.append(up)  ; plist.append(pratp/(1.+pratp))
+        presslist.append(up/3./(1.-pratp/(1.+pratp)))
         qlist.append(qloss) ; tefflist.append(teff)
         
         if tauscale is not None:
@@ -253,7 +258,7 @@ def avcompare_list(dirlist, rrange = None, conf = 'DEFAULT', tauscale = None):
 
     if rrange is None:
         plots.someplots(xlist, vlist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', name='avtwo_v', inchsize=[5,3])
-        plots.someplots(xlist, ulist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$U/U_{\rm mag}$', name='avtwo_u', ylog=True, inchsize=[5,3])
+        plots.someplots(xlist, presslist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$P/P_{\rm mag}$', name='avtwo_u', ylog=True, inchsize=[5,3])
         plots.someplots(xlist, plist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', name='avtwo_p', ylog=True, inchsize=[5,3])
         plots.someplots(xlist, qlist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$Q^-$', name = 'avtwo_q', xlog = True, ylog = True, inchsize=[5,3])
         plots.someplots(xlist, tefflist, multix=True, formatsequence=['r--', 'k-', 'g:', 'b-.'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T_{\rm eff}$, keV', name = 'avtwo_teff', xlog = True, ylog = False, inchsize=[5,3])
@@ -1046,7 +1051,7 @@ def masstest(indir, conf='DEFAULT'):
                     xlog = False, ylog = False, xtitle = r'$t$, s', ytitle = r'$M$')
     print("mass change / mass injected = "+str((m[-1]-m[0])/(macc[-1]-macc[0])))
     
-    plots.someplots((t[1:]+t[:-1])/2., [(mlost[1:]-mlost[:-1])/(t[1:]-t[:-1])], name='mdot', xtitle = r'$t$, s', ytitle = r'$\dot{M}$, g s$^{-1}$', xlog = False, xrange=[1.5,1.6], ylog = True)
+    plots.someplots((t[1:]+t[:-1])/2., [(mlost[1:]-mlost[:-1])/(t[1:]-t[:-1])], name='mdot', xtitle = r'$t$, s', ytitle = r'$\dot{M}$, g s$^{-1}$', xlog = False, ylog = False)
 
 
 def quasi2d_nocalc(infile, conf = 'DEFAULT', trange = None):
@@ -1072,10 +1077,10 @@ def quasi2d_nocalc(infile, conf = 'DEFAULT', trange = None):
     if ifplot:
         nv = 30
         #  plots.somemap(r, t, log10(4.*pi *q*r**2/mdot), name=outdir+'/q2d_q', inchsize = [4, 12], cbtitle = r'$R^2 Q^- / L_{\rm Edd}$', xrange = trange, transpose=True) #, levels = 3.*arange(nv)/double(nv-2)-1.)
-        plots.somemap(r, t, v, name=outdir+'/q2d_v', inchsize = [3, 15], cbtitle = r'$v/c$',  xrange = trange,transpose=True, levels = 0.125 * (arange(nv)/double(nv-1)-0.7))
-        plots.somemap(r, t, lurel - log(3.), name=outdir+'/q2d_u', inchsize = [3, 15], cbtitle = r'$\log_{10} p/p_{\rm mag}$', xrange = trange, addcontour = [u/3./0.99, u/3./0.9, u/3./0.8],transpose=True)
-        plots.somemap(r, t, m, name=outdir+'/q2d_m', inchsize = [3, 15], cbtitle = r'$s / \dot{M}$', xrange = trange, transpose=True, levels = 3.*arange(nv)/double(nv-2)-1.)
-        plots.somemap(r, t, q, name=outdir+'/q2d_q', inchsize = [3, 15], cbtitle = r'$Q R^3$', xrange = trange, transpose=True)
+        plots.somemap(r, t, v, name=outdir+'/q2d_v', inchsize = [3, 5], cbtitle = r'$v/c$',  xrange = trange,transpose=True, levels = 0.125 * (arange(nv)/double(nv-1)-0.7))
+        plots.somemap(r, t, lurel - log(3.), name=outdir+'/q2d_u', inchsize = [3, 5], cbtitle = r'$\log_{10} p/p_{\rm mag}$', xrange = trange, addcontour = [u/3./0.99, u/3./0.9, u/3./0.8],transpose=True)
+        plots.somemap(r, t, m, name=outdir+'/q2d_m', inchsize = [3, 5], cbtitle = r'$s / \dot{M}$', xrange = trange, transpose=True, levels = 3.*arange(nv)/double(nv-2)-1.)
+        plots.somemap(r, t, q, name=outdir+'/q2d_q', inchsize = [3, 5], cbtitle = r'$Q R^3$', xrange = trange, transpose=True)
 
 #############################################
 def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None, iflog=False):
@@ -1229,7 +1234,7 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None,
         mdlev = 3.*arange(nv)/double(nv-2)-1.
         plots.somemap(rnew, tar*tscale, mdar/mdot, name=outdir+'/q2d_m', \
                 inchsize = [4, 12], cbtitle = r'$s / \dot{M}$', levels = mdlev, \
-                transpose = True, xrange = trange, xlog=iflog) # , yrange=[1.,1.1], ylog = False)
+                transpose = True, xrange = trange, ylog=False, xlog=True) # , yrange=[1.,1.1], ylog = False)
 
         # mean mdar
         mdmean = mdar.mean(axis=0)

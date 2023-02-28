@@ -43,7 +43,6 @@ quasi2d_nocalc('titania_mdot100/ftable.dat', conf='M100', trange=[0., 0.05])
 ## Fig. 5
 multishock_plot('titania_bs/sfront', trange=[0.,0.3])
   
-
 #Fig. 9:
 avcompare_list(["titania_light", "titania_fidu", "titania_rfidu2", "titania_nd"], rrange=[3.21,3.3])
 cp avtwo_u.png forpaper/av4u_zoom.png
@@ -263,6 +262,15 @@ def massrace():
 def geotest():
     gfile = loadtxt("out/geo.dat", comments="#", delimiter=" ", unpack=False)
     r = gfile[:,0] ;  across = gfile[:,3]
-    plots.someplots(r/r[0], [across/across[0]*(r[0]/r)**3-1.], xlog = True, ylog = True, \
-                    name = 'geotest', formatsequence = ['k-'])
+    plots.someplots(r/r[0], [across/across[0]*(r[0]/r)**3-1.], xlog = True, ylog = True, name = 'geotest', formatsequence = ['k-'])
 
+
+def justtwocurves():
+    file1 = "out_fidu/flux.dat"
+    file2 = "sai_fidu2/flux.dat"
+    lines1 = loadtxt(file1, comments="#")
+    t1 = lines1[:,0] ; flux1 = lines1[:,1] / 4./pi
+    lines2 = loadtxt(file2, comments="#")
+    t2 = lines2[:,0] ; flux2 = lines2[:,1] / 4./pi
+
+    plots.someplots([t2, t1], [flux2, flux1], multix = True, name='forpaper/lccurves', formatsequence=["k-", "r:"], xlog=False, xrange=[0.005,0.015], inchsize=[12., 4.], yrange=[1.4,2.4], xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$')

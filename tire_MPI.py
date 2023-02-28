@@ -117,6 +117,7 @@ if ifturnoff:
     print("TURNOFF: mass accretion rate decreased by "+str(turnofffactor))
 else:
     turnofffactor =  1. # no mdot reduction
+
 nocool = configactual.getboolean('nocool') # turning off radiation losses
 
 # derived quantities:
@@ -146,6 +147,16 @@ rscale = configactual.getfloat('rscale') * m1
 rhoscale = configactual.getfloat('rhoscale') / m1
 massscale = configactual.getfloat('massscale') * m1**2
 energyscale = configactual.getfloat('energyscale') * m1**2
+
+# sinusoidal variations of \dot{M} with time:
+ifmdotvar = configactual.getboolean('ifmdotvar') # sinusoidal variations of mdot
+if ifmdotvar:
+    mdotvar_amp = configactual.getfloat('mdotvar_amp') # amplitude of these variations
+    mdotvar_period = configactual.getfloat('mdotvar_period') #
+    ovar = 2.*pi * tscale / mdotvar_period # corresponding frequency
+else:
+    mdotvar_amp = 0.
+    ovar = 0.
 
 if verbose & (omega>0.):
     print(conf+": spin period "+str(2.*pi/omega*tscale)+"s")
@@ -809,12 +820,16 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
     # outer BC:
     if (crank == last) & (rightpack_save is None):
         prim['v'][-1] = vout
-        prim['rho'][-1] = -mdot / (prim['v'] * g.across)[-1]
-        #        prim['v'][-1] = -mdot / (prim['rho'] * g.across)[-1] # velocity should be consistent with the mass accretion rate
+        prim['rho'][-1] = -mdot  / (prim['v'] * g.across)[-1]
         if ifturnoff:
             prim['rho'][-1] *= turnofffactor # reducing the mass flow at the outer limit
         rightpack_save = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]}
-        
+    
+    if ifmdotvar and (crank == last):
+        # density variations modify rightpack value of rho; the value is restored in the end
+        rho_backup = rightpack_save['rho']
+        rightpack_save['rho'] *= 1. + mdotvar_amp * sin(ovar * t)
+    
     ltot = 0. # total luminosity of the flow (required for IRR)
     timectr = 0
     
@@ -903,11 +918,9 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
-
+        
         if crank == last:
             rightpack = rightpack_save
-            # print("crank = "+str(last)+": rho = "+str(rightpack['rho']))
-            # --ensuring fixed physical conditions @ the right boundary
         
         if thetimer is not None:
             thetimer.stop_comp("BC")        
@@ -930,11 +943,6 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
             thetimer.stop_comp("RKstep")
             thetimer.start_comp("updateCon")
         con1 = updateCon(con, dcon1, dt/2.)
-        # ultimate BC:
-        #    if crank == last:
-        #        con1['s'][-1] = -mdot * turnofffactor
-        #        con1['e'][-1] = vout*mdot*(1.-potfrac)/2.
-            # con1['e'][-1] = umagout*g.across[-1]-vout*mdot/2.*(1.-potfrac) # (con1['m'] / 2. /g.r)[-1]
         if (crank == first) & szero:
             # con1['s'][0] = 0.
             con1['s'][0] = 0. # minimum(con1['s'][0]+con1['m'][0]*dt/g.r[0]**2, 0.)
@@ -946,9 +954,11 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
+
         if crank == last:
-            rightpack = rightpack_save            
+            rightpack = rightpack_save
             # --ensuring fixed physical conditions @ the right boundary
+
         if thetimer is not None:
             thetimer.stop_comp("BC")
             thetimer.start_comp("RKstep")
@@ -972,6 +982,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         leftpack_send = {'rho': prim['rho'][0], 'v': prim['v'][0], 'u': prim['u'][0]} # , prim['beta'][0]]
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
+
         if crank == last:
             rightpack = rightpack_save
             # --ensuring fixed physical conditions @ the right boundary
@@ -1000,8 +1011,8 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         rightpack_send = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]} #, prim['beta'][-1]]
         leftpack, rightpack = BCsend(leftpack_send, rightpack_send, comm)
         if crank == last:
-            rightpack = rightpack_save            
-            # --ensuring fixed physical conditions @ the right boundary
+            rightpack = rightpack_save
+
         if thetimer is not None:
             thetimer.stop_comp("BC")
             thetimer.start_comp("RKstep")
@@ -1053,6 +1064,9 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         thetimer.purge_comps()
     nout += 1
     
+    if ifmdotvar and (crank == last):
+        rightpack_save['rho'] = rho_backup # restoring the unperturbed value of rho
+    
     if raddiff:
         return nout, t, con, rightpack_save, dmlost, dcon1['DEF']
     else:
@@ -1102,7 +1116,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
     print(str(t*tscale)+' '+str(ltot)+'\n')
     #     ii = input("Q")
     ftot.write(str(t*tscale)+' '+str(mtot)+' '+str(etot)+' '+str(dmlost)+' '+str(mdot*t)+' '+str((rho*v*gglobal.across)[-1])+'\n')
-    print("mdot = "+str(mdot))
+    # print("mdot = "+str(mdot))
     print(str(t/tmax)+" calculated\n")
     print(str(t*tscale)+' '+str(ltot)+'\n')
     print(str(t*tscale)+' '+str(mtot)+'\n')
