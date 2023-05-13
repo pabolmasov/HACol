@@ -202,6 +202,7 @@ def stitch(hname1, hname2):
         grp.create_dataset("v", data=data["v"][:])
         grp.create_dataset("u", data=data["u"][:])
         grp.create_dataset("qloss", data=data["qloss"][:])
+        grp.create_dataset("ediff", data=data["ediff"][:])
         hnew.flush()
 
     # removing duplicates:
@@ -216,6 +217,7 @@ def stitch(hname1, hname2):
         grp.create_dataset("v", data=data["v"][:])
         grp.create_dataset("u", data=data["u"][:])
         grp.create_dataset("qloss", data=data["qloss"][:])
+        grp.create_dataset("ediff", data=data["ediff"][:])
         hnew.flush()
         print("From "+hname2+", entry"+entry+"\n", flush=True)
         

@@ -478,7 +478,11 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
         l = l.mean() * sin(2.*pi*t*simfreq)*exp(-t)
         
     if smoothing:
-        l_spline = splrep(t, l, s=200,k=5)
+        period = 0.5
+        phase = (t / period) % 1.
+        w = phase.argsort()
+        w = w[t[w]>period]
+        l_spline = splrep(phase[w], l[w], s=0.5,k=5,per=True)
     
     if trange is not None:
         w = (t> trange[0]) * (t<trange[1])
@@ -489,11 +493,11 @@ def dynspec(infile='out/flux', ntimes=10, nbins=100, binlogscale=False, deline =
 
     if smoothing:
         # smoothing and subtraction:
-        plots.someplots(t, [l, BSpline(*l_spline)(t)], name='spline', formatsequence=['k.', 'r-'], xtitle = r'$t$, s', ytitle =  r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
-        plots.someplots(t, [l-BSpline(*l_spline)(t)], name='spline_diff',formatsequence=['k-'], xtitle = r'$t$, s', ytitle =  r'$\Delta L/L_{\rm Edd}$', xlog=False, ylog=False)
-        plots.someplots(t, [l-BSpline(*l_spline)(t)], name='spline_diff_detail',formatsequence=['k-'], xtitle = r'$t$, s', ytitle =  r'$\Delta L/L_{\rm Edd}$', xlog=False, ylog=False, xrange=[0.25,0.30])
+        plots.someplots(t, [l, BSpline(*l_spline)(phase)], name='spline', formatsequence=['k.', 'r-'], xtitle = r'$t$, s', ytitle =  r'$L/L_{\rm Edd}$', xlog=False, ylog=False)
+        plots.someplots(t, [l-BSpline(*l_spline)(phase)], name='spline_diff',formatsequence=['k-'], xtitle = r'$t$, s', ytitle =  r'$\Delta L/L_{\rm Edd}$', xlog=False, ylog=False)
+        plots.someplots(t, [l-BSpline(*l_spline)(phase)], name='spline_diff_detail',formatsequence=['k-'], xtitle = r'$t$, s', ytitle =  r'$\Delta L/L_{\rm Edd}$', xlog=False, ylog=False, xrange=[0.2,0.50], yrange=[-0.1,0.1])
        # ii =input('spline')
-        l = l - BSpline(*l_spline)(t)
+        l = l - BSpline(*l_spline)(phase)
     
     if iffront:
         if trange is not None:
@@ -1100,8 +1104,7 @@ def quasi2d_nocalc(infile, conf = 'DEFAULT', trange = None):
         nv = 30
         #  plots.somemap(r, t, log10(4.*pi *q*r**2/mdot), name=outdir+'/q2d_q', inchsize = [4, 12], cbtitle = r'$R^2 Q^- / L_{\rm Edd}$', xrange = trange, transpose=True) #, levels = 3.*arange(nv)/double(nv-2)-1.)
         plots.somemap(r, t, v, name=outdir+'/q2d_v', inchsize = [5, 10], cbtitle = r'$v/c$',  xrange = trange,transpose=True, levels = 0.125 * (arange(nv)/double(nv-1)-0.7))
-        plots.somemap(r, t, lurel - log(3.), name=outdir+'/q2d_u', inchsize = [5, 10], cbtitle = r'$\log_{10} p/p_{\rm mag}$', xrange = trange, addcontour = [u/3./0.99, u/3./0.9, u/3./0.8],transpose=True,
-            xlog=True, ylog=True)
+        plots.somemap(r, t, lurel - log(3.), name=outdir+'/q2d_u', inchsize = [5, 10], cbtitle = r'$\log_{10} p/p_{\rm mag}$', xrange = trange, addcontour = [u/3./0.99, u/3./0.9, u/3./0.8],transpose=True)
         plots.somemap(r, t, m, name=outdir+'/q2d_m', inchsize = [5, 10], cbtitle = r'$s / \dot{M}$', xrange = trange, transpose=True, levels = 3.*arange(nv)/double(nv-2)-1.)
         teff = 4.75 * mass1**(-0.25) * (q/r**3)**0.25 # keV
         plots.somemap(r, t, q, name=outdir+'/q2d_q', inchsize = [5, 10], cbtitle = r'$Q R^3$', xrange = trange, transpose=True)

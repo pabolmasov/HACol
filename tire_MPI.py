@@ -111,6 +111,7 @@ nubulk = configactual.getfloat('nubulk')
 weinberg = configactual.getboolean('weinberg')
 eta = configactual.getfloat('eta')
 heatingeff = configactual.getfloat('heatingeff')
+ifnuloss = configactual.getboolean('ifnuloss')
 ifturnoff = configactual.getboolean('ifturnoff') # if mdot is artificially reduced (by a factor turnofffactor)
 if ifturnoff:
     turnofffactor = configactual.getfloat('turnofffactor')
@@ -131,17 +132,18 @@ if verbose:
 vout = configactual.getfloat('voutfactor')  /sqrt(r_e) # velocity at the outer boundary
 minitfactor = configactual.getfloat('minitfactor') # initial total mass in the units of equilibrium mass
 umag = b12**2*2.29e6*m1 # on the pole!
-umagout = 0.5**2*umag*(rstar/r_e)**6
+umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic energy density at R_e (edge of the magnetosphere)
 csqout = vout**2
 if verbose:
     print(conf+": "+str(csqout))
+# additional global parameters set here:
 config.set(conf,'r_e', str(r_e))
 config.set(conf,'dr_e', str(dr_e))
 config.set(conf,'umag', str(umag))
 config.set(conf,'omega', str(omega))
 config.set(conf,'vout', str(vout))
-   
-# physical scales:
+
+# physical scales (adding mass dependence):
 tscale = configactual.getfloat('tscale') * m1
 rscale = configactual.getfloat('rscale') * m1
 rhoscale = configactual.getfloat('rhoscale') / m1
@@ -160,25 +162,34 @@ else:
 
 if verbose & (omega>0.):
     print(conf+": spin period "+str(2.*pi/omega*tscale)+"s")
-tr = 4. * afac / sqrt(2.) / xifac**3.5 * r_e**1.5 * (dr_e/rstar)
+# replenishment time:
+tr = sqrt(2.)/pi / xifac**3.5 * r_e**1.5 * (dr_e/rstar)
+# 4. * afac / sqrt(2.) / xifac**3.5 * r_e**1.5 * (dr_e/rstar)
 # 2.**1.5/pi*afac * dr_e/r_e / xifac * (r_e/xifac/rstar)**2.5 / rstar # replenishment time scale of the column
 if verbose:
     print("r_e = "+str(r_e))
     print(conf+": replenishment time "+str(tr*tscale)) #*2.*pi*rstar**1.5))
     ii =input("R")
-tmax = tr * configactual.getfloat('tmax') 
+# scaling maximal time with tr:
+tmax = tr * configactual.getfloat('tmax')
+# scaling output frequency with tr:
 dtout = tr * configactual.getfloat('dtout')    # tr * configactual.getfloat('dtout')
+# if we are planning to do png outputs during the calculation:
 ifplot = configactual.getboolean('ifplot')
+# if data are written in HDF5 format
 ifhdf = configactual.getboolean('ifhdf')
+# every n-th snapshot will be plotted, here is the 'n':
 plotalias = configactual.getint('plotalias')
+# every n-th snapshot will be outputted to ASCII, here is the 'n':
 ascalias = configactual.getint('ascalias')
+# output directory
 outdir = configactual.get('outdir')
+# if we are restarting (then, a lot of other keywords should be set):
 ifrestart = configactual.getboolean('ifrestart')
     
 if verbose:
     print(conf+": Alfven = "+str(r_e/xifac / rstar)+"stellar radii")
     print(conf+": magnetospheric radius r_e = "+str(r_e)+" = "+str(r_e/rstar)+"stellar radii")
-    
     # estimating optimal N for a linear grid
     print(conf+": nopt(lin) = "+str(r_e/dr_e * (r_e/rstar)**2/5))
     print(conf+": nopt(log) = "+str(rstar/dr_e * (r_e/rstar)**2/5))
@@ -193,17 +204,17 @@ if ifhdf:
 import bassun as bs # Basko-Sunyaev solution 
 import solvers as solv # Riemann solvers
 from sigvel import * # signal velocities
-from geometry import * #
-from tauexp import *
+from geometry import * # geometry
+from tauexp import * # optical depth treatment
 
 from timer import Timer # Joonas's timer
 
-# beta = Pgas / Ptot: define once and globally
+# beta = Pgas / Ptot: define the EOS once and globally
 from beta import *
 betafun = betafun_define() # defines the interpolated function for beta (\rho, U)
 betafun_p = betafun_press_define() # defines the interpolated function for beta (\rho, P)
 
-from timestep import *
+from timestep import * # controlling the time step (CFL, diffusive, thermal)
 
 def gphi(g, dr = 0.):
     # gravitational potential
@@ -219,7 +230,6 @@ def gphi(g, dr = 0.):
     phi = -1./r - 0.5*(r*g.sth*omega)**2 
     return phi
 
-# @jit
 def gforce(sinsum, g, dr):
     # gravitational force calculated self-consistently using gphi on cell boundaries
     #    if crank == first:
@@ -244,6 +254,12 @@ def regularize(u, rho, press):
         rho1 = rho
             
     return u1, rho1, press1
+
+def nuloss(urad):
+    # annihilation neutrino losses as function of radiation energy density
+    u0 = 1.79e8 *m1
+    c1 = -36.2166
+    return urad**0.75 * m1 * exp(c1 - (urad/u0)**(-0.25))
 
 ##############################################################################
 
@@ -316,7 +332,6 @@ def toprim(con, gnd = None):
     prim = {'rho': rho, 'v': v, 'u': u, 'beta': beta, 'urad': urad, 'press': press}
     return prim
 
-#  @jit
 def diffuse(rho, urad, v, dl, across, taueff):
     '''
     radial energy diffusion;
@@ -512,13 +527,15 @@ def sources(m, g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0.
     ds = copy(force+gammaforce - dmsqueeze * v) # lost mass carries away momentum
     de = copy((force*(1.-potfrac)+gammaforce) * v - qloss - desqueeze)  #
 
+    if ifnuloss:
+        de -= nuloss(urad)
+
     #if crank == first:
     #    ds[0] = 0.
     #    de[0] = 0.
     #    return dm, force, dudt, qloss, ueq
     return dm, ds, de
 
-#  @jit(nopython=True)
 def derivo(l_half, s_half, p_half, fe_half, dm, ds, de):
     #, dlleft, dlright,
     #sleft, sright, pleft, pright, feleft, feright):
@@ -542,12 +559,14 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
     calculating elementary increments of conserved quantities
     input: geometry, half-step l, primitives (dictionary), data from the left ghost zone, from the right ghost zone
     '''
-    #    prim = toprim(con) # primitive from conserved
+    #    unpacking primitives:
     rho = prim['rho'] ;  press = prim['press'] ;  v = prim['v'] ; urad = prim['urad'] ; u = prim['u'] ;   beta = prim['beta']
-
-    ahalf = concatenate([ahalf, [(gnd.across[-1]+gnd.across[-2])/2.]])
+    # ahalf is the cross section vector at the midpoints
+    ahalf = concatenate([ahalf, [(gnd.across[-1]+gnd.across[-2])/2.]]) # why is it one step offset?
     ahalf = concatenate([[(gnd.across[0]+gnd.across[1])/2.], ahalf])
-    
+    # ahalf = concatenate([ahalf, [gnd.across[-1]]])
+    # ahalf = concatenate([[gnd.across[0]], ahalf])
+
     m, s, e = tocon_separate(rho, v, u, gnd, gin = True) # conserved quantities
     g1 = Gamma1(5./3., beta)
     # sources & sinks:
@@ -633,12 +652,17 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         press = concatenate([press, [pressright]])
         beta = concatenate([beta, [betaright]])
     else:
-        rho = concatenate([rho, [-mdot / vout / g.across[-1]]]) # [rho[-1]]])
+        # outer BC:
+        rhout = -mdot / vout / g.across[-1]
+        betaout = betafun(Fbeta(rhout, umagout, betacoeff))
+        pressout = umagout/3./(1.-betaout/2.)
+        uradout = umagout * (1.-betaout) / (1.-betaout/2.)
+        rho = concatenate([rho, [rhout]]) #ahalf[-1]]])   #
         v = concatenate([v, [vout]]) # [minimum(v[-1], 0.)]])
-        u = concatenate([u, [u[-1]]])
-        urad = concatenate([urad, [urad[-1]]])
-        press = concatenate([press, [press[-1]]])
-        beta = concatenate([beta, [beta[-1]]])
+        u = concatenate([u, [umagout]])    #  [u[-1]]])
+        urad = concatenate([urad, [uradout]])
+        press = concatenate([press, [pressout]])
+        beta = concatenate([beta, [betaout]])
         print(crank)
         ii = input("NONE:"+str(crank)) # this should not happen: outer BC is set separately
     # fluxes:
@@ -1149,7 +1173,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
                             xlog = True, formatsequence = ['k-', 'k:'])
             if size(ediff) > 1:
                 # print(size(ediff))
-                plots.someplots(gglobal.r, [ediff, v * (u + press + rho * v**2/2.)],
+                plots.someplots(gglobal.r, [ediff, v * (u + press + rho * v**2/2.) * gglobal.across],
                                 name=outdir+'/ediff{:05d}'.format(nout),
                                 ytitle=r'$F_e$', ylog=False, yrange = [ediff.min(), ediff.max()],
                                 formatsequence = ['k-', 'r-'])
