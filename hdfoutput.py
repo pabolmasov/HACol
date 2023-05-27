@@ -35,7 +35,7 @@ def init(hname, g, configactual): # , m1, mdot, eta, afac, re, dre, omega):
     hfile.flush()
     return hfile # returns file stream reference
     
-def dump(hfile, nout, t, rho, v, u, qloss, ediff):
+def dump(hfile, nout, t, rho, v, u, qloss, ediff, nuloss = None):
     '''
     writing one snapshot
     '''
@@ -50,6 +50,11 @@ def dump(hfile, nout, t, rho, v, u, qloss, ediff):
         grp.create_dataset("ediff", data=ediff)
     else:
         grp.create_dataset("ediff", data=qloss * 0.)
+    if nuloss is not None:
+        nuloss_A, nuloss_Ph, nuloss_Pl = nuloss # volume neutrino losses
+        grp.create_dataset("nuloss_A", data=nuloss_A)
+        grp.create_dataset("nuloss_Ph", data=nuloss_Ph)
+        grp.create_dataset("nuloss_Pl", data=nuloss_Pl)
     hfile.flush()
     print("HDF5 output, entry"+entry+"\n", flush=True)
 

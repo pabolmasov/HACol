@@ -112,6 +112,10 @@ weinberg = configactual.getboolean('weinberg')
 eta = configactual.getfloat('eta')
 heatingeff = configactual.getfloat('heatingeff')
 ifnuloss = configactual.getboolean('ifnuloss')
+
+if ifnuloss:
+    import neu
+
 ifturnoff = configactual.getboolean('ifturnoff') # if mdot is artificially reduced (by a factor turnofffactor)
 if ifturnoff:
     turnofffactor = configactual.getfloat('turnofffactor')
@@ -254,12 +258,6 @@ def regularize(u, rho, press):
         rho1 = rho
             
     return u1, rho1, press1
-
-def nuloss(urad):
-    # annihilation neutrino losses as function of radiation energy density
-    u0 = 1.79e8 *m1
-    c1 = -36.2166
-    return urad**0.75 * m1 * exp(c1 - (urad/u0)**(-0.25))
 
 ##############################################################################
 
@@ -511,13 +509,6 @@ def sources(m, g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0.
         qloss = qloss_separate(rho, urad, g, gin = True, dt = dt)
     else:
         qloss = 0.
-    # print(qloss)
-    # ii =input("q")
-    #     force[0] = 0.  # (1.-g.r[0]/g.r[1])/(1.-g.r[0]/g.r[2])
-    #        qloss[0] = 0. # no heat loss from the innermost cell
-    #        force[0] = 0. # no force on the innermost cell
-    # irradheating = heatingeff * eta * mdot *afac / r * sth * sinsum * taufun(taueff, taumin, taumax) !!! need to include irradheating later!
-    #    ueq = heatingeff * mdot / g.r**2 * sinsum * urad/(xirad*tau+1.)
     if squeezemode:
         if dmsqueeze.min() < 0.:
             print("min(dmsq) = "+str(dmsqueeze.min()))
@@ -528,12 +519,8 @@ def sources(m, g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0.
     de = copy((force*(1.-potfrac)+gammaforce) * v - qloss - desqueeze)  #
 
     if ifnuloss:
-        de -= nuloss(urad)
+        de -= neu.Qnu(rho, urad, mass1 = m1, separate=False) # neutrino losses according to Beaudet et al. 1967
 
-    #if crank == first:
-    #    ds[0] = 0.
-    #    de[0] = 0.
-    #    return dm, force, dudt, qloss, ueq
     return dm, ds, de
 
 def derivo(l_half, s_half, p_half, fe_half, dm, ds, de):
@@ -824,7 +811,7 @@ def BCsend(leftpack_send, rightpack_send, comm):
         rightpack = comm.recv(source = right, tag = right)
     return leftpack, rightpack
 
-def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0., nout = 0, thetimer = None, rightpack_save = None, dmlost = 0., ediff = 0.):
+def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0., nout = 0, thetimer = None, rightpack_save = None, dmlost = 0., ediff = 0., fnu = None):
 #(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile, t = 0., nout = 0):
     '''
     single domain, calculated by a single core
@@ -843,11 +830,17 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
 
     # outer BC:
     if (crank == last) & (rightpack_save is None):
-        prim['v'][-1] = vout
-        prim['rho'][-1] = -mdot  / (prim['v'] * g.across)[-1]
+        # prim['v'][-1] = vout
+        # prim['rho'][-1] = -mdot  / (prim['v'] * g.across)[-1]
+        rho0 = -mdot  / vout / g.across[-1]
+        p0 = (umagout-0.5*mdot * vout / g.across[-1]) * 0.25
+        v0 = vout
         if ifturnoff:
             prim['rho'][-1] *= turnofffactor # reducing the mass flow at the outer limit
-        rightpack_save = {'rho': prim['rho'][-1], 'v': prim['v'][-1], 'u': prim['u'][-1]}
+        rightpack_save = {'rho': rho0, 'v': v0, 'u': p0*3.}
+        if verbose:
+            print('setting outer BC\n')
+            ## ii = input('OBC')
     
     if ifmdotvar and (crank == last):
         # density variations modify rightpack value of rho; the value is restored in the end
@@ -931,7 +924,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
     if (crank != first):                
         comm.send(outblock, dest = first, tag = crank)
     else:
-        tireouts(hfile, comm, outblock, fflux, ftot, nout = nout, dmlost = dmlost, ediff = ediff)
+        tireouts(hfile, comm, outblock, fflux, ftot, nout = nout, dmlost = dmlost, ediff = ediff, fnu = fnu)
     # nout += 1
     if thetimer is not None:
         thetimer.stop("io")
@@ -1097,7 +1090,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         return nout, t, con, rightpack_save, dmlost, 0.
     
 ##########################################################
-def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 0.):
+def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 0., fnu=None):
     '''
     single-core output 
     '''        
@@ -1148,13 +1141,24 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
     # print("dt = "+str(dt)+'\n')
     dt, dt_CFL, dt_thermal, dt_diff, dt_mloss, mach = timestepdetails(gglobal, rho, press, u, v, urad,  xirad = xirad, raddiff = raddiff, CFL = CFL, Cdiff = Cdiff, Cth = Cth, taumin = taumin, taumax = taumax, CMloss = 0.5)
     qloss = qloss_separate(rho, urad, gglobal, dt=dt)
+    if ifnuloss:
+        nuloss_A, nuloss_Ph, nuloss_Pl = neu.Qnu(rho, urad, mass1=m1, separate=True)
+        Lnu_A =  trapz(nuloss_A * gglobal.across, x= gglobal.l)
+        Lnu_Ph =  trapz(nuloss_Ph * gglobal.across, x= gglobal.l)
+        Lnu_Pl =  trapz(nuloss_Pl * gglobal.across, x= gglobal.l)
+        # neu.Qnu(rho, urad, mass1=m1, separate=True)
+        fnu.write(str(t*tscale)+' '+str(Lnu_A)+' '+str(Lnu_Ph)+' '+str(Lnu_Pl)+'\n')
+        fnu.flush()
     print("dt = "+str(dt)+" = "+str(dt_CFL)+"; "+str(dt_thermal)+"; "+str(dt_diff)+"; "+str(dt_mloss)+"\n")
     print("characteristic Mach number: "+str(mach))
     fflux.flush() ; ftot.flush()
     if hfile is not None:
         # print("qloss = ", qloss)
         # print("ediff = ", ediff)
-        hdf.dump(hfile, nout, t, rho, v, u, qloss, ediff)
+        if ifnuloss:
+            hdf.dump(hfile, nout, t, rho, v, u, qloss, ediff, nuloss = (nuloss_A, nuloss_Ph, nuloss_Pl))
+        else:
+            hdf.dump(hfile, nout, t, rho, v, u, qloss, ediff)
         hfile.flush()
     if not(ifhdf) or (nout%ascalias == 0):
         if ifplot:
@@ -1292,8 +1296,8 @@ def alltire():
             print('meq = '+str(meq)+"\n")
             # ii = input('M')
             rho *= meq/mass * minitfactor # normalizing to the initial mass
-            vinit = vout * sqrt(rmax/g.r) * ((g.r-rstar)/(rmax-rstar)) # to fit the v=0 condition at the surface of the star
-            vinit *= abs(mdot / (rho * vinit * g.across)[-1]) # renormalise for a ~const mdot
+            # vinit = vout * sqrt(rmax/g.r) * ((g.r-rstar)/(rmax-rstar)) # to fit the v=0 condition at the surface of the star
+            # vinit *= abs(mdot / (rho * vinit * g.across)[-1]) # renormalise for a ~const mdot
             v = copy(vinit)
             #        print("umagout = "+str(umagout))
             #        ii = input("vout * mdot = "+str(vout*mdot/g.across[-1]))
@@ -1423,7 +1427,12 @@ def alltire():
             hfile = None
         fflux=open(outdir+'/'+'flux.dat', 'w')
         ftot=open(outdir+'/'+'totals.dat', 'w')
-
+        if ifnuloss:
+            fnu = open(outdir+'/'+'neuloss.dat', 'w')
+            fnu.write('# t, s  -- Lnu(A), Ledd/4pi\ -- Lnu(Ph), Ledd/4pi\ -- Lnu(Pl), Ledd/4pi\n')
+        else:
+            fnu = None
+            
         fflux.write("# t, s  --  luminosity, Ledd/4pi\n")
         ftot.write("# t, s -- mass, "+" -- energy -- lost mass -- accreted mass -- current mdot\n")
         ftot.write("#  mass units "+str(massscale)+"g\n")
@@ -1495,7 +1504,7 @@ def alltire():
         if verbose:
             print("t = "+str(t*tscale)+" (crank = "+str(crank)+")")
         if crank ==0:
-            nout, t, con, rightpack_save, dmlost1, ediff1 = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot, t=t, nout = nout, thetimer = timer, rightpack_save = rightpack_save, dmlost = dmlost, ediff = ediff)
+            nout, t, con, rightpack_save, dmlost1, ediff1 = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot, t=t, nout = nout, thetimer = timer, rightpack_save = rightpack_save, dmlost = dmlost, ediff = ediff, fnu = fnu)
         else:
             nout, t, con, rightpack_save, dmlost1, ediff1 = onedomain(g, ghalf, con, comm, t=t, nout = nout, rightpack_save = rightpack_save, dmlost = dmlost, ediff = ediff)
         # print("alltire onedomain "+str(crank)+": mdlost1 = "+str(dmlost1))
