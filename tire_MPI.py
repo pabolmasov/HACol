@@ -692,10 +692,7 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         print("signal velocities crashed -- core "+str(crank))
         # ii=input("cs")
         sys.exit(1) 
-    # if crank == first:
-    #    fm[0] = 0.
-        #        fs[0] = fs[1]
-    #    fe[0] = 0.
+
     m, s, e = tocon_separate(rho, v, u, gnd) # conserved quantities for the extended mesh
     # print(type(rsolver))
     # ii = input('solver')
@@ -715,6 +712,8 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
             # ii = input('a')
             fm_half, fs_half, fe_half =  solv.HLLE([fm, fs, fe], [m, s, e], vl, vr, vm, phi = philm)
     
+    if crank == last:
+        fm_half[-1] = -mdot # setting mass inflow to mdot (looks safe)
     if(raddiff):
         #        dl = gnd.l[1:]-gnd.l[:-1]
         #  across = gnd.across
