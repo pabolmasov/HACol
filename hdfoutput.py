@@ -72,7 +72,7 @@ def keyshow(filename):
     f.close()
     return keys
 
-def read(hname, nentry):
+def read(hname, nentry, ifnu = False):
     '''
     read a single entry from an HDF5
     '''
@@ -90,10 +90,20 @@ def read(hname, nentry):
     rho=data["rho"][:] ; u=data["u"][:] ; v=data["v"][:] # reading the snapshot
     qloss = data["qloss"][:]
     ediff = data["ediff"][:]
+    
+    if ifnu:
+        qnuA = data["nuloss_A"][:]
+        qnuPh = data["nuloss_Ph"][:]
+        qnuPl = data["nuloss_Pl"][:]
+
     t=data.attrs["t"]
     print("t="+str(t)+" ("+str(nentry)+")")
     hfile.close()
-    return entry, t, l, r/rstar, sth, rho, u, v, qloss, glosave, ediff
+    
+    if ifnu:
+        return entry, t, l, r/rstar, sth, rho, u, v, qloss, glosave, ediff, qnuA, qnuPh, qnuPl
+    else:
+        return entry, t, l, r/rstar, sth, rho, u, v, qloss, glosave, ediff
 
 def liststitch(hnamelist):
     '''
