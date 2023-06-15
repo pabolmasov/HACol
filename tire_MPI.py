@@ -166,19 +166,13 @@ else:
 
 if verbose & (omega>0.):
     print(conf+": spin period "+str(2.*pi/omega*tscale)+"s")
-# replenishment time:
-tr = sqrt(2.)/pi / xifac**3.5 * r_e**1.5 * (dr_e/rstar)
+# replenishment time: wrong!
+# tr = sqrt(2.)/pi / xifac**3.5 * r_e**1.5 * (dr_e/rstar)
 # 4. * afac / sqrt(2.) / xifac**3.5 * r_e**1.5 * (dr_e/rstar)
 # 2.**1.5/pi*afac * dr_e/r_e / xifac * (r_e/xifac/rstar)**2.5 / rstar # replenishment time scale of the column
 if verbose:
     print("r_e = "+str(r_e))
-    print(conf+": replenishment time "+str(tr*tscale)) #*2.*pi*rstar**1.5))
-    ii =input("R")
-# scaling maximal time with tr:
-tmax = tr * configactual.getfloat('tmax')
-# scaling output frequency with tr:
-dtout = tr * configactual.getfloat('dtout')    # tr * configactual.getfloat('dtout')
-# if we are planning to do png outputs during the calculation:
+    # ii =input("R")
 ifplot = configactual.getboolean('ifplot')
 # if data are written in HDF5 format
 ifhdf = configactual.getboolean('ifhdf')
@@ -1148,7 +1142,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
         # neu.Qnu(rho, urad, mass1=m1, separate=True)
         fnu.write(str(t*tscale)+' '+str(Lnu_A)+' '+str(Lnu_Ph)+' '+str(Lnu_Pl)+'\n')
         fnu.flush()
-    print("dt = "+str(dt)+" = "+str(dt_CFL)+"; "+str(dt_thermal)+"; "+str(dt_diff)+"; "+str(dt_mloss)+"\n")
+    print("time step (CFL, thermal, diff, mass loss) = "+str(dt)+" = "+str(dt_CFL)+"; "+str(dt_thermal)+"; "+str(dt_diff)+"; "+str(dt_mloss)+"\n")
     print("characteristic Mach number: "+str(mach))
     fflux.flush() ; ftot.flush()
     if hfile is not None:
@@ -1209,7 +1203,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
 def alltire():
     global gglobal
     global mdot
-    global tmax
+    global tmax, dtout
     ######################### main thread:  #############################
     if crank == 0: 
         # if the output directory does not exist:
@@ -1249,10 +1243,16 @@ def alltire():
         rnew=rfun(luni) # radial coordinates for the  l-equidistant mesh
         luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
         g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
+        tr = g.across[0] * umag * rstar**2 / mdot # replenishment time
+        # scaling the calculation times with tr:
+        tmax = tr * configactual.getfloat('tmax')
+        # scaling output frequency with tr:
+        dtout = tr * configactual.getfloat('dtout')    # tr * configactual.getfloat('dtout')
+        # if we are planning to do png outputs during the calculation:
         if verbose:
             print(conf+": Across(0) = "+str(g.across[0]))
             # basic estimate for the replenishment time scale:
-            print(conf+": t_r = A_\perp u_mag / g / dot{M} = "+str(g.across[0] * umag * rstar**2 / mdot * tscale)+"s")
+            print(conf+": t_r = A_\perp u_mag / g / dot{M} = "+str(tr * tscale)+"s")
             ii =input("R")
         r=rnew # set a grid uniform in l=luni
         r_half=rfun(luni_half) # half-step radial coordinates

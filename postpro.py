@@ -1111,7 +1111,7 @@ def quasi2d_nocalc(infile, conf = 'DEFAULT', trange = None):
         plots.somemap(r, t, teff, name=outdir+'/q2d_teff', inchsize = [5, 10], cbtitle = r'$Teff$, keV', xrange = trange, transpose=True)
 
 #############################################
-def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None, iflog=False):
+def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None, iflog=False, ifnu=False):
     '''
     makes quasi-2D Rt plots or an RT table
     '''
@@ -1175,9 +1175,22 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None,
     betavent = zeros(nt, dtype = double) # this one is BS's beta
     betaeff = zeros(nt, dtype = double) # and this one, too
     betaeff_m = zeros(nt, dtype = double) # this, too
+    if ifnu:
+        qnuA = zeros([nt, nrnew], dtype = double)
+        qnuPh = zeros([nt, nrnew], dtype = double)
+        qnuPl = zeros([nt, nrnew], dtype = double)
     #    var[0,:] = v[:] ; uar[0,:] = u[:] ; tar[0] = t
     for k in arange(nt):
-        entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(hname, k*step+n1) # hdf5 read
+        if ifnu:
+            entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff, qnuA_1, qnuPh_1, qnuPl_1 = hdf.read(hname, k*step+n1, ifnu=True) # hdf5 read
+            qafun = interp1d(r, qnuA_1, kind = 'linear')
+            qphfun = interp1d(r, qnuPh_1, kind = 'linear')
+            qplfun = interp1d(r, qnuPl_1, kind = 'linear')
+            qnuA[k, :] = qafun(rnew)
+            qnuPh[k, :] = qphfun(rnew)
+            qnuPl[k, :] = qphfun(rnew)
+        else:
+            entryname, t, l, r, sth, rho, u, v, qloss, glo, ediff = hdf.read(hname, k*step+n1) # hdf5 read
         vfun = interp1d(r, v, kind = 'linear')
         var[k, :] = vfun(rnew)
         qfun = interp1d(r, qloss/perimeter, kind = 'linear')
@@ -1275,6 +1288,8 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None,
         print("mean effective betaBS = "+str(betaeff.mean()))
         print("using magnetic energy, betaBS = "+str(betaeff_m.mean()))
         print("gas-to-total pressure ratio at the surface is "+str(betar[tar>0.9*tar.max(),0].mean()))
+        if ifnu:
+            plots.somemap(rnew, tar*tscale, log10(qnuA+qnuPh+qnuPh), name=outdir+'/q2d_nua', inchsize = [4, 12], cbtitle = r'$\log_{10}Q_{\nu}$, relative units', transpose = True, xrange = trange, ylog=False, xlog=True) # , yrange=[1.,1.1], ylog = False)
         
     # let us also make an ASCII table
     ftable = open(outdir+'/ftable.dat', 'w')
