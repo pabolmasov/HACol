@@ -116,6 +116,11 @@ ifnuloss = configactual.getboolean('ifnuloss')
 if ifnuloss:
     import neu
 
+ifpairs = configactual.getboolean('ifpairs')
+
+if ifpairs:
+    import pairkappa
+
 ifturnoff = configactual.getboolean('ifturnoff') # if mdot is artificially reduced (by a factor turnofffactor)
 if ifturnoff:
     turnofffactor = configactual.getfloat('turnofffactor')
@@ -332,6 +337,12 @@ def diffuse(rho, urad, v, dl, across, taueff):
     '''
     # rtau_exp =  tratfac(3. * (rho[1:]+rho[:-1])/2. * dl, taumin, taumax)
     rtau_exp = 1./(3.*dl* (rho[1:]+rho[:-1])/2.)
+    
+    if ifpairs:
+        pfac = pairkappa.kappafac(urad/m1, rho/m1)
+        rtau_exp *= (pfac[1:]+pfac[:-1])/2.
+        taueff *= (pfac[1:]+pfac[:-1])/2.
+    
     # rtau_exp1 =  tratfac(3. * (rho)[1:] * dl/2., taumin, taumax)
     # rtau_exp2 =  tratfac(3. * (rho)[:-1] * dl/2., taumin, taumax)
     # rtau_exp1 = 1./(3. * (rho)[1:] * dl/2.)
@@ -1119,7 +1130,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
     #    r = r[wsort] ;  m = m[wsort] ;  e = e[wsort]
     # rho = rho[wsort] ; v = v[wsort] ; u = u[wsort] ; urad = urad[wsort] ; beta = beta[wsort] ; umagtar = umagtar[wsort]
     qloss = qloss_separate(rho, urad, gglobal)
-    ltot = trapz(qloss, x = gglobal.l) 
+    ltot = trapz(qloss, x = gglobal.l)
     mtot = trapz(m, x = gglobal.l)
     etot = trapz(e, x = gglobal.l)
     fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
