@@ -116,6 +116,11 @@ ifnuloss = configactual.getboolean('ifnuloss')
 if ifnuloss:
     import neu
 
+ifpairs = configactual.getboolean('ifpairs')
+
+if ifpairs:
+    import pairkappa
+
 ifturnoff = configactual.getboolean('ifturnoff') # if mdot is artificially reduced (by a factor turnofffactor)
 if ifturnoff:
     turnofffactor = configactual.getfloat('turnofffactor')
@@ -332,6 +337,7 @@ def diffuse(rho, urad, v, dl, across, taueff):
     '''
     # rtau_exp =  tratfac(3. * (rho[1:]+rho[:-1])/2. * dl, taumin, taumax)
     rtau_exp = 1./(3.*dl* (rho[1:]+rho[:-1])/2.)
+        
     # rtau_exp1 =  tratfac(3. * (rho)[1:] * dl/2., taumin, taumax)
     # rtau_exp2 =  tratfac(3. * (rho)[:-1] * dl/2., taumin, taumax)
     # rtau_exp1 = 1./(3. * (rho)[1:] * dl/2.)
@@ -349,6 +355,7 @@ def diffuse(rho, urad, v, dl, across, taueff):
     
     ttau = taufun(taueff, taumin, taumax)
     dule_half = -du / 3. / dl * ttau
+
     # (across[1:]+across[:-1]) / 2. /(3.*dl)/ ((rho[1:]+rho[:-1])/2.) # (rtau_exp1 + rtau_exp2)  # * rtau_exp # / (rtau_left + rtau_right)
 
     # dule_half +=  duls_half * (v[1:]+v[:-1])/2. # adding the viscous energy flux
@@ -379,7 +386,11 @@ def diffuse(rho, urad, v, dl, across, taueff):
     ##    print(n0)
     #    print(urad.min())
         # ii = input('N')
-
+    if ifpairs:
+        pfac = pairkappa.kappafac(urad/m1, rho/m1)
+        dule_half /= (pfac[1:]+pfac[:-1])/2.
+        duls_half /= (pfac[1:]+pfac[:-1])/2.
+#        taueff *= (pfac[1:]+pfac[:-1])/2.
 
     return duls_half, dule_half
            
@@ -1119,7 +1130,7 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
     #    r = r[wsort] ;  m = m[wsort] ;  e = e[wsort]
     # rho = rho[wsort] ; v = v[wsort] ; u = u[wsort] ; urad = urad[wsort] ; beta = beta[wsort] ; umagtar = umagtar[wsort]
     qloss = qloss_separate(rho, urad, gglobal)
-    ltot = trapz(qloss, x = gglobal.l) 
+    ltot = trapz(qloss, x = gglobal.l)
     mtot = trapz(m, x = gglobal.l)
     etot = trapz(e, x = gglobal.l)
     fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
@@ -1298,6 +1309,7 @@ def alltire():
             # vinit = vout * sqrt(rmax/g.r) * ((g.r-rstar)/(rmax-rstar)) # to fit the v=0 condition at the surface of the star
             # vinit *= abs(mdot / (rho * vinit * g.across)[-1]) # renormalise for a ~const mdot
             v = copy(vinit)
+            v *= (g.r-rstar)/(rmax-rstar) # zeroing velocity near the surface
             #        print("umagout = "+str(umagout))
             #        ii = input("vout * mdot = "+str(vout*mdot/g.across[-1]))
             press =  (umagout-vout*mdot/2./g.across[-1]) * (g.r[-1]/g.r) * (rho/rho[-1]+1.)/2. * 0.25
