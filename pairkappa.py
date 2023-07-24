@@ -1,12 +1,13 @@
 from numpy import *
 
-rhodconst = 2.16647e+11 # degeneracy density normalized according to globals.conf
+rhodconst = 4.333e+11 # degeneracy density normalized according to globals.conf
+# sqrt(2./pi**3)*(mc/hbar)**3*GMsun * sigmaT/c**2
 mecc = 510.994 # electron mass in keV
 
 def multiplicity(temp, rho):
     # gives the number of positrons in annihilation equilibrium of a mildly relativistic gas; temp shd be in me c^2 units
     # see Landau-Lifshitz V (stat physics), p. 344
-    return sqrt(1. + 4. * (rho/rhodconst)**(-2) * temp**3 * exp(-2./temp))
+    return sqrt(1. + 4. * (rhodconst/rho)**(2) * temp**3 * exp(-2./temp))
 
 def kappafac(urad, rho):
     # cross-section increase due to pair production;
