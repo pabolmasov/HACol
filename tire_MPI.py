@@ -1264,7 +1264,7 @@ def alltire():
             print(conf+": Across(0) = "+str(g.across[0]))
             # basic estimate for the replenishment time scale:
             print(conf+": t_r = A_\perp u_mag / g / dot{M} = "+str(tr * tscale)+"s")
-            ii =input("R")
+            # ii =input("R")
         r=rnew # set a grid uniform in l=luni
         r_half=rfun(luni_half) # half-step radial coordinates
         ghalf = geometry_initialize(r_half, r_e, dr_e, afac=afac) # mid-step geometry in r
@@ -1286,9 +1286,9 @@ def alltire():
         print("   beta_s = "+str(BSbeta))
         cthfun = interp1d(g.r/r[0], g.cth) # we need a function allowing to calculate cos\theta (x)
 
-        print(" t_s = "+str(tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, xs, cthfun)))
-        if verbose:
-            input("BS")
+        print(" magnetosphere size ", r[-1]/r[0], " * ", rstar)
+        print(" t_s = "+str(tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, min(xs, r[-1]/rstar), cthfun)))
+        ii = input("ts")
         # magnetic field energy density:
         umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
         #
@@ -1506,6 +1506,14 @@ def alltire():
         t = tpack["t"] ; nout = tpack["nout"]
         tmax += t
 
+    if crank == 0:
+        tpack = {"tmax": tmax, "dtout": dtout}
+    else:
+        tpack = None
+    tpack = comm.bcast(tpack, root = 0)
+    tmax = tpack["tmax"]
+    dtout = tpack["dtout"]
+
     rightpack_save = None
 
     dmlost = 0.
@@ -1514,10 +1522,13 @@ def alltire():
     while (t<tmax):
         if verbose:
             print("t = "+str(t*tscale)+" (crank = "+str(crank)+")")
+            print("crank = ", crank, "; tmax = "+str(tmax*tscale))
         if crank ==0:
             nout, t, con, rightpack_save, dmlost1, ediff1 = onedomain(g, ghalf, con, comm, hfile = hfile, fflux = fflux, ftot = ftot, t=t, nout = nout, thetimer = timer, rightpack_save = rightpack_save, dmlost = dmlost, ediff = ediff, fnu = fnu)
         else:
             nout, t, con, rightpack_save, dmlost1, ediff1 = onedomain(g, ghalf, con, comm, t=t, nout = nout, rightpack_save = rightpack_save, dmlost = dmlost, ediff = ediff)
+            # print("*** t = "+str(t*tscale)+" (crank = "+str(crank)+")")
+            # print("*** tmax = "+str(tmax*tscale)+" (crank = "+str(crank)+")")
         # print("alltire onedomain "+str(crank)+": mdlost1 = "+str(dmlost1))
         dmlost = dmlost1 ; ediff = ediff1
         if rightpack_save is not None:
