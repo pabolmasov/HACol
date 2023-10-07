@@ -16,7 +16,6 @@ import os.path
 import sys
 import configparser as cp
 import gc
-
 import re
 
 # parallel support
@@ -1288,7 +1287,7 @@ def alltire():
 
         print(" magnetosphere size ", r[-1]/r[0], " * ", rstar)
         print(" t_s = "+str(tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, min(xs, r[-1]/rstar), cthfun)))
-        ii = input("ts")
+        # ii = input("ts")
         # magnetic field energy density:
         umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
         #
