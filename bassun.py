@@ -22,8 +22,8 @@ def xis(gamma, eta, n=3, x0=20., ifbeta = False):
     x = fsolve(fxis, x0, args=(gamma, eta, n), maxfev = 1000, xtol=1e-10)
     #    print(fxis(x, gamma, eta, n))
     if ifbeta:
-        print("beta")
         beta = 1.-gamma*exp(gamma)*(expn(1,gamma)-expn(1, gamma*x))
+        print("beta = ", beta)
         return x, beta
     else:
         return x
@@ -67,3 +67,5 @@ def BSsolution(gamma, eta):
     v = v/v[-1] * 1./sqrt(xs)/7. # normalisation
 
     return x, v, u
+    
+

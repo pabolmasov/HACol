@@ -22,6 +22,81 @@ if ifplot:
     from matplotlib.pyplot import ioff
     ioff()
 
+def BSphysical(conf='DEFAULT'):
+    '''
+    outputs physical parameters of the BS solution from the surface up to the shock wave
+    '''
+    rstar = config[conf].getfloat('rstar')
+    # print('Rstar = ', rstar)
+    #r_e = config[conf].getfloat('r_e')
+    # print('Re = ', r_e)
+    m1 = config[conf].getfloat('m1')
+    mu30 = config[conf].getfloat('mu30')
+    mdot = config[conf].getfloat('mdot') * 4.*pi # now it is in G M / c kappa
+    xifac = config[conf].getfloat('xifac')
+    r_e = config[conf].getfloat('r_e_coeff') * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetosphere radius
+    dr_e = config[conf].getfloat('drrat') * r_e
+    afac = config[conf].getfloat('afac')
+    mass1 = config[conf].getfloat('m1')
+    tscale = config[conf].getfloat('tscale') * mass1
+    rhoscale = config[conf].getfloat('rhoscale') / mass1
+    rscale = config[conf].getfloat('rscale') * mass1
+    realxirad = config[conf].getfloat('xirad')
+    mow = config[conf].getfloat('mow')
+    b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
+    umag = b12**2*2.29e6*m1
+    betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
+
+    # setting geometry:
+    g = geo.geometry_initialize(asarray([rstar]), r_e, dr_e, afac=afac) # radial-equidistant mesh
+    
+    BSgamma = (g.across/g.delta**2)[0]/mdot*rstar / (realxirad/1.5)
+    BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(g.delta[0])/(rstar)**0.125
+    
+    x, v, u = bs.BSsolution(BSgamma, BSeta)
+
+    u *= 3. * umag
+
+    g = geo.geometry_initialize(rstar * x, r_e, dr_e, afac=afac) # radial-equidistant mesh with dipolar geometry, 1000 elements, and extended up to xs
+
+    rho = mdot / (v * g.across)  # code units
+    
+    # perimeter = 2. * (g.across/g.delta) # cooling from two sides
+    taueff = rho * g.delta
+    # taufactor = taufun(taueff, taumin, taumax) / (realxirad*taueff+1.)
+    qloss = u / (realxirad*taueff+1.)
+
+    rho = mdot / (v * g.across) / mass1 * rhoscale # physical density in g /cm^3
+    
+    teff = 4.75 * mass1**(-0.25) * qloss**0.25 # keV
+
+    r = g.r * rscale # physical length
+    delta = g.delta * rscale
+
+    plots.someplots(r, [delta], name='BSdelta', xtitle='$R$, cm',
+                    ytitle=r'$\delta$, cm', ylog=True,
+                    formatsequence = ['k-'])
+    plots.someplots(r, [rho], name='BSrho', xtitle='$R$, cm',
+                    ytitle=r'$\rho,$ g cm$^{-3}$', ylog=True,
+                    formatsequence = ['k-'])
+    plots.someplots(r, [v], name='BSv', xtitle='$R$, cm',
+                    ytitle=r'$v/c$', ylog=True,
+                    formatsequence = ['k-'])
+    plots.someplots(r, [teff], name='BSteff', xtitle='$R$, cm',
+                    ytitle=r'$T_{\rm eff}$, keV', ylog=False,
+                    formatsequence = ['k-'])
+    # TODO: make an ASCII-saving module
+    fout = open('BSphys.dat', 'w')
+    fout.write("# R[cm]  -- delta[cm]  -- v/c -- rho [CGS] -- Teff [keV] \n")
+    nx = size(r)
+    for k in arange(nx):
+        s = str(r[k]) + " " + str(g.delta[k] * rscale) + " " + str(v[k]) + " " + str(rho[k]) +" " + str(teff[k]) + "\n"
+        print(s)
+        fout.write(s)
+    fout.flush()
+    fout.close()
+
+
 def readtireout(infile, ncol = 0):
     '''
     reading a tireout ASCII file
