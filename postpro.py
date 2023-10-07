@@ -73,6 +73,8 @@ def BSphysical(conf='DEFAULT'):
     r = g.r * rscale # physical length
     delta = g.delta * rscale
 
+    bloc = b12/2. * sqrt(3.*g.cth**2+1.) * (rstar/g.r)**3 # local magnetic field, 10^12 G
+
     plots.someplots(r, [delta], name='BSdelta', xtitle='$R$, cm',
                     ytitle=r'$\delta$, cm', ylog=True,
                     formatsequence = ['k-'])
@@ -85,12 +87,15 @@ def BSphysical(conf='DEFAULT'):
     plots.someplots(r, [teff], name='BSteff', xtitle='$R$, cm',
                     ytitle=r'$T_{\rm eff}$, keV', ylog=False,
                     formatsequence = ['k-'])
+    plots.someplots(r, [bloc], name='BSB', xtitle='$R$, cm',
+                    ytitle=r'$B$, $10^{12}$G', ylog=True,
+                    formatsequence = ['k-'])
     # TODO: make an ASCII-saving module
     fout = open('BSphys.dat', 'w')
-    fout.write("# R[cm]  -- delta[cm]  -- v/c -- rho [CGS] -- Teff [keV] \n")
+    fout.write("# R[cm]  -- delta[cm]  -- v/c -- rho [CGS] -- Teff [keV] -- B[G]\n")
     nx = size(r)
     for k in arange(nx):
-        s = str(r[k]) + " " + str(g.delta[k] * rscale) + " " + str(v[k]) + " " + str(rho[k]) +" " + str(teff[k]) + "\n"
+        s = str(r[k]) + " " + str(g.delta[k] * rscale) + " " + str(v[k]) + " " + str(rho[k]) + " " + str(teff[k]) + " " + str(bloc[k]) + "\n"
         print(s)
         fout.write(s)
     fout.flush()
