@@ -56,15 +56,15 @@ def dtint(gamma, xs, cthfun, beta = None):
 
 def BSsolution(gamma, eta):
 
-    nx = 1000
+    nx = 10000
 
     xs, beta = xis(gamma, eta, n=3, x0=20., ifbeta = True)
     
     x = xs**(arange(nx)/double(nx-1))
 
     u = (1.-exp(gamma)/beta * (expn(2, gamma)-expn(2, gamma*x)/x))**4 # u/u[0]
-    v = exp(gamma*x)/x**3 * (expn(1, gamma*x)+ beta * exp(-gamma) - expn(2, gamma)) / u
-    v = v/v[-1] * 1./sqrt(xs)/7. # normalisation
+    v = exp(gamma*x)/x**3 * (expn(2, gamma*x)/x+ beta * exp(-gamma) - expn(2, gamma)) / u
+    v = v/v[-1] * sqrt(2./xs)/7. # normalisation
 
     return x, v, u
     

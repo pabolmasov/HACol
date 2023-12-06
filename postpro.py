@@ -26,6 +26,9 @@ def BSphysical(conf='DEFAULT'):
     '''
     outputs physical parameters of the BS solution from the surface up to the shock wave
     '''
+    
+    varkappa = 0.35 # temporary!!!
+    
     rstar = config[conf].getfloat('rstar')
     # print('Rstar = ', rstar)
     #r_e = config[conf].getfloat('r_e')
@@ -44,18 +47,23 @@ def BSphysical(conf='DEFAULT'):
     realxirad = config[conf].getfloat('xirad')
     mow = config[conf].getfloat('mow')
     b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
-    umag = b12**2*2.29e6*m1
+    umag = b12**2*2.29e6*m1 # magnetic energy density at the bottom
     betacoeff = config[conf].getfloat('betacoeff') * (m1)**(-0.25)/mow
 
     # setting geometry:
-    g = geo.geometry_initialize(asarray([rstar]), r_e, dr_e, afac=afac) # radial-equidistant mesh
+    nx=100
+    g = geo.geometry_initialize(asarray(rstar * (r_e / rstar)**(arange(nx)/double(nx))), r_e, dr_e, afac=afac) # radial-equidistant mesh
     
-    BSgamma = (g.across/g.delta**2)[0]/mdot*rstar / (realxirad/1.5)
-    BSeta = (8./21./sqrt(2.)*umag*3. * (realxirad/1.5))**0.25*sqrt(g.delta[0])/(rstar)**0.125
+    BSgamma = (g.across/g.delta**2)[0]/mdot*rstar / (realxirad/1.5) * (0.35/varkappa)
+    BSeta = (8./21./sqrt(2.) * (varkappa/0.35) * umag *3. * (realxirad/1.5))**0.25*sqrt(g.delta[0])/(rstar)**0.125
     
     x, v, u = bs.BSsolution(BSgamma, BSeta)
 
-    u *= 3. * umag
+    v/= sqrt(rstar)
+
+    print("u0 = ", b12**2/8./pi*3.*1e24,"erg/cm**3")
+    # ii = input("u")
+    # u *= 3. * umag
 
     g = geo.geometry_initialize(rstar * x, r_e, dr_e, afac=afac) # radial-equidistant mesh with dipolar geometry, 1000 elements, and extended up to xs
 
@@ -64,11 +72,15 @@ def BSphysical(conf='DEFAULT'):
     # perimeter = 2. * (g.across/g.delta) # cooling from two sides
     taueff = rho * g.delta
     # taufactor = taufun(taueff, taumin, taumax) / (realxirad*taueff+1.)
-    qloss = u / (realxirad*taueff+1.)
+    qloss = u / (realxirad*taueff+1.) # u in u[0]
 
-    rho = mdot / (v * g.across) / mass1 * rhoscale # physical density in g /cm^3
+
+    rho = mdot / (v * g.across) * rhoscale * 0.35/varkappa# physical density in g /cm^3
     
-    teff = 4.75 * mass1**(-0.25) * qloss**0.25 # keV
+    # teff = 4.75 * mass1**(-0.25) * qloss**0.25 # keV
+    teff = 242.88 * b12**0.5 * qloss**0.25 # keV
+
+    tc = 171.742 * b12**0.5 * u**0.25 # temperature in keV
 
     r = g.r * rscale # physical length
     delta = g.delta * rscale
@@ -92,15 +104,23 @@ def BSphysical(conf='DEFAULT'):
                     formatsequence = ['k-'])
     # TODO: make an ASCII-saving module
     fout = open('BSphys.dat', 'w')
-    fout.write("# R[cm]  -- delta[cm]  -- v/c -- rho [CGS] -- Teff [keV] -- B[G]\n")
+    fout.write("# gamma = "+str(BSgamma)+"; eta = "+str(BSeta)+"\n")
+    fout.write("# R[cm]  -- delta[cm]  -- v/c -- tau -- rho [CGS] -- Teff [keV] -- B[10^12G]\n")
     nx = size(r)
     for k in arange(nx):
-        s = str(r[k]) + " " + str(g.delta[k] * rscale) + " " + str(v[k]) + " " + str(rho[k]) + " " + str(teff[k]) + " " + str(bloc[k]) + "\n"
-        print(s)
+        s = str(r[k]) + " " + str(g.delta[k] * rscale) + " " + str(v[k]) + " " + str(taueff[k]) + " " + str(rho[k]) + " " + str(teff[k]) + " " + str(bloc[k]) + "\n"
+        # print(s)
         fout.write(s)
     fout.flush()
     fout.close()
-
+    
+    w2 = abs(r-2e6).argmin()
+    
+    print("tc(2R_*) = ", tc[w2])
+    print("l/delta [2R_*] = ", (g.across/g.delta**2)[w2]/2.)
+    s = str(r[w2]) + " " + str(g.delta[w2] * rscale) + " " + str(v[w2]) + " " + str(taueff[w2]) + " " + str(rho[w2]) + " " + str(teff[w2]) + " " + str(bloc[w2]) + "\n"
+    print("# R[cm]  -- delta[cm]  -- v/c -- tau -- rho [CGS] -- Teff [keV] -- B[10^12G]\n")
+    print(s)
 
 def readtireout(infile, ncol = 0):
     '''

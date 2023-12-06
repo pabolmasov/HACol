@@ -108,6 +108,7 @@ multimultishock_plot(["titania_fidu", "titania_nod"], parflux = True)
 multimultishock_plot(["titania_fidu", "titania_rot", "titania_RI"], parflux = True)
 multimultishock_plot(["titania_fidu", "titania_irr"], parflux = True, sfilter = 1.2)
 dynspec(infile = 'titania_huge/sfront', nbins = 20, ntimes=50, iffront = True,deline=True, fosccol = -1)
+dynspec(infile = 'sai_ovarH/sfront', nbins = 30, ntimes=30, iffront = True,deline=True, fosccol = -1)
 
 quasi2d('titania_fidu2/tireout.hdf5', 0,1500)
 mdotmap(0,1500,1, prefix='titania_fidu2/tireout', conf='FIDU') 
