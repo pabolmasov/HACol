@@ -1369,8 +1369,8 @@ def quasi2d(hname, n1, n2, conf = 'DEFAULT', step = 1, kleap = 5, trange = None,
         # Q-:
         plots.somemap(rnew, tar*tscale, log10(qar), name=outdir+'/q2d_q', \
                 inchsize = [4, 12], cbtitle = r'$\log_{10}Q$', transpose = True, xrange = trange, ylog=iflog, xlog=True)
-        plots.somemap(rnew, tar*tscale, log10(ear), name=outdir+'/q2d_qe', \
-                inchsize = [4, 12], cbtitle = r'$\log_{10}F_{\rm diff}$', transpose = True, xrange = trange, yrange = [2.7, 3.3], xlog = False, ylog=iflog)
+        plots.somemap(rnew, tar*tscale, log10(abs(ear)), name=outdir+'/q2d_qe', \
+                inchsize = [4, 12], cbtitle = r'$\log_{10}\left|F_{\rm diff}\right|$', transpose = True, xrange = trange, xlog = False, ylog=iflog)
         # mdot:
         mdlev = 3.*arange(nv)/double(nv-2)-1.
         plots.somemap(rnew, tar*tscale, mdar/mdot, name=outdir+'/q2d_m', \

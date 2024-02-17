@@ -112,6 +112,11 @@ eta = configactual.getfloat('eta')
 heatingeff = configactual.getfloat('heatingeff')
 ifnuloss = configactual.getboolean('ifnuloss')
 
+# starting with a disc interior rather than fixing mdot
+ifdisc = configactual.getboolean('ifdisc')
+Dalpha = configactual.getfloat('Dalpha')
+Dthick = configactual.getfloat('Dthick')
+
 if ifnuloss:
     import neu
 
@@ -644,9 +649,14 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         beta = concatenate([beta, [betaright]])
     else:
         # outer BC:
-        rhout = -mdot / vout / g.across[-1]
-        betaout = betafun(Fbeta(rhout, umagout, betacoeff))
-        pressout = umagout/3./(1.-betaout/2.)
+        if ifdisc:
+            rhout = Drho
+            pressout = Dpress
+            betaout = betafun_p(Fbeta_press(rhout, pressout, betacoeff))
+        else:
+            rhout = -mdot / vout / g.across[-1]
+            betaout = betafun(Fbeta(rhout, umagout, betacoeff))
+            pressout = umagout/3./(1.-betaout/2.)
         uradout = umagout * (1.-betaout) / (1.-betaout/2.)
         rho = concatenate([rho, [rhout]]) #ahalf[-1]]])   #
         v = concatenate([v, [vout]]) # [minimum(v[-1], 0.)]])
@@ -717,7 +727,8 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
             fm_half, fs_half, fe_half =  solv.HLLE([fm, fs, fe], [m, s, e], vl, vr, vm, phi = philm)
     
     if crank == last:
-        fm_half[-1] = -mdot # setting mass inflow to mdot (looks safe)
+        if not(ifdisc):
+            fm_half[-1] = -mdot # setting mass inflow to mdot (looks safe)
     if(raddiff):
         #        dl = gnd.l[1:]-gnd.l[:-1]
         #  across = gnd.across
@@ -815,6 +826,7 @@ def BCsend(leftpack_send, rightpack_send, comm):
     return leftpack, rightpack
 
 def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0., nout = 0, thetimer = None, rightpack_save = None, dmlost = 0., ediff = 0., fnu = None):
+    global vout
 #(g, lcon, ghostleft, ghostright, dtpipe, outpipe, hfile, t = 0., nout = 0):
     '''
     single domain, calculated by a single core
@@ -835,12 +847,17 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
     if (crank == last) & (rightpack_save is None):
         # prim['v'][-1] = vout
         # prim['rho'][-1] = -mdot  / (prim['v'] * g.across)[-1]
-        rho0 = -mdot  / vout / g.across[-1]
-        p0 = (umagout-0.5*mdot * vout / g.across[-1]) * 0.25
+        if ifdisc:
+            rho0 = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
+            p0 = minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*mdot * vout / g.across[-1]) * 0.25)
+            vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
+        else:
+            rho0 = -mdot  / vout / g.across[-1]
+            p0 = (umagout-0.5*mdot * vout / g.across[-1]) * 0.25
         v0 = vout
         if ifturnoff:
             prim['rho'][-1] *= turnofffactor # reducing the mass flow at the outer limit
-        rightpack_save = {'rho': rho0, 'v': v0, 'u': p0*3.}
+        rightpack_save = {'rho': rho0, 'v': v0, 'u': p0*3.} # why x3? is it radiation dominated?
         if verbose:
             print('setting outer BC\n')
             ## ii = input('OBC')
@@ -885,7 +902,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         if crank > first:
             leftdata = comm.recv(source = left, tag = left)
             print("I, "+str(crank)+", received from "+str(left)+": "+leftdata['data'])
-        if rang < last:
+        if crank < last:
             rightdata = comm.recv(source = right, tag = right)
             print("I, "+str(crank)+", received from "+str(right)+": "+rightdata['data'])
         print("this was topology test\n")
