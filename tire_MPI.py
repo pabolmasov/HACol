@@ -650,8 +650,9 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
     else:
         # outer BC:
         if ifdisc:
-            rhout = Drho
-            pressout = Dpress
+            rhout = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
+            vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
+            pressout = minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*vout**2 * rho0) * 0.25)
             betaout = betafun_p(Fbeta_press(rhout, pressout, betacoeff))
         else:
             rhout = -mdot / vout / g.across[-1]
@@ -849,8 +850,8 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         # prim['rho'][-1] = -mdot  / (prim['v'] * g.across)[-1]
         if ifdisc:
             rho0 = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
-            p0 = minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*mdot * vout / g.across[-1]) * 0.25)
             vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
+            p0 = minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*vout**2 * rho0) * 0.25)
         else:
             rho0 = -mdot  / vout / g.across[-1]
             p0 = (umagout-0.5*mdot * vout / g.across[-1]) * 0.25
