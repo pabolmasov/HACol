@@ -864,7 +864,7 @@ def multishock(n1, n2, dn, prefix = "out/tireout", dat = False, conf = None, kle
     print("eta gamma^{1/4} = "+str(BSeta*BSgamma**0.25))
     print("beta = "+str(BSbeta))
     print("predicted shock position = "+str(xs))
-    dt_BS = tscale * rstar**1.5 * bs.dtint(BSgamma, xs, cthfun)
+    # dt_BS = tscale * rstar**1.5 * bs.dtint(BSgamma, xs, cthfun)
     ii = input("xs")
     # spherization radius
     rsph =1.5*mdot/4./pi
@@ -1170,6 +1170,9 @@ def masstest(indir, conf='DEFAULT'):
     plots.someplots(t, [m-m[0], macc-mlost-(macc[0]-mlost[0]), (macc-macc[0])*1e-2, (mlost-mlost[0])*1e-2], name = 'mbalance', formatsequence = ['k-', 'r:', 'b--', 'm-', 'c-'],
                     xlog = False, ylog = False, xtitle = r'$t$, s', ytitle = r'$M$')
     print("mass change / mass injected = "+str((m[-1]-m[0])/(macc[-1]-macc[0])))
+    
+    print(mdot)
+    print("mdot/mdotd = ", mdotcurrent[400:].mean()/mdot/4./pi, "+/-", mdotcurrent[400:].std()/mdot/4./pi)
     
     # plots.someplots((t[1:]+t[:-1])/2., [(mlost[1:]-mlost[:-1])/(t[1:]-t[:-1])], name='mdot', xtitle = r'$t$, s', ytitle = r'$\dot{M}$, g s$^{-1}$', xlog = False, ylog = False)
 

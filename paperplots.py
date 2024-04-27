@@ -275,3 +275,27 @@ def justtwocurves():
     t2 = lines2[:,0] ; flux2 = lines2[:,1] / 4./pi
 
     plots.someplots([t2, t1], [flux2, flux1], multix = True, name='forpaper/lccurves', formatsequence=["k-", "r:"], xlog=False, xrange=[0.005,0.015], inchsize=[12., 4.], yrange=[1.4,2.4], xtitle=r'$t$, s', ytitle=r'$L/L_{\rm Edd}$')
+
+def transplot():
+
+    hs = asarray([1.0, 0.5, 0.25, 0.2, 0.1])
+    
+    mdots = asarray([609., 1590., 6430., 10277., 46200.])
+    
+    nh = 100
+    htmp_max = 1.0
+    htmp_min = 0.1
+    htmp = (htmp_max/htmp_min)**((arange(nh)+1.)/double(nh-1))*htmp_min
+    
+    alpha = 0.1
+    mdot = 100. * 4.*pi
+    a = 0.25
+    drrat = 0.25
+    
+    gamma=4./3.
+    gammafac = sqrt(gamma)/2. * (2.*gamma/(gamma+1.))**((gamma+1.)/2./(gamma-1.))
+    
+    print("gammafac = ", gammafac)
+    
+    plots.someplots([hs, htmp], [mdots/mdot, gammafac * a * drrat / alpha / htmp**2], name='forpaper/transplot', formatsequence=['k.', 'r:'], xtitle=r'$H/R$', ytitle=r'$\dot{M}/\dot{M}_{\rm d}$', multix=True, ylog=True)
+    
