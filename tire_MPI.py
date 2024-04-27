@@ -437,6 +437,12 @@ def qloss_separate(rho, urad, g, gin = False, dt = None):
         taueff = rho * delta 
     else:
         taueff = rho / (1. / delta + 2. * delta /  across)
+        
+    # put kappa modifications here:
+    if ifpairs:
+        pfac = pairkappa.kappafac(urad/m1, rho/m1) #
+        taueff *= pfac
+        
     # taueff /= 2. # either we radiate from two sides and use one-half of taueff, or we use the full optical depth and use effectively one side
     # taufac = taufun(taueff, taumin, taumax)    # 1.-exp(-tau)
     # beta = betafun(Fbeta(rho, u, betacoeff))
