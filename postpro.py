@@ -153,9 +153,10 @@ def galjaread(infile):
     
     return x, u, v, rho, prat
 
-def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = False, trange = None):
+def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = False, trange = None, savetheta = False):
     '''
     compares the structure of the flow to the analytic solution by B&S76
+    savetheta -- produces an additional output file with theta -- u/umag output
     '''
     
     sintry = size(nentry)
@@ -285,14 +286,21 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
     if not nocalc:
         # we need to save the result as an ASCII file, then
         fout = open(dirname + '/avprofile.dat', 'w')
+        if savetheta:
+            fth = open(dirname + '/thprofile.dat','w')
+            fth.write('# theta -- u/umag \n')
         fout.write("# R  -- v -- u -- Prat -- T -- rho -- qloss -- dv -- du -- dbeta -- dqloss \n")
         nx = size(xp)
         for k in arange(nx):
             s = str(xp[k]) + " " + str(vp[k]) + " " + str((up/umagtar)[k]) + " " + str(betap[k]) + " " + str(tempp[k]) + " " + str(rhop[k]) + " " + str(qloss[k]) + " " + str(dv[k])+ " "+str((du/umagtar)[k])+" "+str(dbeta[k])+" "+str(dqloss[k])+"\n"
+            if savetheta:
+                fth.write(str(theta[k])+' '+ str((up/umagtar)[k]) + '\n')
             print(s)
             fout.write(s)
             fout.flush()
         fout.close()
+        if savetheta:
+            fth.close()
     if ifplot:
         if nocalc:
             press = up / 3. / (1.-betap/2.)

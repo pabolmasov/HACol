@@ -50,7 +50,7 @@ def HLLC(fs, qs, sl, sr, sm, rho, press, phi = None):
     f1, f2, f3 = fs  ;  q1, q2, q3 = qs
     ds = sr - sl
 
-    v = f1/q1
+    v = 0. # f1/q1
     
     nx=size(q1)
     fhalf1=zeros(nx-1, dtype=double)  ;  fhalf2=zeros(nx-1, dtype=double)  ;  fhalf3=zeros(nx-1, dtype=double)    

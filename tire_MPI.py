@@ -102,7 +102,7 @@ taumax = configactual.getfloat('taumax')
 
 # additional parameters:
 xifac = configactual.getfloat('xifac')
-avfac = configactual.getfloat('afac')
+afac = configactual.getfloat('afac')
 nubulk = configactual.getfloat('nubulk')
 weinberg = configactual.getboolean('weinberg')
 eta = configactual.getfloat('eta')
@@ -112,6 +112,7 @@ ifnuloss = configactual.getboolean('ifnuloss')
 ifdisc = configactual.getboolean('ifdisc')
 Dalpha = configactual.getfloat('Dalpha')
 Dthick = configactual.getfloat('Dthick')
+fromplane = configactual.getboolean('fromplane')
 
 if ifnuloss:
     import neu
@@ -1241,11 +1242,20 @@ def alltire():
             os.makedirs(outdir)
 
         ################## setting geometry: ########################
-        sthd=1./sqrt(1.+(dr_e/r_e)**2) # initial sin(theta)
+        # initial sin(theta)
+        if fromplane:
+            sthd = 1.-1./double(nx)
+        else:
+            sthd=1./sqrt(1.+(dr_e/r_e)**2) 
+            
+        # print("sthd = ", sthd)
+        # ii = input("sth")
         rmax=r_e*sthd # slightly less then r_e
-        r=((2.*(rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
+        r=(((2.*rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.)
+        # r=(rmax-rstar)*(arange(nx0)/double(nx0-1))+rstar # very fine radial mesh
         g = geometry_initialize(r, r_e, dr_e, afac=afac) # radial-equidistant mesh
-        #     print(str(r.min()) + " = " + str(rstar)+"?")
+        print("sin(theta) = "+str(g.sth.min())+".."+str(g.sth.max()))
+        ii = input("theta")
         if (rbasefactor is None):
             rbase = r.min()
         else:
@@ -1304,7 +1314,8 @@ def alltire():
         print("   xi_s = "+str(xs))
         print("   beta_s = "+str(BSbeta))
         cthfun = interp1d(g.r/r[0], g.cth) # we need a function allowing to calculate cos\theta (x)
-
+        print("cth = ", g.cth)
+        ii = input("cth")
         print(" magnetosphere size ", r[-1]/r[0], " * ", rstar)
         print(" t_s = "+str(tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, min(xs, r[-1]/rstar), cthfun)))
         # ii = input("ts")
