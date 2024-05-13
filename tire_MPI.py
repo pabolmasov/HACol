@@ -43,7 +43,7 @@ ifhdf = config[conf].getboolean('ifhdf')
 verbose = config[conf].getboolean('verbose')
 if crank != 0:
     verbose = False
-autostart = config[conf].getboolean('autostart')
+    
 # initializing variables:
 if conf is None:
     configactual = config['DEFAULT']
@@ -69,8 +69,8 @@ CMloss = configactual.getfloat('CMloss') # numerical coeff. for mass-loss scalin
 timeskip = configactual.getint('timeskip') # >1 if we want to update the time step every "timeskip" steps; not recommended
 ufloor = configactual.getfloat('ufloor') # minimal possible energy density
 rhofloor = configactual.getfloat('rhofloor') # minimal possible mass density
-cslimit = configactual.getboolean('cslimit') # if we are going to set a lower limit for temperature (thermal bath)
-csqmin = configactual.getfloat('csqmin') # minimal possible speed-of-sound-squared (only if cslimit is on)
+# cslimit = configactual.getboolean('cslimit') # if we are going to set a lower limit for temperature (thermal bath)
+# csqmin = configactual.getfloat('csqmin') # minimal possible speed-of-sound-squared (only if cslimit is on)
 potfrac = configactual.getfloat('potfrac') # how do we include potential energy: 0 if all the work is treated as an energy source; 1 if the potential is included in the expression for conserved enegry
 szero = configactual.getboolean('szero') # if we set velocity to zero in the 0th cell (not recommended, as )
 ttest = configactual.getboolean('ttest') # topology test output
@@ -79,15 +79,12 @@ ttest = configactual.getboolean('ttest') # topology test output
 mu30 = configactual.getfloat('mu30') # magnetic moment, 10^{30} Gs cm^3 units 
 m1 = configactual.getfloat('m1') # NS mass (solar units)
 mdot = configactual.getfloat('mdot') * 4. * pi # internal units, GM/varkappa c
-mdotsink = configactual.getfloat('mdotsink') * 4. *pi # internal units
 rstar = configactual.getfloat('rstar') # GM/c^2 units
 b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
 mow = configactual.getfloat('mow') # mean molecular weight
 betacoeff = configactual.getfloat('betacoeff') * (m1)**(-0.25)/mow 
 
 # BC modes:
-BSmode = configactual.getboolean('BSmode')
-coolNS = configactual.getboolean('coolNS')
 ufixed = configactual.getboolean('ufixed')
 squeezemode = configactual.getboolean('squeezemode')
 venttest = configactual.getboolean('venttest') # turns off mass loss above the surface (only SECOND cell is allowed)
@@ -109,13 +106,13 @@ afac = configactual.getfloat('afac')
 nubulk = configactual.getfloat('nubulk')
 weinberg = configactual.getboolean('weinberg')
 eta = configactual.getfloat('eta')
-heatingeff = configactual.getfloat('heatingeff')
 ifnuloss = configactual.getboolean('ifnuloss')
 
 # starting with a disc interior rather than fixing mdot
 ifdisc = configactual.getboolean('ifdisc')
 Dalpha = configactual.getfloat('Dalpha')
 Dthick = configactual.getfloat('Dthick')
+fromplane = configactual.getboolean('fromplane')
 
 if ifnuloss:
     import neu
@@ -1245,11 +1242,20 @@ def alltire():
             os.makedirs(outdir)
 
         ################## setting geometry: ########################
-        sthd=1./sqrt(1.+(dr_e/r_e)**2) # initial sin(theta)
+        # initial sin(theta)
+        if fromplane:
+            sthd = 1.-1./double(nx)
+        else:
+            sthd=1./sqrt(1.+(dr_e/r_e)**2) 
+            
+        # print("sthd = ", sthd)
+        # ii = input("sth")
         rmax=r_e*sthd # slightly less then r_e
-        r=((2.*(rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.) # very fine radial mesh
+        r=(((2.*rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.)
+        # r=(rmax-rstar)*(arange(nx0)/double(nx0-1))+rstar # very fine radial mesh
         g = geometry_initialize(r, r_e, dr_e, afac=afac) # radial-equidistant mesh
-        #     print(str(r.min()) + " = " + str(rstar)+"?")
+        print("sin(theta) = "+str(g.sth.min())+".."+str(g.sth.max()))
+        ii = input("theta")
         if (rbasefactor is None):
             rbase = r.min()
         else:
@@ -1315,7 +1321,8 @@ def alltire():
         print("   xi_s = "+str(xs))
         print("   beta_s = "+str(BSbeta))
         cthfun = interp1d(g.r/r[0], g.cth) # we need a function allowing to calculate cos\theta (x)
-
+        print("cth = ", g.cth)
+        ii = input("cth")
         print(" magnetosphere size ", r[-1]/r[0], " * ", rstar)
         print(" t_s = "+str(tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, min(xs, r[-1]/rstar), cthfun)))
         # ii = input("ts")

@@ -238,7 +238,7 @@ def plot_somemap(fname, ncol = -1, xlog = True):
     levs = (lev2-lev1) * arange(nl)/double(nl-1)+lev1
     somemap(x, y, q, name=fname, xlog=xlog, xtitle=r'$r/R_*$', ytitle = r'$t$, s', transpose=True, levels = levs, inchsize = [3,10])
     
-def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None, xrange = None, inchsize = None, dys = None, linewidthsequence = None, secaxfunpair = None):
+def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', ytitle='', formatsequence = None, legendsequence = None, vertical = None, verticalformatsequence = None, multix = False, yrange = None, xrange = None, inchsize = None, dys = None, linewidthsequence = None, secaxfunpair = None):
     '''
     plots a series of curves  
     if multix is off, we assume that the independent variable is the same for all the data 
