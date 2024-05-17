@@ -36,6 +36,10 @@ def Fbeta_press(rho, press, betacoeff):
     beta = pg/p from rho and pressure (dimensionless units)
     F(beta) itself is F = beta / (1-beta)**0.25
     '''
+    s = size(rho)
+    if s<=1:
+        return betacoeff * rho / (press*3.)**0.75 
+    
     beta = rho*0.+1.
     wpos=where(press>ufloor)
     if(size(wpos)>0):
