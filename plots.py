@@ -18,7 +18,7 @@ rc('mathtext',fontset='cm')
 rc('mathtext',rm='stix')
 rc('text', usetex=True)
 # #add amsmath to the preamble
-matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
+# matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
 from hdfoutput import read, entryname
 import geometry as geo
@@ -243,10 +243,21 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
     plots a series of curves  
     if multix is off, we assume that the independent variable is the same for all the data 
     '''
-    ny=shape(ys)[0]
+    if isinstance(ys, list):
+        ny = len(ys)
+    elif isinstance(ys, ndarray):
+        ny=shape(ys)[0]
+    else:
+        ny = 1 # presumably, scalar
 
     if multix:
-        nx = shape(x)[0]
+        # nx = shape(x)[0]
+        if isinstance(x, list):
+            nx = len(x)
+        elif isinstance(x, ndarray):
+            nx=shape(x)[0]
+        else:
+            nx = 1 # presumably, scalar
         if nx != ny:
             print("X and Y arrays do not match")
             return 0

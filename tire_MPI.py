@@ -652,19 +652,24 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         beta = concatenate([beta, [betaright]])
     else:
         # outer BC:
+        # TODO: this is not a real BC, the real one is reproducing IC!!!
         if ifdisc:
             rhout = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
             vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
-            pressout = minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*vout**2 * rho0) * 0.25)
+            pressout = umagout / (4. * Dalpha * Dthick * m1) 
+            # minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*vout**2 * rho0) * 1.0)
             betaout = betafun_p(Fbeta_press(rhout, pressout, betacoeff))
+            uradout = 3.*pressout * (1.-betaout)
+            uout = 3.*pressout * (1.-betaout/2.)
         else:
             rhout = -mdot / vout / g.across[-1]
             betaout = betafun(Fbeta(rhout, umagout, betacoeff))
             pressout = umagout/3./(1.-betaout/2.)
-        uradout = umagout * (1.-betaout) / (1.-betaout/2.)
+            uradout = umagout * (1.-betaout) / (1.-betaout/2.)
+            uout = umagout
         rho = concatenate([rho, [rhout]]) #ahalf[-1]]])   #
         v = concatenate([v, [vout]]) # [minimum(v[-1], 0.)]])
-        u = concatenate([u, [umagout]])    #  [u[-1]]])
+        u = concatenate([u, [uout]])    #  [u[-1]]])
         urad = concatenate([urad, [uradout]])
         press = concatenate([press, [pressout]])
         beta = concatenate([beta, [betaout]])
@@ -852,16 +857,23 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
         # prim['v'][-1] = vout
         # prim['rho'][-1] = -mdot  / (prim['v'] * g.across)[-1]
         if ifdisc:
-            rho0 = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
-            vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
-            p0 = minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*vout**2 * rho0) * 0.25)
+            rhout = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
+            # vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
+            pressout = umagout / (4. * sqrt(2.) * m1 * Dalpha * Dthick) * xifac**3.5
+            if verbose:
+                print("pressout = ", pressout/umagout)
+            # ii = input("P")
+            # minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*vout**2 * rho0) * 0.25)
         else:
-            rho0 = -mdot  / vout / g.across[-1]
-            p0 = (umagout-0.5*mdot * vout / g.across[-1]) * 0.25
+            rhout = -mdot  / vout / g.across[-1]
+            pressout = (umagout-0.5*mdot * vout / g.across[-1]) * 0.25
+        betaout = betafun_p(Fbeta_press(rhout, pressout, betacoeff))
+        uradout = 3.*pressout * (1.-betaout)
+        uout = 3.*pressout * (1.-betaout/2.)
         v0 = vout
         if ifturnoff:
             prim['rho'][-1] *= turnofffactor # reducing the mass flow at the outer limit
-        rightpack_save = {'rho': rho0, 'v': v0, 'u': p0*3.} # why x3? is it radiation dominated?
+        rightpack_save = {'rho': rhout, 'v': v0, 'u': uout} # why x3? is it radiation dominated?
         if verbose:
             print('setting outer BC\n')
             ## ii = input('OBC')
@@ -1254,8 +1266,9 @@ def alltire():
         r=(((2.*rmax-rstar)/rstar)**(arange(nx0)/double(nx0-1))+1.)*(rstar/2.)
         # r=(rmax-rstar)*(arange(nx0)/double(nx0-1))+rstar # very fine radial mesh
         g = geometry_initialize(r, r_e, dr_e, afac=afac) # radial-equidistant mesh
-        print("sin(theta) = "+str(g.sth.min())+".."+str(g.sth.max()))
-        ii = input("theta")
+        if verbose:
+            print("sin(theta) = "+str(g.sth.min())+".."+str(g.sth.max()))
+        # ii = input("theta")
         if (rbasefactor is None):
             rbase = r.min()
         else:
@@ -1321,8 +1334,8 @@ def alltire():
         print("   xi_s = "+str(xs))
         print("   beta_s = "+str(BSbeta))
         cthfun = interp1d(g.r/r[0], g.cth) # we need a function allowing to calculate cos\theta (x)
-        print("cth = ", g.cth)
-        ii = input("cth")
+        # print("cth = ", g.cth)
+        # ii = input("cth")
         print(" magnetosphere size ", r[-1]/r[0], " * ", rstar)
         print(" t_s = "+str(tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, min(xs, r[-1]/rstar), cthfun)))
         # ii = input("ts")
