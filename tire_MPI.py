@@ -93,6 +93,8 @@ zeroeloss = configactual.getboolean('zeroeloss') # mass is lost without thermal 
 squeezeothersides = configactual.getboolean('squeezeothersides')
 cooltwosides = configactual.getboolean('cooltwosides')
 
+bottomcool = configactual.getboolean('bottomcool')
+
 # radiation transfer:
 ifthin = configactual.getboolean('ifthin')
 raddiff = configactual.getboolean('raddiff')
@@ -628,7 +630,13 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         # urad1 = u1*(1.-beta1)/(1.-beta1/2.)
         #   betafun_p(Fbeta(rho0, press0, betacoeff))
         # rho1 = rho[1] ; u1 = u[1] ; press1 = press[1] ; urad1 = urad[1] ; beta1 = beta[1]
-        rho1 = rho[0] ; u1 = u[0] ; press1 = press[0] ; urad1 = urad[0] ; beta1 = beta[0]     ;   v1 =  -minimum(v[0], 0.)
+        rho1 = rho[0]
+
+        if bottomcool:
+            u1 = 0.
+        else:
+            u1 = u[0]
+        press1 = press[0] ; urad1 = urad[0] ; beta1 = beta[0]     ;   v1 =  -minimum(v[0], 0.)
         rho = concatenate([[rho1], rho])
         v = concatenate([[v1], v]) # inner BC for v
         u = concatenate([[u1], u]) 
@@ -727,7 +735,7 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
     else:
         if 'HLLC' in rsolver:
             # print('HLLC')
-            fm_half, fs_half, fe_half =solv.HLLC([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, phi = philm)
+            fm_half, fs_half, fe_half =solv.HLLC1([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, v, phi = philm)
             # solv.HLLC1([fm, fs, fe], [m, s, e], vl, vr, vm, rho, press, v, phi = philm)
         else:
             # print('size ahalf = '+str(size(ahalf)))
@@ -752,7 +760,8 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         # duls_half *= taufun(taueff, taumin, taumax)
         # dule_half *= taufun(taueff, taumin, taumax)
         if leftpack is None:
-            dule_half[0] = 0.
+            if not(bottomcool):
+                dule_half[0] = 0.
         # duls_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         #  dule_half *= 1.-exp(-delta * (rho[1:]+rho[:-1])/2.)
         fs_half += duls_half ; fe_half += dule_half         

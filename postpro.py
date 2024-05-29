@@ -311,7 +311,7 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
             print(str(sintry)+' = sintry')
             # print(du.max())
             # plots pressure:
-            plots.someplots([BSr, r/rstar, r/rstar, r/rstar, r/rstar], [BSu/3., press, up*0.+1., press+du/up*press, press-du/up*press], name=dirname+'/acompare_u', ylog=False, formatsequence=['k-', 'r--', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$p/p_{\rm mag}$', multix = True, inchsize=[5,3])
+            plots.someplots([BSr, r/rstar, r/rstar, r/rstar, r/rstar], [BSu/3., press, up*0.+1., press+du/up*press, press-du/up*press], name=dirname+'/acompare_u', ylog=False, formatsequence=['k-', 'r--', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$p/p_{\rm mag}$', multix = True, inchsize=[5,3], yrange = [BSu.min()/10., maximum(press.max()*2.,5.)])
             # yrange = [BSu.min()/10., maximum(BSu.max()*2.,5.)], inchsize=[5,3])
             plots.someplots([BSr, r/rstar, r/rstar, r/rstar], [betag, betap, betap+dbeta, betap-dbeta], name=dirname+'/acompare_p', ylog=False, formatsequence=['k-', 'r--', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\beta$', multix = True, inchsize=[5,3])
             #     plots.someplots([BSr, r/rstar, r/rstar, r/rstar], [BSrho, rhop, rhop+drho, rhop-drho], name=dirname+'/acompare_rho', ylog=True, formatsequence=['k-', 'r--', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True)
@@ -319,7 +319,7 @@ def acomparer(infile, nentry =1000, ifhdf = True, conf = 'DEFAULT', nocalc = Fal
             plots.someplots([r/rstar, BSr, r/rstar, r/rstar], [-vp, -BSv, 1./sqrt(r), 1./sqrt(r)/7.], name=dirname+'/acompare_v', ylog=True, formatsequence=['r--', 'k-', 'b:', 'b:', 'r:', 'r:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$-v/c$', multix = True, yrange= [-BSv.max()/2., -BSv.min()*7.*2.], inchsize=[5,3])
             press = up / 3. / (1.-betap/2.)
             # plots pressure:
-            plots.someplots([BSr, r/rstar, r/rstar], [BSu/3., press, up*0.+1.], name=dirname+'/acompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$p/p_{\rm mag}$', multix = True, yrange = [BSu.min()/10., maximum(BSu.max()*2.,5.)], inchsize=[5,3])
+            plots.someplots([BSr, r/rstar, r/rstar], [BSu/3., press, up*0.+1.], name=dirname+'/acompare_u', ylog=True, formatsequence=['k-', 'r--', 'b:'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$p/p_{\rm mag}$', multix = True, yrange = [BSu.min()/10., maximum(up.max()*2.,5.)], inchsize=[5,3])
             plots.someplots([BSr, r/rstar], [BSrho, rhop], name=dirname+'/acompare_rho', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$\rho/\rho^*$', multix = True, inchsize=[5,3])
         plots.someplots([BSr, r/rstar], [tempg, tempp], name=dirname+'/acompare_T', ylog=True, formatsequence=['k-', 'r--'], xtitle = r'$R/R_{\rm NS}$', ytitle =  r'$T$, keV', multix = True, inchsize=[5,3])
         teff = 4.75 * mass1**(-0.25) * qloss**0.25 # keV
