@@ -112,7 +112,7 @@ def HLLC(fs, qs, sl, sr, sm, rho, press, phi = None):
 def HLLC1(fs, qs, sl, sr, sm, rho, press, v, phi = None):
     '''
     second version of HLLC, according to Fleischmann et al.(2020)
-    does not work now
+    apparently, works
     phi is low-Mach correction
     '''
     f1, f2, f3 = fs  ;  q1, q2, q3 = qs
