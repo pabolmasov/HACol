@@ -68,4 +68,3 @@ def BSsolution(gamma, eta):
 
     return x, v, u
     
-

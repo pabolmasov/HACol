@@ -6,7 +6,7 @@ from matplotlib import ticker
 from numpy import *
 import numpy.ma as ma
 from pylab import *
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid
 from scipy.interpolate import interp1d
 import glob
 import re
@@ -18,7 +18,7 @@ rc('mathtext',fontset='cm')
 rc('mathtext',rm='stix')
 rc('text', usetex=True)
 # #add amsmath to the preamble
-matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
+# matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
 from hdfoutput import read, entryname
 import geometry as geo
@@ -535,7 +535,7 @@ def rhocurvestack(n1, n2, step, prefix = "out/tireout", postfix = ".dat", conf =
     t = fluxlines[:,0] ; f = fluxlines[:,1]
     t =t[arange(0,n2-n1,step)]
 
-    rho_acc = cumtrapz((v1*rho1+v0*rho0)/2., x=t/tscale, initial = rho0[0])
+    rho_acc = cumulative_trapezoid((v1*rho1+v0*rho0)/2., x=t/tscale, initial = rho0[0])
     
     someplots(t, [rho0, rho1, rho_acc], name = "rho0", xtitle=r'$t$, s', ytitle=r'$\rho_0$', xlog=False, ylog=True, formatsequence = ['k-', 'r:', 'b--'])
 

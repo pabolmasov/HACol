@@ -1,4 +1,4 @@
-import postpro
+# import postpro
 import plots
 import os
 from numpy import *
@@ -298,4 +298,4 @@ def transplot():
     print("gammafac = ", gammafac)
     
     plots.someplots([hs, htmp], [mdots/mdot, gammafac * a * drrat / alpha / htmp**2], name='forpaper/transplot', formatsequence=['k.', 'r:'], xtitle=r'$H/R$', ytitle=r'$\dot{M}/\dot{M}_{\rm d}$', multix=True, ylog=True)
-    
+ 

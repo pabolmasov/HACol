@@ -374,7 +374,7 @@ def diffuse(rho, urad, v, dl, across, taueff):
     edepth = 0.5
     ddepth = 10
     if edepth > 0.:
-        # taul = cumtrapz((rho[1:]+rho[:-1])/2., x=dl, initial = 0.)
+        # taul = cumulative_trapezoid((rho[1:]+rho[:-1])/2., x=dl, initial = 0.)
         
         for k in arange(ddepth):
             dule_half[1:-1] += edepth * ((dule_half[2:]-dule_half[1:-1]) * exp(-rho[2:-1]/2. * dl[1:-1])+ (dule_half[:-2]-dule_half[1:-1])*exp(-rho[1:-2]/2. * dl[:-2])) * exp(-ttau[1:-1])
@@ -1304,10 +1304,11 @@ def alltire():
             print(conf+"   eta = "+str(BSeta))
             if ifdisc:
                 print(conf+" for subsonic solution: ")
-                print(conf+": theta0 = ", arcsin(rstar/r_e))
+                print(conf+": theta0 = ", arcsin(sqrt(rstar/r_e)))
                 print(conf+": k = ", afac * (r_e / dr_e) * r_e / (mdot/4./pi), " = ", BSgamma * 0.5 * r_e / rstar, " (the second estimate uses BSgamma and is more reliable)")
                 print(conf+": f0 = ", Dthick**2*0.75)
-                # ii = input("^^^^^^^^^^^")
+                print("required alpha = ", 0.92/Dthick**2 * (afac/2.) * dr_e/r_e) # 0.75*mdot*r_e**3.5/Dthick / mu30**2*1.37e-12)
+                ii = input("^^^^^^^^^^^")
             
         x1 = 1. ; x2 = 1000. ; nxx=1000
         xtmp=(x2/x1)**(arange(nxx)/double(nxx))*x1

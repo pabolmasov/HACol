@@ -347,7 +347,7 @@ def avcompare_list(dirlist, rrange = None, conf = 'DEFAULT', tauscale = None):
             geofile = dirlist[k]+'/geo.dat'
             r, theta, alpha, across, l, delta = geo.gread(geofile)
             # r/r[0] shd coincide with xp
-            tau = cumtrapz(rhop, x=r)
+            tau = cumulative_trapezoid(rhop, x=r)
             # position of the shock front:
             dvdl = abs((vp[1:]-vp[:-1])/(l[1:]-l[:-1]))
             wfront = dvdl.argmax()
@@ -1134,7 +1134,7 @@ def energytest(infile, n1, n2, dn, conf = 'DEFAULT'):
         ltot[k] = trapz(qloss, x=l)
         mass[k] = trapz(rho * across, x = l)
 
-    llost = cumtrapz(ltot, x=tar, initial = 0.)
+    llost = cumulative_trapezoid(ltot, x=tar, initial = 0.)
         
     m1 = config[conf].getfloat('m1')
     tscale = config[conf].getfloat('tscale') * m1

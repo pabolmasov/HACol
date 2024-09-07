@@ -1,5 +1,5 @@
 from numpy import *
-from scipy.integrate import cumtrapz
+from scipy.integrate import cumulative_trapezoid
 
 class geometry:
     r = None # radial (spherical) coordinate
@@ -23,7 +23,7 @@ def geometry_initialize(r, r_e, dr_e, writeout=None, afac = 1.):
     # across=4.*pi*afac*dr_e*r_e*(r/r_e)**3/sqrt(1.+3.*cth**2) # follows from Galja's formula (17)
     alpha=arctan((cth**2-1./3.)/sth/cth) # Galja's formula (3)
     sina=sin(alpha) ; cosa=cos(alpha)
-    l=cumtrapz(sqrt(1.+3.*cth**2)/2./cth, x=r, initial=0.) # coordinate along the field line
+    l=cumulative_trapezoid(sqrt(1.+3.*cth**2)/2./cth, x=r, initial=0.) # coordinate along the field line
     delta = r * sth/sqrt(1.+3.*cth**2) * dr_e/r_e
     # transverse thickness of the flow 
     across = 2. * delta * 2. * pi * afac * r * sth # cross-section: first 2 from 2 poles of the NS, 2*pi*afac * r * sth is the latitudinal extension of the column
