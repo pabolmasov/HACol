@@ -316,8 +316,7 @@ def someplots(x, ys, name='outplot', ylog = False, xlog = True, xtitle=r'$r$', y
         fig.legend(loc='lower right', borderaxespad=0.,)    
         #loc='upper center',ncol=4,
                #fancybox=True,   bbox_to_anchor=(0.9, 0.5),
-    
-            
+                
     fig.tight_layout()
     savefig(name+'.png')
     savefig(name+'.pdf')

@@ -41,6 +41,7 @@ config.read(conffile)
 ifplot = config[conf].getboolean('ifplot')
 ifhdf = config[conf].getboolean('ifhdf')
 verbose = config[conf].getboolean('verbose')
+
 if crank != 0:
     verbose = False
     
@@ -1307,9 +1308,10 @@ def alltire():
         g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
         tr = g.across[0] * umag * rstar**2 / mdot # replenishment time
         # scaling the calculation times with tr:
-        tmax = tr * configactual.getfloat('tmax')
         # scaling output frequency with tr:
         dtout = tr * configactual.getfloat('dtout')    # tr * configactual.getfloat('dtout')
+        tmax = tr * configactual.getfloat('tmax')
+
         # if we are planning to do png outputs during the calculation:
         if verbose:
             print(conf+": Across(0) = "+str(g.across[0]))
@@ -1551,11 +1553,11 @@ def alltire():
     else:
         # exchange nout and t
         if crank ==0:
-            tpack = {"t": t, "nout": nout}
+            tpack = {"t": t, "nout": nout, "tmax": tmax}
         else:
             tpack = None
         tpack = comm.bcast(tpack, root = 0)
-        t = tpack["t"] ; nout = tpack["nout"]
+        t = tpack["t"] ; nout = tpack["nout"] ;  tmax = tpack["tmax"]
         tmax += t
 
     if crank == 0:
