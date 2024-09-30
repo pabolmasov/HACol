@@ -299,3 +299,15 @@ def transplot():
     
     plots.someplots([hs, htmp], [mdots/mdot, gammafac * a * drrat / alpha / htmp**2], name='forpaper/transplot', formatsequence=['k.', 'r:'], xtitle=r'$H/R$', ytitle=r'$\dot{M}/\dot{M}_{\rm d}$', multix=True, ylog=True)
     
+def voutshow():
+
+
+    linesT = loadtxt('vcomp/tireoutT.dat')
+    rT = linesT[:,0]
+    vT = linesT[:,2]
+
+    linesDT = loadtxt('vcomp/tireoutDT.dat')
+    rDT = linesDT[:,0]
+    vDT = linesDT[:,2]
+
+    plots.someplots([rT, rDT], [vT, vDT], name = 'vcomp/vcomp', formatsequence = ['k-', 'r:'], xtitle=r'$R/R_*$', ytitle=r'$v/c$', multix = True, xlog = True, legendsequence = ['T4', 'DT4'])

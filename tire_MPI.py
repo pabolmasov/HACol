@@ -41,6 +41,7 @@ config.read(conffile)
 ifplot = config[conf].getboolean('ifplot')
 ifhdf = config[conf].getboolean('ifhdf')
 verbose = config[conf].getboolean('verbose')
+
 if crank != 0:
     verbose = False
     
@@ -490,30 +491,13 @@ def sources(m, g, rho, v, u, urad, ltot = 0., forcecheck = False, dmsqueeze = 0.
         delta = g.delta ;  across = g.across ; r = g.r ; cth = g.cth ; sth = g.sth ; cosa = g.cosa ; sina = g.sina
         dr = copy(r)
         dr[:-1] = r[1:]-r[:-1] ; dr[-1] = dr[-2]
-    # taueff = copy(rho)*0.
-    # if cooltwosides:
-    #     taueff[:] = rho *delta 
-    # else:
-    #     taueff[:] = rho / (1./delta + 2. * delta /  across) 
+
     sinsum = 2.*cth / sqrt(3.*cth**2+1.)  # = sina*cth+cosa*sth = sin(theta+alpha)
-    # barycentering (does not work out)
-    #rc = copy(r)
-    #rc[1:-1] = ((m*r)[2:] + 2. * (m*r)[1:-1] + (m*r)[:-2])/m[1:-1]/4.
-    #rc[0] = (3. * (m*r)[0] + (m*r)[1])/m[0]/4.
-    #rc[-1] = ((m*r)[-2] + 3. * (m*r)[-1])/m[-1]/4.
-    
-    # force = -sinsum * rho * across / r**2
-    # if crank == first:
-    #    force[0] = 0.
+
     force = copy(gforce(sinsum, g, dr)*across*rho) # without irradiation
-    # *(1.-eta * ltot * tratfac(rho*delta, taumin, taumax))
-                  # +omega**2*r*sth*cosa)*rho*across) # *taufac
-    # for k in arange(size(force)):
-    #    print(str(force[k])+" = "+str(((-sinsum/r**2*across)*rho)[k]))
-    # ii = input("F")
+
     if eta>0.:
         gammaforce = -copy(force) * eta * ltot * tratfac(rho*delta, taumin, taumax)
-        # -copy(gforce(sinsum, g, dr)) * eta * ltot * tratfac(rho*delta, taumin, taumax)
     else:
         gammaforce = 0.
     if(forcecheck):
@@ -597,13 +581,11 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         dmsqueeze = 0.
         desqueeze = 0.
         dmloss = 0.
-    #if (dmsqueeze >0.).sum() > 5:        
-    #    print("P>Umag in "+str((dmsqueeze >0.).sum())+" points")
-    #    ii =input('dm')
+
     dm, ds, de = sources(m, gnd, rho, v, u, urad, ltot=ltot, dmsqueeze = dmsqueeze, desqueeze = desqueeze, dt = dtq) 
 
     # adding ghost zones:
-    if leftpack is not None:
+    if leftpack is not None: # data from the previous block
         #    rholeft, vleft, uleft = leftpack
         rholeft = leftpack['rho'] ; vleft = leftpack['v'] ; uleft = leftpack['u']
         betaleft = betafun(Fbeta(rholeft, uleft, betacoeff))
@@ -630,12 +612,13 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         # urad1 = u1*(1.-beta1)/(1.-beta1/2.)
         #   betafun_p(Fbeta(rho0, press0, betacoeff))
         # rho1 = rho[1] ; u1 = u[1] ; press1 = press[1] ; urad1 = urad[1] ; beta1 = beta[1]
-        rho1 = rho[0]
+        rho1 = rho[0] # density @ the bottom (reflective BCs)
 
         if bottomcool:
             u1 = 0.
         else:
             u1 = u[0]
+            
         press1 = press[0] ; urad1 = urad[0] ; beta1 = beta[0]     ;   v1 =  -minimum(v[0], 0.)
         rho = concatenate([[rho1], rho])
         v = concatenate([[v1], v]) # inner BC for v
@@ -645,7 +628,7 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         press = concatenate([[press1], press])
             #[bernoulli/(4.-3./2.*beta0)], press])
         beta = concatenate([[beta1], beta])        
-    if rightpack is not None:
+    if rightpack is not None: # data from the next block
         rhoright = rightpack['rho'] ; vright = rightpack['v'] ; uright = rightpack['u']
         # rhoright, vright, uright = rightpack
         betaright = betafun(Fbeta(rhoright, uright, betacoeff))
@@ -663,7 +646,7 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         # TODO: this is not a real BC, the real one is reproducing IC!!!
         if ifdisc:
             rhout = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
-            vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
+            # vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
             pressout = umagout / (4. * Dalpha * Dthick * m1) 
             # minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*vout**2 * rho0) * 1.0)
             betaout = betafun_p(Fbeta_press(rhout, pressout, betacoeff))
@@ -863,12 +846,13 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
 
     # outer BC:
     if (crank == last) & (rightpack_save is None):
-        # prim['v'][-1] = vout
+        prim['v'][-1] = vout
         # prim['rho'][-1] = -mdot  / (prim['v'] * g.across)[-1]
         if ifdisc:
             rhout = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
             # vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
-            pressout = umagout / (4. * sqrt(2.) * m1 * Dalpha * Dthick) * xifac**3.5
+            # suggesting internal energies are the same
+            pressout = umagout/3. # / (4. * sqrt(2.) * m1 * Dalpha * Dthick) * xifac**3.5
             if verbose:
                 print("pressout = ", pressout/umagout)
             # ii = input("P")
@@ -1307,9 +1291,10 @@ def alltire():
         g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
         tr = g.across[0] * umag * rstar**2 / mdot # replenishment time
         # scaling the calculation times with tr:
-        tmax = tr * configactual.getfloat('tmax')
         # scaling output frequency with tr:
         dtout = tr * configactual.getfloat('dtout')    # tr * configactual.getfloat('dtout')
+        tmax = tr * configactual.getfloat('tmax')
+
         # if we are planning to do png outputs during the calculation:
         if verbose:
             print(conf+": Across(0) = "+str(g.across[0]))
@@ -1558,11 +1543,11 @@ def alltire():
     else:
         # exchange nout and t
         if crank ==0:
-            tpack = {"t": t, "nout": nout}
+            tpack = {"t": t, "nout": nout, "tmax": tmax}
         else:
             tpack = None
         tpack = comm.bcast(tpack, root = 0)
-        t = tpack["t"] ; nout = tpack["nout"]
+        t = tpack["t"] ; nout = tpack["nout"] ;  tmax = tpack["tmax"]
         tmax += t
 
     if crank == 0:
