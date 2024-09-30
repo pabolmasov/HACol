@@ -60,18 +60,19 @@ def uint(theta0, f0, K, firstpoint=False):
 
     nth = 10000
     theta = (pi/2.-theta0) * arange(nth)/double(nth-1)+ theta0
+    x = cos(theta[::-1])
     # theta = theta[::-1]
 
-    fint = intfun(cos(theta[::-1]), f0, K)[::-1]
+    fint = intfun(x, f0, K)
 
-    luint = luintfun(fint,cos(theta)[::-1])[::-1]
+    luint = luintfun(fint,x)[::-1]
 
     luint = luint-luint[0]
     
     if firstpoint:
         return theta[0], fint[0], luint[-1]
     else:
-        return theta, fint, exp(luint)
+        return theta, fint[::-1], exp(luint)
     
 def fcritshow():
 
@@ -129,23 +130,37 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     r_e = config[conf].getfloat('r_e_coeff') * (mu30**2/mdot)**(2./7.)*m1**(-10./7.) * xifac # magnetosphere radius
     afac = config[conf].getfloat('afac')
     drrat = config[conf].getfloat('drrat')
+    Dthick = config[conf].getfloat('Dthick')
 
     theta0 = sqrt(rstar/r_e) # polar cap radius
     k = afac / drrat * r_e / m1 / mdot # k parameter
-
+    
     print("r_e = ", r_e, " = ", r_e/rstar, "R*")
     
     print("theta0 = ", theta0)
     print("k = ", k)
+    print("expected f0 = ", 0.75 * Dthick**2)
     
     if snapshot is not None:
         linesT = loadtxt(snapshot) # 'vcomp/tireoutT.dat'
         rT = linesT[:,0]  ;  uT = linesT[:,3]
         thetaT = arcsin(sqrt(rT*rstar/r_e))
+        vT = linesT[:,2] ; rhoT = linesT[:,1]
+        mdotT = -(vT * rhoT)[-1]*4.*pi*r_e**2*drrat # units?
+        print("measured mdot = ", mdotT/4./pi)
+        print("Re = ", rT[-1]*rstar)
+        #mdot = mdotT
+        #k = afac / drrat * r_e / m1 / mdot # k parameter
+        #print("internal k = ", k)
     
     # we want to find the f0 that produces f(theta0)=0
     # logarithmic bracketing
-    lf1 = -1.; lf2 = 3. ; tol = 1e-7
+    # minimal f0 should be 3/4 of the int, because we do not want f_surface to change sign
+    f0 = fcfun(cos(theta0), k)
+    print("f0min = ", f0)
+    # ii = input('f0')
+    
+    lf1 = log10(f0)+0.01 ; lf2 = lf1+2.0 ; tol = 1e-7
 
     theta, fint1, u1 = uint(theta0, 10.**lf1,k, firstpoint=True)
     theta, fint2, u2 = uint(theta0, 10.**lf2,k, firstpoint=True)
@@ -168,7 +183,7 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
         lf = (lf1+lf2)/2.
         theta, fint, u = uint(theta0, 10.**lf,k, firstpoint=True)
         u += umagrat 
-        print("f0 = ", 10.**lf, ": f(0) = ", fint)
+        # print("f0 = ", 10.**lf, ": f(0) = ", fint)
         if ((u*u1) >= 0.):
             lf1 = lf
         else:
@@ -178,10 +193,12 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
 
     print("beta = ", 0.75 * fint[0] * sin(theta0)**2)
     print("f0 = ", fint[-1])
-
+    
     umag = (1.+3.*cos(theta)**2)/(1.+3.*cos(theta0)**2)*(sin(theta0)/sin(theta))**12 / 3.
     if snapshot is not None:
         umagsnap = (1.+3.*cos(thetaT)**2)/(1.+3.*cos(theta0)**2)*(sin(theta0)/sin(thetaT))**12 / 3.
+
+    print("U/Umag_out = ",(u/umag))
 
     clf()
     subplot(211)
@@ -249,14 +266,6 @@ def uishow():
     yscale('log')
     savefig('uint.png')
 
+# usage:
+# fzero_solution(conf='ASOL_slowT4', snapshot='vcomp/tireoutT.dat')
 
-
-def fplot():
-    clf()
-    plot(theta, intfun(cos(theta)), 'k.')
-    plot(theta, exp(K * cos(theta) * (1.+cos(theta)**2))*f0, 'g:')
-    plot(theta, 1./sin(theta)**2, 'r-')
-    xlabel(r'$\theta$')
-    ylabel(r'$f(\theta)$')
-    yscale('log')
-    savefig('fint.png')
