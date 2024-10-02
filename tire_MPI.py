@@ -647,7 +647,8 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
         if ifdisc:
             rhout = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
             # vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
-            pressout = umagout / (4. * Dalpha * Dthick * m1) 
+            # pressout = umagout / (4. * Dalpha * Dthick * m1)
+            pressout = mdot / (4. * Dalpha * Dthick ) / g.r[-1]**2.5
             # minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*vout**2 * rho0) * 1.0)
             betaout = betafun_p(Fbeta_press(rhout, pressout, betacoeff))
             uradout = 3.*pressout * (1.-betaout)
@@ -852,7 +853,7 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
             rhout = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
             # vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
             # suggesting internal energies are the same
-            pressout = umagout/3. # / (4. * sqrt(2.) * m1 * Dalpha * Dthick) * xifac**3.5
+            pressout = umagout / (4. * sqrt(2.) * m1 * Dalpha * Dthick) * xifac**3.5
             if verbose:
                 print("pressout = ", pressout/umagout)
             # ii = input("P")
