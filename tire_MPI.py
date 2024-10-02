@@ -1300,7 +1300,7 @@ def alltire():
         if verbose:
             print(conf+": Across(0) = "+str(g.across[0]))
             # basic estimate for the replenishment time scale:
-            print(conf+": t_r = A_\perp u_mag / g / dot{M} = "+str(tr * tscale)+"s")
+            print(conf+": t_r = A_perp u_mag / g / dot(M) = "+str(tr * tscale)+"s")
             # ii =input("R")
         r=rnew # set a grid uniform in l=luni
         r_half=rfun(luni_half) # half-step radial coordinates
@@ -1316,6 +1316,13 @@ def alltire():
             print(conf+" BS parameters:")
             print(conf+"   gamma = "+str(BSgamma))
             print(conf+"   eta = "+str(BSeta))
+            if ifdisc:
+                print(conf+" for subsonic solution: ")
+                print(conf+": theta0 = ", arcsin(rstar/r_e))
+                print(conf+": k = ", afac * (r_e / dr_e) * r_e / (mdot/4./pi), " = ", BSgamma * 0.5 * r_e / rstar, " (the second estimate uses BSgamma and is more reliable)")
+                print(conf+": f0 = ", Dthick**2*0.75)
+                # ii = input("^^^^^^^^^^^")
+            
         x1 = 1. ; x2 = 1000. ; nxx=1000
         xtmp=(x2/x1)**(arange(nxx)/double(nxx))*x1
         xs, BSbeta = bs.xis(BSgamma, BSeta, ifbeta = True)
