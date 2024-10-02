@@ -56,10 +56,11 @@ def luintfun(f, x):
     # int I from 0 to x. lnu = I(x0) - I(x)
     return -3. * cumulative_trapezoid(x / f * (3.*omega**2*(1.-x**2)**2 - 2./(1.-x**2)**2), x=x, initial=0.)
 
-def uint(theta0, f0, K, firstpoint=False):
+def uint(theta0, f0, K, firstpoint=False, theta_out = pi/2.):
 
     nth = 10000
-    theta = (pi/2.-theta0) * arange(nth)/double(nth-1)+ theta0
+    
+    theta = (theta_out-theta0) * arange(nth)/double(nth-1)+ theta0
     x = cos(theta[::-1])
     # theta = theta[::-1]
 
@@ -133,6 +134,7 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     Dthick = config[conf].getfloat('Dthick')
 
     theta0 = sqrt(rstar/r_e) # polar cap radius
+    theta_out = arcsin(1./sqrt(1.+drrat**2))
     k = afac / drrat * r_e / m1 / mdot # k parameter
     
     print("r_e = ", r_e, " = ", r_e/rstar, "R*")
@@ -162,8 +164,8 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     
     lf1 = log10(f0)+0.01 ; lf2 = lf1+2.0 ; tol = 1e-7
 
-    theta, fint1, u1 = uint(theta0, 10.**lf1,k, firstpoint=True)
-    theta, fint2, u2 = uint(theta0, 10.**lf2,k, firstpoint=True)
+    theta, fint1, u1 = uint(theta0, 10.**lf1,k, firstpoint=True, theta_out = theta_out)
+    theta, fint2, u2 = uint(theta0, 10.**lf2,k, firstpoint=True, theta_out = theta_out)
 
     umagrat = -12. * log(sin(theta0)) + log(1.+3.*cos(theta0)**2) + log(3.)
     u1 += umagrat ; u2 += umagrat
@@ -181,7 +183,7 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
 
     while (abs(lf2-lf1) >  tol ):
         lf = (lf1+lf2)/2.
-        theta, fint, u = uint(theta0, 10.**lf,k, firstpoint=True)
+        theta, fint, u = uint(theta0, 10.**lf,k, firstpoint=True, theta_out = theta_out)
         u += umagrat 
         # print("f0 = ", 10.**lf, ": f(0) = ", fint)
         if ((u*u1) >= 0.):
@@ -189,7 +191,7 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
         else:
             lf2 = lf
 
-    theta, fint, u = uint(theta0, 10.**lf2,k)
+    theta, fint, u = uint(theta0, 10.**lf2,k, theta_out = theta_out)
 
     print("beta = ", 0.75 * fint[0] * sin(theta0)**2)
     print("f0 = ", fint[-1])
