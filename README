@@ -34,6 +34,10 @@ RESTART
 
 Currently, there is a support for restart with identical or different spatial resolution. If the size of the radial mesh (number of points) is identical, no interpolation is used. If the number of points is different, all the quantities will be remapped. If the outer radius of the simulation is larger than the outer radius of the restart file, the code will report an error. 
 
+Writing to and reading from an HDF5 file is possible, if the global variable locking flag is set to negative. In bash, it is enough to set:
+export HDF5_USE_FILE_LOCKING=FALSE
+
+
 POSSIBLE PROBLEMS
 
 The code is designed in a way to make the results accessable as soon as possible. All the ASCII files and all the HDF5 entries are flushed as soon as the snapshot is written. You do not need to wait until the simulation ends to read and reduce the output entries (though there could be issues with simultaneous access). If you need to kill the code during the simulation, all the results would be saved. There may be problems with reading the HDF5 simultaneously with writing to it. One possible solution is setting HDF5_USE_FILE_LOCKING=FALSE before running the code. 
