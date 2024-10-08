@@ -143,6 +143,7 @@ if verbose:
     print(conf+": "+str(omega))
 
 vout = configactual.getfloat('voutfactor')  /sqrt(r_e) # velocity at the outer boundary
+pressfactor = configactual.getfloat('pressfactor') # outer pressure compared to the local Umag (used as the BC)
 minitfactor = configactual.getfloat('minitfactor') # initial total mass in the units of equilibrium mass
 umag = b12**2*2.29e6*m1 # on the pole!
 umagout = 0.5**2*umag*(rstar/r_e)**6 # magnetic energy density at R_e (edge of the magnetosphere)
@@ -853,14 +854,15 @@ def onedomain(g, ghalf, icon, comm, hfile = None, fflux = None, ftot = None, t=0
             rhout = mdot / g.r[-1]**1.5 / Dalpha / Dthick**3 / m1
             # vout = -Dalpha * Dthick**2 / g.r[-1]**0.5
             # suggesting internal energies are the same
-            pressout = umagout / (4. * sqrt(2.) * m1 * Dalpha * Dthick) * xifac**3.5
+            # pressout = umagout / (4. * sqrt(2.) * m1 * Dalpha * Dthick) * xifac**3.5
             if verbose:
                 print("pressout = ", pressout/umagout)
             # ii = input("P")
             # minimum(mdot / g.r[-1]**2.5 / Dalpha / Dthick / m1 / 4., (umagout-0.5*vout**2 * rho0) * 0.25)
         else:
             rhout = -mdot  / vout / g.across[-1]
-            pressout = (umagout-0.5*mdot * vout / g.across[-1]) * 0.25
+            # pressout = (umagout-0.5*mdot * vout / g.across[-1]) * 0.25
+        pressout = umagout * pressfactor
         betaout = betafun_p(Fbeta_press(rhout, pressout, betacoeff))
         uradout = 3.*pressout * (1.-betaout)
         uout = 3.*pressout * (1.-betaout/2.)

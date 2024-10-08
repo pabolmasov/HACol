@@ -43,14 +43,19 @@ omega = 0.0
 
 # f0 = 10.0
 
+def lowk(theta, theta0, rrat, beta, umag):
+    ufac = 1.+(1./tan(theta0)**2-1./tan(theta)**2)*rrat/beta
+    ufac = minimum((ufac[-1]/ufac)**(4.) *umag[-1]/umag, 3.) 
+    return ufac
+
 def fcfun(x0, K):
     nx = 1e6
     x = x0 * arange(nx)/double(nx)
-    return 0.75 * simpson(exp(-K * x * (1.+x**2)) * x / (1.-x**2)**2,x=x) #, initial = 0)
+    return 1.5 * simpson(exp(-K * x * (1.+x**2)) * x / (1.-x**2)**2,x=x) #, initial = 0)
 
 def intfun(x, f0, K):
     # formal solution for f = normalized (u/rho). f0 is the value at x = cos(theta) = 0
-    return exp(K * x * (1.+x**2)) * (f0 - 0.75 * cumulative_trapezoid(exp(-K * x * (1.+x**2)) * x / (1.-x**2)**2,x=x, initial = 0))
+    return exp(K * x * (1.+x**2)) * (f0 - 1.5 * cumulative_trapezoid(exp(-K * x * (1.+x**2)) * x / (1.-x**2)**2,x=x, initial = 0))
 
 def luintfun(f, x):
     # int I from 0 to x. lnu = I(x0) - I(x)
@@ -65,6 +70,7 @@ def uint(theta0, f0, K, firstpoint=False, theta_out = pi/2.):
     # theta = theta[::-1]
 
     fint = intfun(x, f0, K)
+    fint = maximum(fint, 0.)
 
     luint = luintfun(fint,x)[::-1]
 
@@ -162,7 +168,7 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     print("f0min = ", f0)
     # ii = input('f0')
     
-    lf1 = log10(f0)+0.01 ; lf2 = lf1+2.0 ; tol = 1e-7
+    lf1 = log10(f0)-1.0 ; lf2 = lf1+2.0 ; tol = 1e-7
 
     theta, fint1, u1 = uint(theta0, 10.**lf1,k, firstpoint=True, theta_out = theta_out)
     theta, fint2, u2 = uint(theta0, 10.**lf2,k, firstpoint=True, theta_out = theta_out)
@@ -206,6 +212,7 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     subplot(211)
     plot(theta, fint, 'k-')
     plot(theta, fint[-1]*exp(k*cos(theta)*(1.+cos(theta)**2)), 'r:')
+    plot(theta, fint[-1] - 0.75/tan(theta)**2, 'g-.')
     xlabel(r'$\theta$')
     ylabel(r'$f(\theta)$')
     # yscale('log')
@@ -214,8 +221,14 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     plot(theta, u*0.+3., 'r:')
     plot(theta, u*0.+1., 'r:')
     plot(thetaT, uT, 'b--')
+    plot(theta, lowk(theta, theta0, rstar/r_e, 0.1, umag), 'g-.')
+    plot(theta, lowk(theta, theta0, rstar/r_e, 0.5, umag), 'g-.')
+    plot(theta, lowk(theta, theta0, rstar/r_e, 1.0, umag), 'g-.')
+    #    plot(theta, 3. * (1. + beta* (rstar/r_e) * ( 1./tan(theta0)**2-1./tan(theta)**2))**(-4.), 'k-.')
+    #    plot(theta, 3. * (1. + 1.0* (rstar/r_e) * ( 1./tan(theta0)**2-1./tan(theta)**2))**(-4.), 'k-.')
     xlabel(r'$\theta$')
     ylabel(r'$u(\theta)/u_{\rm mag}(\theta)$')
+    ylim(0.001,10.)
     yscale('log')
     savefig('uint0.png')
     savefig('uint0.pdf')
