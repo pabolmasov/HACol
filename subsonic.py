@@ -43,14 +43,19 @@ omega = 0.0
 
 # f0 = 10.0
 
+def lowk(theta, theta0, rrat, beta, umag):
+    ufac = 1.+(1./tan(theta)**2-1./tan(theta0)**2)*rrat/beta
+    ufac = minimum((ufac/ufac[-1])**(4.)*umag/umag[-1], 3.) 
+    return ufac
+
 def fcfun(x0, K):
     nx = 1e6
     x = x0 * arange(nx)/double(nx)
-    return 0.75 * simpson(exp(-K * x * (1.+x**2)) * x / (1.-x**2)**2,x=x) #, initial = 0)
+    return 1.5 * simpson(exp(K * x * (1.+x**2)) * x / (1.-x**2)**2,x=x) #, initial = 0)
 
 def intfun(x, f0, K):
-    # formal solution for f = normalized (u/rho). f0 is the value at x = cos(theta) = 0
-    return exp(K * x * (1.+x**2)) * (f0 - 0.75 * cumulative_trapezoid(exp(-K * x * (1.+x**2)) * x / (1.-x**2)**2,x=x, initial = 0))
+    # formal solution for f = normalized (u/rho). f0 is the value at x = cos(theta) = cos(theta_out) \simeq 0
+    return exp(-K * x * (1.+x**2)) * (f0 + 1.5 * cumulative_trapezoid(exp(K * x * (1.+x**2)) * x / (1.-x**2)**2,x=x, initial = 0.))
 
 def luintfun(f, x):
     # int I from 0 to x. lnu = I(x0) - I(x)
@@ -65,59 +70,16 @@ def uint(theta0, f0, K, firstpoint=False, theta_out = pi/2.):
     # theta = theta[::-1]
 
     fint = intfun(x, f0, K)
+    fint = maximum(fint, 0.)
 
     luint = luintfun(fint,x)[::-1]
 
-    luint = luint-luint[0]
+    luint = luint-luint[-1] # so that the function (ln u) is 0 @ theta_out
     
     if firstpoint:
-        return theta[0], fint[0], luint[-1]
+        return theta[0], fint[-1], luint[0] # theta0, f at the surface, ln u at the surface (should be =3)
     else:
-        return theta, fint[::-1], exp(luint)
-    
-def fcritshow():
-
-    theta0 = [0.03,0.1,0.3]
-    nth0 = size(theta0)
-    # nth = 1000
-    # theta = (pi/2.-theta0) * (arange(nth)+0.5)/double(nth)+ theta0
-
-    nk = 100 ;  kmin = 0.001 ; kmax = 10.
-    
-    kk = (kmax/kmin)**(arange(nk)/double(nk-1)) * kmin
-    
-    fc = zeros(nk)
-    fc0 = zeros(nk)
-    
-    nx = 1000
-    # print(cos(theta0))
-    
-    clf()
-    for i in arange(nth0):
-        for j in arange(nk):
-        # print("k = ", kk[j])
-            fc[j] = fcfun(cos(theta0[i]), kk[j]) # -intfun(cos(theta)[::-1], 0., k[j])[-1]
-            print("k = ", kk[j], " ;  fc = ", fc[j], " ~ ", fc0)
-
-        plot(kk, fc, formatsequence[i], label=r'$\theta_0 = {:g}$'.format(theta0[i]), linewidth = 2)
-        
-        a0 = (cos(theta0[i])/sin(theta0[i]))**2/2.
-        a1 = -(1.+sin(theta0[i])**2)/sin(theta0[i])**2 * cos(theta0[i]) + log((1.-cos(theta0[i]))/(1.+cos(theta0[i])))
-        plot(kk, (a0+a1*kk) * 1.5, 'r:')
-        
-    fc0 = 1./kk**2 * 1.5
-
-    plot(kk, fc0, 'k:')
-
-    ylim(kk.max()**(-2.), (cos(theta0)/sin(theta0)).max()**2)
-
-    xlabel(r'$k$')
-    ylabel(r'$f_{\rm c}$')
-    yscale('log')
-    xscale('log')
-    legend()
-    savefig('fc.png')
-    savefig('fc.pdf')
+        return theta, fint[::-1], luint
 
 def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     # solve for f(theta0) = 0
@@ -145,12 +107,14 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     
     if snapshot is not None:
         linesT = loadtxt(snapshot) # 'vcomp/tireoutT.dat'
-        rT = linesT[:,0]  ;  uT = linesT[:,3]
+        rT = linesT[:,0]  ;  uT = linesT[:,3] ; rhoT = linesT[:,1]
         thetaT = arcsin(sqrt(rT*rstar/r_e))
         vT = linesT[:,2] ; rhoT = linesT[:,1]
         mdotT = -(vT * rhoT)[-1]*4.*pi*r_e**2*drrat # units?
+        fT = uT/rhoT * rT[-1]
         print("measured mdot = ", mdotT/4./pi)
         print("Re = ", rT[-1]*rstar)
+        print("fT = ",fT)
         #mdot = mdotT
         #k = afac / drrat * r_e / m1 / mdot # k parameter
         #print("internal k = ", k)
@@ -162,61 +126,75 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     print("f0min = ", f0)
     # ii = input('f0')
     
-    lf1 = log10(f0)+0.01 ; lf2 = lf1+2.0 ; tol = 1e-7
+    lf1 = log10(f0)-2.0 ; lf2 = log10(f0)+2.0 ; tol = 1e-10
 
-    theta, fint1, u1 = uint(theta0, 10.**lf1,k, firstpoint=True, theta_out = theta_out)
-    theta, fint2, u2 = uint(theta0, 10.**lf2,k, firstpoint=True, theta_out = theta_out)
+    theta, fint1, u1 = uint(theta0, 10.**lf1,k, theta_out = theta_out, firstpoint = True)
+    theta, fint2, u2 = uint(theta0, 10.**lf2,k, theta_out = theta_out, firstpoint = True)
 
-    umagrat = -12. * log(sin(theta0)) + log(1.+3.*cos(theta0)**2) + log(3.)
-    u1 += umagrat ; u2 += umagrat
+    umagrat = -12. * log(sin(theta0)) + log(1.+3.*cos(theta0)**2) # + log(3.)
+    ucrit1 = u1-umagrat-log(3.) ; ucrit2 = u2-umagrat - log(3.)
     # (1.+3.*cos(theta)**2)/(1.+3.*cos(theta0)**2)*(sin(theta0)/sin(theta))**6
 
     print(umagrat)
     # ii = input("theta")
 
-    print("f0 = ", 10.**lf1, ": f(0) = ", fint1, "; u[-1] = ", u1)
-    print("f0 = ", 10.**lf2, ": f(0) = ", fint2, "; u[-1] = ", u2)
+    print("f0 = ", 10.**lf1, ": f(0) = ", fint1, "; u[-1] = ", ucrit1)
+    print("f0 = ", 10.**lf2, ": f(0) = ", fint2, "; u[-1] = ", ucrit2)
 
     # same sign is not expected
-    if (u1*u2 >= 0.):
+    if (ucrit1*ucrit2 >= 0.):
         return 0.
 
     while (abs(lf2-lf1) >  tol ):
         lf = (lf1+lf2)/2.
-        theta, fint, u = uint(theta0, 10.**lf,k, firstpoint=True, theta_out = theta_out)
-        u += umagrat 
-        # print("f0 = ", 10.**lf, ": f(0) = ", fint)
-        if ((u*u1) >= 0.):
+        theta, fint, u = uint(theta0, 10.**lf, k, theta_out = theta_out, firstpoint = True)
+        ucrit = u-umagrat - log(3.)
+        print("f0 = ", 10.**lf, ": f(0) = ", fint)
+        if ((ucrit*ucrit1) >= 0.):
             lf1 = lf
         else:
             lf2 = lf
 
     theta, fint, u = uint(theta0, 10.**lf2,k, theta_out = theta_out)
-
+    u = exp(u-umagrat)
+    
     print("beta = ", 0.75 * fint[0] * sin(theta0)**2)
+    beta = 0.75 * fint[0] * sin(theta0)**2
     print("f0 = ", fint[-1])
     
-    umag = (1.+3.*cos(theta)**2)/(1.+3.*cos(theta0)**2)*(sin(theta0)/sin(theta))**12 / 3.
+    umag = (1.+3.*cos(theta)**2)/(1.+3.*cos(theta0)**2)*(sin(theta0)/sin(theta))**12 
     if snapshot is not None:
-        umagsnap = (1.+3.*cos(thetaT)**2)/(1.+3.*cos(theta0)**2)*(sin(theta0)/sin(thetaT))**12 / 3.
+        umagsnap = (1.+3.*cos(thetaT)**2)/(1.+3.*cos(theta0)**2)*(sin(theta0)/sin(thetaT))**12 
+        umagsnap0 = (1.+3.*cos(thetaT)**2)/sin(thetaT)**12 
 
     print("U/Umag_out = ",(u/umag))
 
     clf()
+    fig = figure()
     subplot(211)
     plot(theta, fint, 'k-')
-    plot(theta, fint[-1]*exp(k*cos(theta)*(1.+cos(theta)**2)), 'r:')
+    # plot(theta, fint[-1]*exp(k*cos(theta)*(1.+cos(theta)**2)), 'r:')
+    plot(theta, fint[-1] + 0.75/tan(theta)**2, 'g-.')
+    plot(thetaT, fT*umagsnap0, 'b--')
     xlabel(r'$\theta$')
     ylabel(r'$f(\theta)$')
-    # yscale('log')
+    yscale('log')
     subplot(212)
     plot(theta, u/umag, 'k-')
     plot(theta, u*0.+3., 'r:')
     plot(theta, u*0.+1., 'r:')
     plot(thetaT, uT, 'b--')
+    plot(theta, lowk(theta, theta0, rstar/r_e, beta, umag), 'g-.')
+    #    plot(theta, lowk(theta, theta0, rstar/r_e, 0.5, umag), 'g-.')
+    # plot(theta, lowk(theta, theta0, rstar/r_e, 1.0, umag), 'g-.')
+    #    plot(theta, 3. * (1. + beta* (rstar/r_e) * ( 1./tan(theta0)**2-1./tan(theta)**2))**(-4.), 'k-.')
+    #    plot(theta, 3. * (1. + 1.0* (rstar/r_e) * ( 1./tan(theta0)**2-1./tan(theta)**2))**(-4.), 'k-.')
     xlabel(r'$\theta$')
     ylabel(r'$u(\theta)/u_{\rm mag}(\theta)$')
+    ylim(1e-1,20.)
     yscale('log')
+    fig.set_size_inches(4.,6.)
+    fig.tight_layout()
     savefig('uint0.png')
     savefig('uint0.pdf')
 
@@ -240,33 +218,6 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     fout.close()
 
     return lf
-
-def uishow():
-
-    theta0 = 0.03
-    f0 = 301.0
-    k = 0.01
-    
-    theta, fint, u = uint(theta0, f0,k)
-
-    print("f0 = ", fint[0])
-    
-    fint_appro = exp(k * cos(theta)) * (f0 - 0.75 * (1./tan(theta)**2+((1.+sin(theta)**2)/sin(theta)**2*cos(theta)+log((1.-cos(theta))/(1.+cos(theta)))) * k ))
-    
-    clf()
-    subplot(211)
-    plot(theta, fint, 'k.')
-    plot(theta, fint_appro, 'rx')
-    xlabel(r'$\theta$')
-    ylabel(r'$f(\theta)$')
-    yscale('log')
-    subplot(212)
-    plot(theta, u, 'k.')
-    plot(theta, (1.+3.*cos(theta)**2)/(1.+3.*cos(theta0)**2)*(sin(theta0)/sin(theta))**6, 'r:')
-    xlabel(r'$\theta$')
-    ylabel(r'$u(\theta)/u_0$')
-    yscale('log')
-    savefig('uint.png')
 
 # usage:
 # fzero_solution(conf='ASOL_slowT4', snapshot='vcomp/tireoutT.dat')
