@@ -786,11 +786,11 @@ def shock_hdf(n, infile = "out/tireout.hdf5", kleap = 5, uvcheck = False, uvchec
             plots.someplots(r[1:], [v[1:], v1[1:], dvdl], name = "shocknan", xtitle=r'$r$', ytitle=r'$v$', xlog=False, formatsequence = ['k.', 'r-', 'b'])
         ii=input('r')
 
-    ltot = trapz(qloss[1:], x=l[1:])
+    ltot = trapezoid(qloss[1:], x=l[1:])
     if wcomp1 > 2:
-        lbelowshock = trapz(qloss[1:wcomp1], x = l[1:wcomp1])
+        lbelowshock = trapezoid(qloss[1:wcomp1], x = l[1:wcomp1])
         #    wnearshock = maximum(wcomp1-10,1):minimum(wcomp1+10, n-1)
-        lonshock = trapz(qloss[maximum(wcomp1-10,1):minimum(wcomp1+10, n-1)], x = l[maximum(wcomp1-10,1):minimum(wcomp1+10, n-1)])
+        lonshock = trapezoid(qloss[maximum(wcomp1-10,1):minimum(wcomp1+10, n-1)], x = l[maximum(wcomp1-10,1):minimum(wcomp1+10, n-1)])
     else:
         lbelowshock = 0.
         lonshock = 0.
@@ -1134,13 +1134,13 @@ def energytest(infile, n1, n2, dn, conf = 'DEFAULT'):
     
     for k in arange(nt):
         entryname, t, l, r, sth, rho, u, v, qloss, glo = hdf.read(infile, n[k])
-        ekin[k] = trapz(rho * v**2/2. * across, x = l)
-        epot[k] = -trapz(rho / r * across, x = l)
-        eheat[k] = trapz(u * across, x = l)
+        ekin[k] = trapezoid(rho * v**2/2. * across, x = l)
+        epot[k] = -trapezoid(rho / r * across, x = l)
+        eheat[k] = trapezoid(u * across, x = l)
         etot[k] = ekin[k] + epot[k] + eheat[k]
         tar[k] = t
-        ltot[k] = trapz(qloss, x=l)
-        mass[k] = trapz(rho * across, x = l)
+        ltot[k] = trapezoid(qloss, x=l)
+        mass[k] = trapezoid(rho * across, x = l)
 
     llost = cumulative_trapezoid(ltot, x=tar, initial = 0.)
         

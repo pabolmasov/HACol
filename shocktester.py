@@ -29,8 +29,8 @@ def shocktester():
     p = m * v**2 + press
     fe = (e+press + m*v**2/2.) * v 
 
-    etot = trapz(e, x=x)
-    mtot = trapz(m, x=x)
+    etot = trapezoid(e, x=x)
+    mtot = trapezoid(m, x=x)
     
     m_C = copy(m) ; s_C = copy(s) ; e_C = copy(e)
     m_E = copy(m) ; s_E = copy(s) ; e_E = copy(e)
@@ -108,8 +108,8 @@ def shocktester():
             print("v(E) = "+str(v_E.min())+".."+str(v_E.max()))
             # print("vR(C) = "+str(sr_C))
             # total mass and energy
-            print("DM(total, C)/Minit = "+str(trapz(m_C/mtot-1., x=x)))
-            print("DM(total, E)/Minit = "+str(trapz(m_E/mtot-1., x=x)))
-            print("DE(total, C)/Einit = "+str(trapz(e_C/etot-1., x=x)))
-            print("DE(total, E)/Einit = "+str(trapz(e_E/etot-1., x=x)))
+            print("DM(total, C)/Minit = "+str(trapezoid(m_C/mtot-1., x=x)))
+            print("DM(total, E)/Minit = "+str(trapezoid(m_E/mtot-1., x=x)))
+            print("DE(total, C)/Einit = "+str(trapezoid(e_C/etot-1., x=x)))
+            print("DE(total, E)/Einit = "+str(trapezoid(e_E/etot-1., x=x)))
             nout += 1 ; tstore += dtout

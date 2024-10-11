@@ -13,10 +13,10 @@ import re
 import os
 
 #Uncomment the following if you want to use LaTeX in figures 
-rc('font',**{'family':'serif'})
-rc('mathtext',fontset='cm')
-rc('mathtext',rm='stix')
-rc('text', usetex=True)
+# rc('font',**{'family':'serif'})
+# rc('mathtext',fontset='cm')
+# rc('mathtext',rm='stix')
+# rc('text', usetex=True)
 # #add amsmath to the preamble
 # matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
@@ -479,7 +479,7 @@ def postplot(hname, nentry, ifdat = False, conf = 'DEFAULT'):
     someplots(r, [q, -rho*v*across/(r*rstar)**2], name=hname+entry+"_q",
               ytitle=r'$\frac{{\rm d}^2 E}{{\rm d}l {\rm d} t}$', ylog=True, xlog = True,
               formatsequence = ['k-', 'r-'])
-    print("ltot = "+str(trapz(q, x=l)/4./pi))
+    print("ltot = "+str(trapezoid(q, x=l)/4./pi))
     print("energy release = "+str(mdot /4./pi/ rstar))
     print("heat from outside = "+str((-u * v * across)[-1] /4./pi))
     

@@ -6,7 +6,7 @@ from numpy import *
 # from numba import jit
 
 # libraries:scipy
-from scipy.integrate import *
+from scipy.integrate import simpson, trapezoid
 from scipy.interpolate import *
 
 # libraries needed for interaction with system 
@@ -375,7 +375,7 @@ def diffuse(rho, urad, v, dl, across, taueff):
     edepth = 0.5
     ddepth = 10
     if edepth > 0.:
-        # taul = cumtrapz((rho[1:]+rho[:-1])/2., x=dl, initial = 0.)
+        # taul = cumulative_trapezoid((rho[1:]+rho[:-1])/2., x=dl, initial = 0.)
         
         for k in arange(ddepth):
             dule_half[1:-1] += edepth * ((dule_half[2:]-dule_half[1:-1]) * exp(-rho[2:-1]/2. * dl[1:-1])+ (dule_half[:-2]-dule_half[1:-1])*exp(-rho[1:-2]/2. * dl[:-2])) * exp(-ttau[1:-1])
@@ -463,9 +463,9 @@ def qloss_separate(rho, urad, g, gin = False, dt = None):
 
     '''
     if size(g.l) == size(qloss):
-        print("current flux: "+str(trapz(qloss, x = g.l))+'\n')
+        print("current flux: "+str(trapezoid(qloss, x = g.l))+'\n')
     else:
-        print("current flux: "+str(trapz(qloss, x = g.l[1:-1]))+'\n')
+        print("current flux: "+str(trapezoid(qloss, x = g.l[1:-1]))+'\n')
     '''
     
     return qloss
@@ -577,7 +577,7 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
                 dmsqueeze[2:]=0.
             else:
                 dmsqueese *= 0.
-        dmloss = trapz(dmsqueeze, x= gnd.r[1:-1])
+        dmloss = trapezoid(dmsqueeze, x= gnd.r[1:-1])
     else:
         dmsqueeze = 0.
         desqueeze = 0.
@@ -1158,9 +1158,9 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
     #    r = r[wsort] ;  m = m[wsort] ;  e = e[wsort]
     # rho = rho[wsort] ; v = v[wsort] ; u = u[wsort] ; urad = urad[wsort] ; beta = beta[wsort] ; umagtar = umagtar[wsort]
     qloss = qloss_separate(rho, urad, gglobal)
-    ltot = trapz(qloss, x = gglobal.l)
-    mtot = trapz(m, x = gglobal.l)
-    etot = trapz(e, x = gglobal.l)
+    ltot = trapezoid(qloss, x = gglobal.l)
+    mtot = trapezoid(m, x = gglobal.l)
+    etot = trapezoid(e, x = gglobal.l)
     fflux.write(str(t*tscale)+' '+str(ltot)+'\n')
     print(str(t*tscale)+' '+str(ltot)+'\n')
     #     ii = input("Q")
@@ -1175,9 +1175,9 @@ def tireouts(hfile, comm, outblock, fflux, ftot, nout = 0, dmlost = 0., ediff = 
     qloss = qloss_separate(rho, urad, gglobal, dt=dt)
     if ifnuloss:
         nuloss_A, nuloss_Ph, nuloss_Pl = neu.Qnu(rho, urad, mass1=m1, separate=True)
-        Lnu_A =  trapz(nuloss_A * gglobal.across, x= gglobal.l)
-        Lnu_Ph =  trapz(nuloss_Ph * gglobal.across, x= gglobal.l)
-        Lnu_Pl =  trapz(nuloss_Pl * gglobal.across, x= gglobal.l)
+        Lnu_A =  trapezoid(nuloss_A * gglobal.across, x= gglobal.l)
+        Lnu_Ph =  trapezoid(nuloss_Ph * gglobal.across, x= gglobal.l)
+        Lnu_Pl =  trapezoid(nuloss_Pl * gglobal.across, x= gglobal.l)
         # neu.Qnu(rho, urad, mass1=m1, separate=True)
         fnu.write(str(t*tscale)+' '+str(Lnu_A)+' '+str(Lnu_Ph)+' '+str(Lnu_Pl)+'\n')
         fnu.flush()
@@ -1334,7 +1334,7 @@ def alltire():
         # print("cth = ", g.cth)
         # ii = input("cth")
         print(" magnetosphere size ", r[-1]/r[0], " * ", rstar)
-        print(" t_s = "+str(tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, min(xs, r[-1]/rstar), cthfun)))
+        print(" t_s = "+str(tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, minimum(xs, r[-1]/rstar), cthfun)))
         # ii = input("ts")
         # magnetic field energy density:
         umagtar = umag * (1.+3.*g.cth**2)/4. * (rstar/g.r)**6
@@ -1348,7 +1348,7 @@ def alltire():
             rho = copy(abs(mdot) / (abs(vout)+abs(vinit)) / g.across)
             #   rho *= 1. + (g.r/rstar)**2
             # total mass
-            mass = trapz(rho*g.across, x=g.l)
+            mass = trapezoid(rho*g.across, x=g.l)
             meq = (g.across*umag*rstar**2)[0]
             print('meq = '+str(meq)+"\n")
             # ii = input('M')

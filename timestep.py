@@ -43,7 +43,7 @@ def time_step(prim, g, dl, xirad = 1.5, raddiff = True, eta = 0., CFL = 0.5, Cdi
 
     # outputs luminosity if irradiation is included
     if eta>0.:
-        ltot = trapz(qloss * taufun(taueff, taumin, taumax), x = g.l)
+        ltot = trapezoid(qloss * taufun(taueff, taumin, taumax), x = g.l)
         return minimum(dt_CFL, minimum(dt_diff, dt_thermal)), ltot
     else:
         return minimum(dt_CFL, minimum(dt_diff, dt_thermal))# 1./(1./dt_CFL + 1./dt_thermal + 1./dt_diff)
