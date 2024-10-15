@@ -3,7 +3,7 @@ from numpy.random import rand
 from numpy import *
 from scipy.optimize import fsolve
 from scipy.special import expn
-from scipy.integrate import simps
+from scipy.integrate import simpson
 
 def fxis(x, gamma, eta, n):
     return 1.+exp(gamma*x)*(x*expn(2,gamma)-expn(2,gamma*x)) - eta * gamma**0.25 * x**((n+0.5)/4.)
@@ -46,7 +46,7 @@ def dtint(gamma, xs, cthfun, beta = None):
         cth = cthfun(x)
         #        print("mean cos = "+str(cth.mean()))
         w = where(csq>0.)
-        dt = simps((sqrt((3.*cth**2+1.)/ csq)/cth)[w], x=x[w])/2.
+        dt = simpson((sqrt((3.*cth**2+1.)/ csq)/cth)[w], x=x[w])/2.
     else:
         dt = zeros(nxs)
         for k in arange(nxs):

@@ -13,10 +13,10 @@ import re
 import os
 
 #Uncomment the following if you want to use LaTeX in figures 
-rc('font',**{'family':'serif'})
-rc('mathtext',fontset='cm')
-rc('mathtext',rm='stix')
-rc('text', usetex=True)
+# rc('font',**{'family':'serif'})
+# rc('mathtext',fontset='cm')
+# rc('mathtext',rm='stix')
+# rc('text', usetex=True)
 # #add amsmath to the preamble
 # matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"] 
 
@@ -70,7 +70,7 @@ def qloss_separate(rho, v, u, g, conf):
 
 
 #############################################################
-# Plotting block 
+# regular graphic output
 def uplot(r, u, rho, sth, v, name='outplot', umagtar = None, ueq = None, configactual = None, unorm = True, time = None):
     '''
     energy u supplemented by rest-mass energy rho c^2
@@ -479,7 +479,7 @@ def postplot(hname, nentry, ifdat = False, conf = 'DEFAULT'):
     someplots(r, [q, -rho*v*across/(r*rstar)**2], name=hname+entry+"_q",
               ytitle=r'$\frac{{\rm d}^2 E}{{\rm d}l {\rm d} t}$', ylog=True, xlog = True,
               formatsequence = ['k-', 'r-'])
-    print("ltot = "+str(trapz(q, x=l)/4./pi))
+    print("ltot = "+str(trapezoid(q, x=l)/4./pi))
     print("energy release = "+str(mdot /4./pi/ rstar))
     print("heat from outside = "+str((-u * v * across)[-1] /4./pi))
     
@@ -858,3 +858,37 @@ def plot_dts(n, prefix = 'out/tireout', postfix = '.dat', conf = 'DEFAULT'):
 
     someplots(r, [dt_CFL, dt_thermal, dt_diff], ylog = True, ytitle=r'$\Delta t$', name = 'dts', formatsequence = ['k-', 'b:', 'r--'])
 
+##############################################
+# subsonic two-panel plot:
+
+def subfint(theta, fint, unorm, thetaT, uTnorm, fT = None):
+
+    clf()
+    fig = figure()
+    subplot(211)
+    plot(theta, fint, 'k-')
+    # plot(theta, fint[-1]*exp(k*cos(theta)*(1.+cos(theta)**2)), 'r:')
+    plot(theta, fint[-1] + 0.75/tan(theta)**2, 'g-.')
+    if fT is not None:
+        plot(thetaT, fT, 'b--')
+    xlabel(r'$\theta$')
+    ylabel(r'$f(\theta)$')
+    yscale('log')
+    subplot(212)
+    plot(theta, unorm, 'k-')
+    plot(theta, unorm*0.+3., 'r:')
+    plot(theta, unorm*0.+1., 'r:')
+    plot(thetaT, uTnorm, 'b--')
+    # plot(theta, lowk(theta, theta0, rstar/r_e, beta, umag), 'g-.')
+    #    plot(theta, lowk(theta, theta0, rstar/r_e, 0.5, umag), 'g-.')
+    # plot(theta, lowk(theta, theta0, rstar/r_e, 1.0, umag), 'g-.')
+    #    plot(theta, 3. * (1. + beta* (rstar/r_e) * ( 1./tan(theta0)**2-1./tan(theta)**2))**(-4.), 'k-.')
+    #    plot(theta, 3. * (1. + 1.0* (rstar/r_e) * ( 1./tan(theta0)**2-1./tan(theta)**2))**(-4.), 'k-.')
+    xlabel(r'$\theta$')
+    ylabel(r'$u(\theta)/u_{\rm mag}(\theta)$')
+    ylim(1e-1,20.)
+    yscale('log')
+    fig.set_size_inches(4.,6.)
+    # fig.tight_layout()
+    savefig('uint0.png')
+    savefig('uint0.pdf')
