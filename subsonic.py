@@ -16,10 +16,10 @@ import os
 import time
 
 #Uncomment the following if you want to use LaTeX in figures 
-rc('font',**{'family':'serif'})
-rc('mathtext',fontset='cm')
-rc('mathtext',rm='stix')
-rc('text', usetex=True)
+# rc('font',**{'family':'serif'})
+# rc('mathtext',fontset='cm')
+# rc('mathtext',rm='stix')
+# rc('text', usetex=True)
 # #add amsmath to the preamble
 # matplotlib.rcParams['text.latex.preamble']=[r"\usepackage{amssymb,amsmath}"]
 
@@ -34,6 +34,8 @@ config.read(conffile)
 
 ifplot =  config['DEFAULT'].getboolean('ifplot')
 
+if ifplot:
+    import plots
 
 formatsequence = ['k-', 'g:', 'b--', 'r-.']
 
@@ -95,7 +97,7 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     drrat = config[conf].getfloat('drrat')
     Dthick = config[conf].getfloat('Dthick')
 
-    theta0 = sqrt(rstar/r_e) # polar cap radius
+    theta0 = arcsin(sqrt(rstar/r_e)) # polar cap radius
     theta_out = arcsin(1./sqrt(1.+drrat**2))
     k = afac / drrat * r_e / m1 / mdot # k parameter
     
@@ -118,7 +120,10 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
         #mdot = mdotT
         #k = afac / drrat * r_e / m1 / mdot # k parameter
         #print("internal k = ", k)
-    
+
+        theta0 = thetaT.min()
+        theta_out = thetaT.max()
+        
     # we want to find the f0 that produces f(theta0)=0
     # logarithmic bracketing
     # minimal f0 should be 3/4 of the int, because we do not want f_surface to change sign
@@ -128,8 +133,8 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
     
     lf1 = log10(f0)-2.0 ; lf2 = log10(f0)+2.0 ; tol = 1e-10
 
-    theta, fint1, u1 = uint(theta0, 10.**lf1,k, theta_out = theta_out, firstpoint = True)
-    theta, fint2, u2 = uint(theta0, 10.**lf2,k, theta_out = theta_out, firstpoint = True)
+    theta, fint1, u1 = uint(theta0, 10.**lf1, k, theta_out = theta_out, firstpoint = True)
+    theta, fint2, u2 = uint(theta0, 10.**lf2, k, theta_out = theta_out, firstpoint = True)
 
     umagrat = -12. * log(sin(theta0)) + log(1.+3.*cos(theta0)**2) # + log(3.)
     ucrit1 = u1-umagrat-log(3.) ; ucrit2 = u2-umagrat - log(3.)
@@ -169,35 +174,8 @@ def fzero_solution(conf = 'ASOL_slowT4', snapshot = None):
 
     print("U/Umag_out = ",(u/umag))
 
-    clf()
-    fig = figure()
-    subplot(211)
-    plot(theta, fint, 'k-')
-    # plot(theta, fint[-1]*exp(k*cos(theta)*(1.+cos(theta)**2)), 'r:')
-    plot(theta, fint[-1] + 0.75/tan(theta)**2, 'g-.')
-    plot(thetaT, fT*umagsnap0, 'b--')
-    xlabel(r'$\theta$')
-    ylabel(r'$f(\theta)$')
-    yscale('log')
-    subplot(212)
-    plot(theta, u/umag, 'k-')
-    plot(theta, u*0.+3., 'r:')
-    plot(theta, u*0.+1., 'r:')
-    plot(thetaT, uT, 'b--')
-    plot(theta, lowk(theta, theta0, rstar/r_e, beta, umag), 'g-.')
-    #    plot(theta, lowk(theta, theta0, rstar/r_e, 0.5, umag), 'g-.')
-    # plot(theta, lowk(theta, theta0, rstar/r_e, 1.0, umag), 'g-.')
-    #    plot(theta, 3. * (1. + beta* (rstar/r_e) * ( 1./tan(theta0)**2-1./tan(theta)**2))**(-4.), 'k-.')
-    #    plot(theta, 3. * (1. + 1.0* (rstar/r_e) * ( 1./tan(theta0)**2-1./tan(theta)**2))**(-4.), 'k-.')
-    xlabel(r'$\theta$')
-    ylabel(r'$u(\theta)/u_{\rm mag}(\theta)$')
-    ylim(1e-1,20.)
-    yscale('log')
-    fig.set_size_inches(4.,6.)
-    fig.tight_layout()
-    savefig('uint0.png')
-    savefig('uint0.pdf')
-
+    plots.subfint(theta, fint, u/umag, thetaT, uT, fT = fT * umagsnap0/umagsnap[0])
+    
     # ASCII output:
     fout = open('uint.dat', 'w+')
     fout.write('# theta f  u/umag\n')

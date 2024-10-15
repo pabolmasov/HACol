@@ -576,7 +576,7 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
             if crank == first:
                 dmsqueeze[2:]=0.
             else:
-                dmsqueese *= 0.
+                dmsqueeze *= 0.
         dmloss = trapezoid(dmsqueeze, x= gnd.r[1:-1])
     else:
         dmsqueeze = 0.
