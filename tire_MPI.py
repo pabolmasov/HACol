@@ -578,7 +578,7 @@ def RKstep(gnd, lhalf, ahalf, prim, leftpack, rightpack, umagtar = None, ltot = 
                 dmsqueeze[2:]=0.
             else:
                 dmsqueeze *= 0.
-        dmloss = trapezoid(dmsqueeze, x= gnd.r[1:-1])
+        dmloss = trapezoid(dmsqueeze, x= gnd.l[1:-1])
     else:
         dmsqueeze = 0.
         desqueeze = 0.
@@ -1608,4 +1608,3 @@ if (parallelfactor != csize):
 
 alltire()
 
-print("Laskelma on p‰‰ttynyt onnellisesti!")

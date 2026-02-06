@@ -22,9 +22,9 @@ def HLLE(fs, qs, sl, sr, sm, phi = None):
     fhalf1=copy(f1[1:])  ;  fhalf2=copy(f2[1:])  ;  fhalf3=copy(f3[1:])    
     
     if(size(wreg)>0):
-        fhalf1[wreg] = (((sr1*f1[:-1]-sl1*f1[1:])/ds+sl1*sr1*(q1[1:]-q1[:-1])/ds))[wreg] # classic HLLE
-        fhalf2[wreg] = (((sr1*f2[:-1]-sl1*f2[1:])/ds+sl1*sr1*(q2[1:]-q2[:-1])/ds))[wreg] # classic HLLE
-        fhalf3[wreg] = (((sr1*f3[:-1]-sl1*f3[1:])/ds+sl1*sr1*(q3[1:]-q3[:-1])/ds))[wreg] # classic HLLE
+        fhalf1[wreg] = (((sr1*f1[:-1]-sl1*f1[1:])[wreg]/ds[wreg]+(sl1*sr1*(q1[1:]-q1[:-1]))[wreg]/ds[wreg])) # classic HLLE
+        fhalf2[wreg] = (((sr1*f2[:-1]-sl1*f2[1:])[wreg]/ds[wreg]+(sl1*sr1*(q2[1:]-q2[:-1]))[wreg]/ds[wreg])) # classic HLLE
+        fhalf3[wreg] = (((sr1*f3[:-1]-sl1*f3[1:])[wreg]/ds[wreg]+(sl1*sr1*(q3[1:]-q3[:-1]))[wreg]/ds[wreg])) # classic HLLE
     if size(w0)>0.:
         wpos = where((ds <=0.) & (sm >= 0.))
         wneg = where((ds <=0.) & (sm <= 0.))
