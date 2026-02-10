@@ -101,11 +101,59 @@ def uint(theta0, fout, K, firstpoint=False, theta_out = pi/2.):
     else:
         return theta, fint[::-1], luint
 
+
+def shooting_beta(th0, k, verbose = True, theta_out = pi/2.):
+    '''
+    restores inner f by choosing proper fout
+    '''
+    
+    lf1 = -2.0 ; lf2 = 2.0 ; tol = 1e-10 # brackets and tolerance for lg(fout)
+    
+    theta, fint1, u1 = uint(th0, 10.**lf1, k, theta_out = theta_out, firstpoint = True)
+    theta, fint2, u2 = uint(th0, 10.**lf2, k, theta_out = theta_out, firstpoint = True)
+
+    if verbose:
+        print("fout = ", 10.**lf1, ": f(0) = ", fint1, "; u[-1] = ", u1)
+        print("fout = ", 10.**lf2, ": f(0) = ", fint2, "; u[-1] = ", u2)
+
+    # magnetic energy density ratio logarithm
+    umagrat0 = -12. * log(sin(th0)) + log(1.+3.*cos(th0)**2)
+    umagrat_out = -12. * log(sin(theta_out)) + log(1.+3.*cos(theta_out)**2)
+    umagrat = umagrat0 - umagrat_out
+    
+    print("umagrat = ", umagrat)
+
+    ucrit1 = u1- umagrat -log(3.)
+    ucrit2 = u2 - umagrat - log(3.)
+    if verbose:
+        print("fout = ", 10.**lf1, ": f(0) = ", fint1, "; u[-1] = ", ucrit1)
+        print("fout = ", 10.**lf2, ": f(0) = ", fint2, "; u[-1] = ", ucrit2)
+
+    while (abs(lf2-lf1) >  tol ):
+        lf = (lf1+lf2)/2.
+        theta, fint, u = uint(th0, 10.**lf, k, theta_out = theta_out, firstpoint = True)
+        ucrit = u - umagrat - log(3.)
+        if verbose:
+            print("fout = ", 10.**lf, ": f(0) = ", fint)
+        if ((ucrit*ucrit1) >= 0.):
+            lf1 = lf
+        else:
+            lf2 = lf
+
+    fout = 10.**((lf1+lf2)/2.)
+            
+    theta, fint, u = uint(th0, 10.**lf, k, theta_out = theta_out, firstpoint = True)
+            
+    return fint / 0.75 * sin(th0)**2, fout
+    
 def fzero_solution(conf = 'SUBSO', snapshot = None, thsnapshots = None, iffit = False):
     '''
     thsnapshots are thprofile.dat files produced by acompace. If they are set, plotting snapshot is suppressed
     '''
 
+    # theta, fint1, u1 = uint(0.45, 1., 0.085, firstpoint = True)
+    # print("u1 = ", u1)
+    
     # reading the data:
     outdir = config[conf].get('outdir')
     rstar = config[conf].getfloat('rstar')
@@ -119,17 +167,22 @@ def fzero_solution(conf = 'SUBSO', snapshot = None, thsnapshots = None, iffit = 
     drrat = config[conf].getfloat('drrat')
     tscale = config[conf].getfloat('tscale')
     # Dthick = config[conf].getfloat('Dthick')
+    realxirad = config[conf].getfloat('xirad')
 
     theta0 = arcsin(sqrt(rstar/r_e)) # polar cap radius
     theta_out = arcsin(1./sqrt(1.+drrat**2))
-    k = afac / drrat * r_e / (mdot/4./pi) # k parameter
+    # theta_out = pi/2.
 
+    # r_e = 1577.74 * mu30**(4./7.)/mdot**(2./7.)/m1**(10./7.)
+    
+    kk = afac / drrat * r_e / (mdot/4./pi) # k parameter
+    
     print("mdot = ", mdot / 4./pi)
     
     print("r_e = ", r_e, " = ", r_e/rstar, "R*")
     
     print("theta0 = ", theta0)
-    print("k = ", k)
+    print("k = ", kk)
     #    ii = input('K')
     # print("expected fout = ", 0.75 * Dthick**2)
     
@@ -162,63 +215,22 @@ def fzero_solution(conf = 'SUBSO', snapshot = None, thsnapshots = None, iffit = 
             linesT = loadtxt(thsnapshots[k])
             tharlist.append(linesT[::alias,0]) ; farlist.append(linesT[::alias,1]) ; uarlist.append(linesT[::alias,2]) ;  dfarlist.append(linesT[::alias,3]) ; duarlist.append(linesT[::alias,4])
             print("fout = ", linesT[-1,1])
-            print("theta(data) = ", tharlist)
+            # print("theta(data) = ", tharlist)
             f0 = linesT[-1,1]
             
-    # logarithmic bracketing
-    # minimal fout should be 3/4 of the int, because we do not want f_surface to change sign
+    beta, fout = shooting_beta(theta0, kk, verbose = True,theta_out=theta_out)
 
-    # ii = input('f0')
-        
-    umagrat0 = -12. * log(sin(theta0)) + log(1.+3.*cos(theta0)**2) # + log(3.)
-    umagrat_out = -12. * log(sin(theta_out)) + log(1.+3.*cos(theta_out)**2) # + log(3.)
-
-    if (iffit):
-
-        lf1 = -1.0 ; lf2 = 1.0 ; tol = 1e-10
-
-        theta, fint1, u1 = uint(theta0, 10.**lf1, k, theta_out = theta_out, firstpoint = True)
-        theta, fint2, u2 = uint(theta0, 10.**lf2, k, theta_out = theta_out, firstpoint = True)
-        # (1.+3.*cos(theta)**2)/(1.+3.*cos(theta0)**2)*(sin(theta0)/sin(theta))**6
-        
-        # ii = input("theta")
-        
-        print("fout = ", 10.**lf1, ": f(0) = ", fint1, "; u[-1] = ", u1)
-        print("fout = ", 10.**lf2, ": f(0) = ", fint2, "; u[-1] = ", u2)
-
-        ucrit1 = u1-umagrat0+umagrat_out -log(3.)
-        ucrit2 = u2-umagrat0+umagrat_out - log(3.)
-        print("fout = ", 10.**lf1, ": f(0) = ", fint1, "; u[-1] = ", ucrit1)
-        print("fout = ", 10.**lf2, ": f(0) = ", fint2, "; u[-1] = ", ucrit2)
-        
-        ii = input("theta")
-        # same sign is not expected
-        if (ucrit1*ucrit2 >= 0.):
-            return 0.
-        
-        while (abs(lf2-lf1) >  tol ):
-            lf = (lf1+lf2)/2.
-            theta, fint, u = uint(theta0, 10.**lf, k, theta_out = theta_out, firstpoint = True)
-            ucrit = u-umagrat0+umagrat_out - log(3.)
-            print("fout = ", 10.**lf, ": f(0) = ", fint)
-            if ((ucrit*ucrit1) >= 0.):
-                lf1 = lf
-            else:
-                lf2 = lf
-
-        f0 = 10.**lf2
-
-    # f0 = 0.75
-        
-    theta, fint, u = uint(theta0, f0, k, theta_out = theta_out)
+    # f0 = beta * 0.75 / sin(theta0)**2
+    
+    theta, fint, u = uint(theta0, fout, kk, theta_out = theta_out)
     umagrat = -12. * log(sin(theta)/sin(theta_out)) + log(1.+3.*cos(theta)**2) - log(1.+3.*cos(theta_out)**2) # + log(3.)
 
     umag = (1.+3.*cos(theta)**2)/(1.+3.*cos(theta0)**2)*(sin(theta0)/sin(theta))**12
     
-    u = exp(u-umagrat)
+    u = exp(u - umagrat)
     
-    print("experimental beta = ", 4./3. * fint[0] * sin(theta0)**2)
-    beta = 4./3. * fint[0] * sin(theta0)**2
+    print("experimental beta = ", beta)
+    #    beta = 4./3. * f0 * sin(theta0)**2
     print("theta = ", theta)
     print("sin^-2(theta0) = ", 1./sin(theta0)**2)
     print("f = ", 0.75 /sin(theta0)**2 * beta + 0.75 * (1./sin(theta)**2-1./sin(theta0)**2))
@@ -231,17 +243,17 @@ def fzero_solution(conf = 'SUBSO', snapshot = None, thsnapshots = None, iffit = 
 
     print("U/Umag = ",u)
 
-    fan = 0.75  + 0.75 * (1./sin(theta)**2-1./sin(theta_out)**2)
+    fan = fint[-1] + 0.75 * (1./sin(theta)**2-1./sin(theta_out)**2)
     #    fan = fint[0] +  0.75 * (1./sin(theta)**2-1./sin(theta0)**2)
     
-    unorm_lowk = (fan/fan[0])**(4.) * umag[0] / umag
+    unorm_lowk = (fan/fan[0])**(4.) *  umag[0] / umag * 3.
     
     if thsnapshots is not None:
         # print(len(tharlist))
         # ii = input('far')
-        plots.subfint(theta, fint, u, tharlist, uarlist, farlist, duTnorm = duarlist, dfT = dfarlist, unorm_lowk = unorm_lowk)
+        plots.subfint(theta, fint, u, tharlist, uarlist, farlist, duTnorm = duarlist, dfT = dfarlist, unorm_lowk = unorm_lowk, alias = 5)
     else:
-        plots.subfint(theta, fint, u, thetaT, uT, fT * umagsnap0/umagsnap[0], unorm_lowk = unorm_lowk)
+        plots.subfint(theta, fint, u, thetaT, uT, fT * umagsnap0/umagsnap[0], unorm_lowk = unorm_lowk, alias = 5)
     
     # ASCII output:
     fout = open('uint.dat', 'w+')
@@ -266,15 +278,21 @@ def fzero_solution(conf = 'SUBSO', snapshot = None, thsnapshots = None, iffit = 
     geofile = outdir+"/geo.dat"
     gr, gtheta, alpha, across, l, delta = geo.gread(geofile)
     perimeter = 2. * (across/delta + 2.*delta)
-    BSgamma = (across/delta**2)[0]/mdot*rstar / (xirad/1.5)
+    # BSgamma = (across/delta**2)[0]/mdot*rstar / (xirad/1.5)
     # umag is magnetic pressure
     b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
     umag = b12**2*2.29e6*m1
+    umag = (1.+3.*cos(theta0)**2)/(rstar*m1)**6 * 5.545e12 * mu30**2
     
-    BSeta = (8./21./sqrt(2.)*umag*3. * (xirad/1.5))**0.25*sqrt(delta[0])/(rstar)**0.125
+    # BSeta = (8./21./sqrt(2.)*umag*3. * (xirad/1.5))**0.25*sqrt(delta[0])/(rstar)**0.125
+    
+    delta0 = sin(theta0)/sqrt(1.+3.*cos(theta0)**2)*rstar*drrat
+
+    BSgamma = (afac/drrat) * sqrt(1.+3.*cos(theta0)**2)/(mdot/4./pi) / (realxirad/1.5) * rstar 
+    BSeta = (8./21./sqrt(2.) * umag * 3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
     print("BSgamma = "+str(BSgamma))
     print("BSeta = "+str(BSeta))
-    xs, BSbeta = bs.xis(BSgamma, BSeta, x0=r_e/rstar, ifbeta = True)
+    xs, BSbeta = bs.xis(BSgamma, BSeta, x0=20., ifbeta = True)
     print("BSbeta = ", BSbeta)
     beta = 1. # no radiation losses
     dtt = dtint(cos(theta)[::-1], (1.-beta)/sin(theta0)**2)

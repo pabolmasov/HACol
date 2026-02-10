@@ -878,14 +878,14 @@ def plot_dts(n, prefix = 'out/tireout', postfix = '.dat', conf = 'DEFAULT'):
 ##############################################
 # subsonic two-panel plot:
 
-def subfint(theta, fint, unorm, thetaT, uTnorm, fT, duTnorm = None, dfT = None, unorm_lowk = None):
+def subfint(theta, fint, unorm, thetaT, uTnorm, fT, duTnorm = None, dfT = None, unorm_lowk = None, alias = 1):
 
     nT = len(thetaT)
     fseq = ['or', 'xg', 'db']
     
     clf()
     fig = figure()
-    subplot(121)
+    subplot(211)
     plot(theta, fint, 'k-')
     # plot(theta,  0.75 + 0.75*(1./sin(theta)**2-1./sin(theta[-1])**2), 'g-.')
     plot(theta,  0.75*(1./sin(theta)**2-1.), 'g-.')
@@ -894,17 +894,17 @@ def subfint(theta, fint, unorm, thetaT, uTnorm, fT, duTnorm = None, dfT = None, 
         for k in arange(nT):
             if dfT is not None:
                 print("are we here?")
-                errorbar(thetaT[k], fT[k], yerr = dfT[k], fmt = fseq[k], mfc = 'none')
+                errorbar(thetaT[k][::alias], fT[k][::alias], yerr = dfT[k][::alias], fmt = fseq[k], mfc = 'none')
             else:
-                plot(thetaT[k], fT[k], fseq[k], mfc = 'none')
+                plot(thetaT[k][::alias], fT[k][::alias], fseq[k], mfc = 'none')
             #    else:
             #        plot(thetaT, fT, 'b--')
     xlabel(r'$\theta$', fontsize=16)
-    ylabel(r'$f(\theta)$', fontsize=16)
+    ylabel(r'$f$', fontsize=16)
     yscale('log')
     plt.tick_params(labelsize=14, length=1, width=1., which='minor')
     plt.tick_params(labelsize=14, length=3, width=1., which='major')
-    subplot(122)
+    subplot(212)
     plot(theta, unorm, 'k-')
     plot(theta, unorm*0.+3., 'r:')
     plot(theta, unorm*0.+1., 'r:')
@@ -914,19 +914,19 @@ def subfint(theta, fint, unorm, thetaT, uTnorm, fT, duTnorm = None, dfT = None, 
     if nT>=1:
         for k in arange(nT):
             if duTnorm is not None:
-                errorbar(thetaT[k], uTnorm[k], yerr = duTnorm[k], fmt = fseq[k], mfc = 'none')
+                errorbar(thetaT[k][::alias], uTnorm[k][::alias], yerr = duTnorm[k][::alias], fmt = fseq[k], mfc = 'none')
             else:
-                plot(thetaT[k], uTnorm[k], fseq[k], mfc = 'none')
+                plot(thetaT[k][::alias], uTnorm[k][::alias], fseq[k], mfc = 'none')
     # else:
     #    plot(thetaT, uTnorm, 'b--')
 
     xlabel(r'$\theta$', fontsize=16)
-    ylabel(r'$u(\theta)/u_{\rm mag}(\theta)$', fontsize=16)
+    ylabel(r'$u/u_{\rm mag}$', fontsize=16)
     ylim(1e-1,20.)
     yscale('log')
     plt.tick_params(labelsize=14, length=1, width=1., which='minor')
     plt.tick_params(labelsize=14, length=3, width=1., which='major')
-    fig.set_size_inches(10.,4.)
+    fig.set_size_inches(5.,8.)
     fig.tight_layout()
     savefig('uint0.png')
     savefig('uint0.pdf')

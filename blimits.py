@@ -50,47 +50,6 @@ def lcor(mdot, mu30):
     return afac / drrat * (2. * log((1.+cth)/(1.-cth))-3.*cth)
 
 
-def shooting_beta(th0, k, verbose = True):
-    '''
-    restores inner f by choosing proper fout
-    '''
-    
-    theta_out = pi/2.
-    
-    lf1 = -2.0 ; lf2 = 2.0 ; tol = 1e-10 # brackets and tolerance for lg(fout)
-    
-    theta, fint1, u1 = sub.uint(th0, 10.**lf1, k, theta_out = theta_out, firstpoint = True)
-    theta, fint2, u2 = sub.uint(th0, 10.**lf2, k, theta_out = theta_out, firstpoint = True)
-
-    if verbose:
-        print("fout = ", 10.**lf1, ": f(0) = ", fint1, "; u[-1] = ", u1)
-        print("fout = ", 10.**lf2, ": f(0) = ", fint2, "; u[-1] = ", u2)
-
-    # magnetic energy density ratio logarithm
-    umagrat0 = -12. * log(sin(th0)) + log(1.+3.*cos(th0)**2)
-    umagrat_out = -12. * log(sin(theta_out)) + log(1.+3.*cos(theta_out)**2)
-    umagrat = umagrat0 - umagrat_out
-    
-    ucrit1 = u1- umagrat -log(3.)
-    ucrit2 = u2 - umagrat - log(3.)
-
-    while (abs(lf2-lf1) >  tol ):
-        lf = (lf1+lf2)/2.
-        theta, fint, u = sub.uint(th0, 10.**lf, k, theta_out = theta_out, firstpoint = True)
-        ucrit = u - umagrat - log(3.)
-        if verbose:
-            print("fout = ", 10.**lf, ": f(0) = ", fint)
-        if ((ucrit*ucrit1) >= 0.):
-            lf1 = lf
-        else:
-            lf2 = lf
-
-    fout = 10.**((lf1+lf2)/2.)
-            
-    theta, fint, u = sub.uint(th0, 10.**lf, k, theta_out = theta_out, firstpoint = True)
-            
-    return fint / 0.75 * sin(th0)**2, fout
-
 def maincycle():
 
     mdot1 = 10.0 ; mdot2 = 1000.0 ; nmdot = 122
@@ -115,7 +74,7 @@ def maincycle():
             th0 =  theta0(mdot[kmdot], mu[kmu])
             delta0 = sin(th0)/sqrt(1.+3.*cos(th0)**2)*rstar*drrat
             umag0 = (1.+3.*cos(th0)**2)/(rstar*mass1)**6 * 5.545e12 * mu[kmu]**2 # code units
-            beta_tmp, fint_tmp = shooting_beta(th0, karr[kmu, kmdot], verbose  = False)
+            beta_tmp, fint_tmp = sub.shooting_beta(th0, karr[kmu, kmdot], verbose  = False)
             beta_fint[kmu, kmdot] = beta_tmp
             fint[kmu, kmdot] = fint_tmp
             # BSgamma = (4.*pi*afac/drrat) * sqrt(1.+3.*cos(th0)**2)/mdot[kmdot] / (realxirad/1.5) # Across/\delta^2 / mdot *rstar /(realxirad/1.5) rstar??
@@ -237,18 +196,28 @@ def maincycle():
 def solcompare(solmdot = 30., solmu = 0.1):
 
     theta_out = pi/2.
+    # theta_out =arcsin(1./sqrt(1.+drrat**2))
     
     solk = afac / drrat * RAlf(solmdot, solmu) * xim / solmdot
+
+    print("Re  = ", RAlf(solmdot, solmu) * xim, " = ",  RAlf(solmdot, solmu) * xim / rstar , "R_*")
+    print("k = ", solk)
+    
     th0 =  theta0(solmdot, solmu)
+    print("theta0  = ", th0)
     delta0 = sin(th0)/sqrt(1.+3.*cos(th0)**2)*rstar*drrat
     umag0 = (1.+3.*cos(th0)**2)/(rstar*mass1)**6 * 5.545e12 * solmu**2 # code units
-    beta_tmp, fint_tmp = shooting_beta(th0, solk, verbose  = False)
+    beta_tmp, fint_tmp = sub.shooting_beta(th0, solk, verbose  = True)
     
     BSgamma = (afac/drrat) * sqrt(1.+3.*cos(th0)**2)/solmdot / (realxirad/1.5) * rstar 
     BSeta = (8./21./sqrt(2.) * umag0 * 3. * (realxirad/1.5))**0.25*sqrt(delta0)/(rstar)**0.125
+    print("BS gamma = ", BSgamma)
+    print("BS eta = ", BSeta)
+    
+    xis, beta_BS = squeeze(BS.xis(BSgamma, BSeta, x0 = 15., ifbeta = True))
+                                  # maximum(2.,(xim*RAlf(solmdot, solmu)/rstar)), ifbeta = True))
 
-    xis, beta_BS = squeeze(BS.xis(BSgamma, BSeta, x0 = maximum(2.,(xim*RAlf(solmdot, solmu)/rstar)), ifbeta = True))
-
+    print("xs  = ", xis)
     print("subsonic beta = ", beta_tmp)
     print("BS beta = ", beta_BS)
 
@@ -257,10 +226,11 @@ def solcompare(solmdot = 30., solmu = 0.1):
     theta, fint, usu = sub.uint(th0, fint_tmp, solk, theta_out = theta_out, firstpoint = False)
     xsu = (sin(theta)/sin(th0))**2
 
-    umagsu = exp(-12. * log(sin(theta)/sin(th0)) + log(1.+3.*cos(theta)**2)-log(1.+3.*cos(th0)**2))
+    umagsu = -12. * log(sin(theta)/sin(th0)) + log(1.+3.*cos(theta)**2)-log(1.+3.*cos(th0)**2)
+    umagsu = exp(umagsu - umagsu[-1])
     umagBS = 1./xBS**6
     
-    usu = exp(usu - usu[0]) #  -12. * log(sin(theta)/sin(th0)) + log(1.+3.*cos(theta)**2)-log(1.+3.*cos(th0)**2))
+    usu = exp(usu - usu[-1]) #  -12. * log(sin(theta)/sin(th0)) + log(1.+3.*cos(theta)**2)-log(1.+3.*cos(th0)**2))
     print(usu)
     
     clf()

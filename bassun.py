@@ -61,11 +61,11 @@ def dtint(gamma, xs, cthfun, beta = None):
         
     return dt
 
-def BSsolution(gamma, eta):
+def BSsolution(gamma, eta, x0 = 20.):
 
     nx = 10000
 
-    xs, beta = xis(gamma, eta, n=3, x0=20., ifbeta = True)
+    xs, beta = xis(gamma, eta, n=3, x0=x0, ifbeta = True)
     
     x = xs**(arange(nx)/double(nx-1))
 
