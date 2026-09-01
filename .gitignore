@@ -1,3 +1,5 @@
+SUBSO*/
+README.save
 *.png
 *.eps
 *.fig
@@ -23,3 +25,8 @@ shocktestm.*
 *.out
 *.*~
 *.pyc
+begin.tex
+end.tex
+globals.conf
+*.txt
+log

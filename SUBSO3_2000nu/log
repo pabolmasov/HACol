@@ -1,0 +1,46 @@
+launched with arguments tire_MPI.py, SUBSO3_2000nu
+SUBSO3_2000nu configuration set by the arguments
+launched with arguments tire_MPI.py, SUBSO3_2000nu
+SUBSO3_2000nu configuration set by the arguments
+r_e = 42.64764278019499
+SUBSO3_2000nu: 0.0
+SUBSO3_2000nu: 4.8246820564718494e-05
+r_e = 207.26754391174768
+SUBSO3_2000nu: Alfven = 85.29528556038998stellar radii
+SUBSO3_2000nu: magnetospheric radius r_e = 207.26754391174768 = 42.64764278019499stellar radii
+SUBSO3_2000nu: nopt(lin) = 1455.0571477656945
+SUBSO3_2000nu: nopt(log) = 34.118114224155995
+sin(theta) = 0.1531272503326994..0.9849581210109046
+SUBSO3_2000nu: Across(0) = 0.2194270242486987
+SUBSO3_2000nu: t_r = A_perp u_mag / g / dot(M) = 1.8173187256777084s
+SUBSO3_2000nu Local correct tr (s) =  2.4990657471319966
+SUBSO3_2000nu BS parameters:
+SUBSO3_2000nu   gamma = 0.004817076552765453
+SUBSO3_2000nu   eta = 45.07007038899779
+/home/glipunova/galja/rabota/vartire/hacol/plotHacol/HACol/bassun.py:13: RuntimeWarning: invalid value encountered in power
+  return 1.+exp(gamma*x)*(x*expn(2,gamma)-expn(2,gamma*x)) - eta * gamma**0.25 * x**((n+0.5)/4.)
+/home/glipunova/galja/rabota/vartire/hacol/plotHacol/HACol/bassun.py:26: RuntimeWarning: The iteration is not making good progress, as measured by the 
+ improvement from the last ten iterations.
+  x = fsolve(fxis, x0, args=(gamma, eta, n), maxfev = 10000, xtol=1e-10)
+/home/glipunova/galja/rabota/vartire/hacol/plotHacol/HACol/bassun.py:30: RuntimeWarning: invalid value encountered in sqrt
+  x = sqrt(-1.)
+beta =  nan
+   xi_s = nan
+   beta_s = nan
+ magnetosphere size  41.317979639490275  *  4.86
+Traceback (most recent call last):
+  File "/home/glipunova/galja/rabota/vartire/hacol/plotHacol/HACol/tire_MPI.py", line 1619, in <module>
+    alltire()
+    ~~~~~~~^^
+  File "/home/glipunova/galja/rabota/vartire/hacol/plotHacol/HACol/tire_MPI.py", line 1347, in alltire
+    print(" t_s = "+str(tscale * rstar**1.5 * m1 * bs.dtint(BSgamma, minimum(xs, r[-1]/rstar), cthfun)))
+                                                   ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/glipunova/galja/rabota/vartire/hacol/plotHacol/HACol/bassun.py", line 58, in dtint
+    dt = simpson((sqrt((3.*cth**2+1.)/csq)/cth)[w], x=x[w])/2.
+         ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.14/dist-packages/scipy/integrate/_quadrature.py", line 501, in simpson
+    h = [np.squeeze(diffs[hm2], axis=axis),
+         ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.14/dist-packages/numpy/_core/fromnumeric.py", line 1663, in squeeze
+    return squeeze(axis=axis)
+ValueError: cannot select an axis to squeeze out which has size not equal to one

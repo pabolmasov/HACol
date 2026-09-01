@@ -4,12 +4,14 @@ import os
 from numpy import *
 from scipy.interpolate import interp1d
 
+
 import configparser as cp
 conffile = 'globals.conf'
 config = cp.ConfigParser(inline_comment_prefixes="#")
 config.read(conffile)
 
 import bassun as bs
+import g_units as units
 
 modellist = ['fidu', 'fidu2', 'nd', 'bs', 'mdot1', 'mdot3', 'wide', 'wi', 'wi1', 'narrow', 'narrow2', 'rot', 'irr', 'RI', 'huge', 'mdot30', 'mdot100', 'mdot100w', 'mdot100w3', 'mdot100w5', 'mdot100w10', 'mdot100w20', 'mdot100w50']
 
@@ -236,8 +238,13 @@ def massrace():
         mu30 = config[confs[k]].getfloat('mu30')
         mdot = config[confs[k]].getfloat('mdot') * 4.*pi
         afac = config[confs[k]].getfloat('afac')
-        tscale = config[confs[k]].getfloat('tscale') * m1
-        mscale = config[confs[k]].getfloat('massscale') * m1**2
+
+        #tscale = config[confs[k]].getfloat('tscale') * m1
+        tscale_s = units.tscale_s(config, conf)
+
+        # mscale = config[confs[k]].getfloat('massscale') * m1**2
+        mscale_g = units.massscale_g(config, conf)
+
         b12 = 2.*mu30*(rstar*m1/6.8)**(-3) # dipolar magnetic field on the pole, 1e12Gs units
         umag = b12**2*2.29e6*m1
         totalfile = dirlist[k]+'/totals.dat'
@@ -246,8 +253,8 @@ def massrace():
         geometry = loadtxt(dirlist[k]+"/geo.dat", comments="#", delimiter=" ", unpack=False)
         across0 = geometry[0,3] ; cth0 = cos(geometry[0,1]) ; delta0 = geometry[0,5]
         mcol = across0 * rstar**2 * umag / m1 * (1.+3.*cth0**2)/4.
-        print("mcol = "+str(mcol*mscale)+"g")
-        tr = mcol / mdot * tscale
+        print("mcol = "+str(mcol*mscale_g)+"g")
+        tr = mcol / mdot * tscale_s
         tth = tr * 24./rstar * delta0**2/across0 * mdot / beta[k]
         print(tth/tr)
         tlist.append(t/tr) ; mlist.append(mass/mcol) ; ttlist.append(t/tth)

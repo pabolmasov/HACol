@@ -14,6 +14,7 @@ import re
 import os
 
 import time
+import g_units as units
 
 #Uncomment the following if you want to use LaTeX in figures 
 # rc('font',**{'family':'serif'})
@@ -282,8 +283,8 @@ def fzero_solution(conf = 'SUBSO', snapshot = None, thsnapshots = None, iffit = 
     dtt = simpson(sqrt(1.+3.*cos(theta)**2)/sqrt(fint), x = -cos(theta))
     print("integral = ", dtt)
     print("Re = ", r_e)
-    t = sqrt(3.) * r_e**1.5/sqrt(m1) * dtt * tscale * m1
-    print("T = ", t, "s")
+    # t = sqrt(3.) * r_e**1.5/sqrt(m1) * dtt * tscale * m1 # sound time ? needs checking
+    # print("T = ", t, "s")#?
 
     print("fosc = ", 1./t, "Hz")
     

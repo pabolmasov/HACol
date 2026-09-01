@@ -17,6 +17,7 @@ import sys
 import configparser as cp
 import gc
 import re
+import g_units as units
 
 # parallel support
 from mpi4py import MPI
@@ -51,6 +52,10 @@ if conf is None:
 else:
     configactual = config[conf]
     
+
+
+
+
 # geometry:
 nx = configactual.getint('nx')
 nx0 = configactual.getint('nx0factor') * nx # refinement used to make an accurate geometry structure; used only once
@@ -1294,6 +1299,7 @@ def alltire():
         luni_half=(luni[1:]+luni[:-1])/2. # half-step l-equidistant mesh
         g = geometry_initialize(rnew, r_e, dr_e, writeout=outdir+'/geo.dat', afac=afac) # all the geometric quantities for the l-equidistant mesh
         tr = g.across[0] * umag * rstar**2 / mdot # replenishment time
+
         # scaling the calculation times with tr:
         # scaling output frequency with tr:
         dtout = tr * configactual.getfloat('dtout')    # tr * configactual.getfloat('dtout')
@@ -1301,10 +1307,13 @@ def alltire():
 
         # if we are planning to do png outputs during the calculation:
         if verbose:
-            print(conf+": Across(0) = "+str(g.across[0]))
+            print(conf+": Area Across(0) = "+str(g.across[0]))
             # basic estimate for the replenishment time scale:
-            print(conf+": t_r = A_perp u_mag / g / dot(M) = "+str(tr * tscale)+"s")
+            print(conf+": Approximate t_r = A_perp u_mag / g / dot(M) = "+str(tr * tscale)+"s")
             # ii =input("R")
+
+            print (conf+" Local correct tr (s) (not used to determine calculation length!) = ", units.tr_phys (config, conf=conf))
+
         r=rnew # set a grid uniform in l=luni
         r_half=rfun(luni_half) # half-step radial coordinates
         ghalf = geometry_initialize(r_half, r_e, dr_e, afac=afac) # mid-step geometry in r

@@ -87,7 +87,7 @@ mdotvar_period = 0.1 # variation period, s
 # conversion to CGS units:
 tscale = 4.92594e-06 # GMsun/c**3
 rscale = 1.47676e5 # GMsun/c**2
-rhoscale = 1.93474e-05 # c**2 / GMsun kappa, for kappa=0.35 (Solar metallicity, complete ionization)
+rhoscale = 1.93474e-05 # c**2 / GMsun /kappa, for kappa=0.35 (Solar metallicity, complete ionization)
 uscale = 1.73886e16 # c**4/GMsun kappa
 mdotscale = 1.26492e16 # G Msun / c kappa
 lscale = 1.13685e37 # G Msun c / kappa luminosity scale
@@ -107,7 +107,7 @@ minitfactor = 0.1 # initial total mass in the units of the equilibrium mass of t
 ifhdf = True # if we are writing to HDF5 instead of ascii (flux is always outputted as ascii)
 outdir = out
 # plotting options:
-ifplot = True
+ifplot = False
 plotalias = 10 # plot every Nth output step 
 ascalias = 10 # make an ascii file every Nth output step (if ifhdf is on)
 
@@ -663,36 +663,6 @@ squeezemode = True
 ifrestart = False
 restartn = 500
 restartfile = out_noloss/tireout.hdf5
-[SUBSO]
-mdot = 100.
-mu30 = 1.0
-afac = 0.25
-drrat = 0.25
-ifdisc = False
-nx = 1200
-parallelfactor = 1
-outdir = out_subso
-omegafactor = 0.0
-voutfactor = -0.3
-pressfactor = 0.99999999999999999 # 333333333333333333
-raddiff = False
-venttest = False
-squeezemode = True
-[SUBSO3]
-mdot = 300.
-mu30 = 0.1
-afac = 0.25
-ifdisc = False
-nx = 1200
-parallelfactor = 3
-outdir = out_subso3
-omegafactor = 0.0
-voutfactor = -0.1
-pressfactor = 0.99999999999999 # 333333333333333333
-raddiff = False
-venttest = False
-squeezemode = True
-tmax = 100.
 [SUBSO3slow]
 mdot = 300.
 mu30 = 0.1
@@ -986,3 +956,120 @@ raddiff = False
 venttest = False
 squeezemode = True
 tmax = 100.
+############################## shock-free solution for paper
+[SUBSO3]
+outdir = SUBSO3
+mdot = 300.
+mu30 = 0.1
+afac = 0.25
+ifdisc = False
+nx = 1200
+parallelfactor = 1
+omegafactor = 0.0
+voutfactor = -0.1
+pressfactor = 0.99999999999999 # 333333333333333333
+raddiff = False
+venttest = False
+squeezemode = True
+tmax = 100.
+############################## shock-free solution for paper
+[SUBSO3_N]
+outdir = SUBSO3_N
+mdot = 300.
+mu30 = 0.1
+afac = 0.25
+ifdisc = False
+nx = 1200
+parallelfactor = 6
+omegafactor = 0.0
+voutfactor = -0.1
+pressfactor = 0.99999999999999 # 333333333333333333
+raddiff = False
+venttest = False
+squeezemode = True
+tmax = 100.
+############################## shock-free solution for paper + ROTATION
+[SUBSO3_R]
+outdir = SUBSO3_R
+mdot = 300.
+mu30 = 0.1
+afac = 0.25
+ifdisc = False
+nx = 1200
+parallelfactor = 6
+omegafactor = 0.5
+voutfactor = -0.1
+pressfactor = 0.99999999999999 # 333333333333333333
+raddiff = False
+venttest = False
+squeezemode = True
+tmax = 100.
+############################## flow starts from the disc symmetry plane
+[SUBSO3_90]
+outdir = SUBSO3_90
+mdot = 300.
+mu30 = 0.1
+afac = 0.25
+ifdisc = False
+nx = 1200
+parallelfactor = 12
+omegafactor = 0.0
+voutfactor = -0.1
+pressfactor = 0.99999999999999 # 333333333333333333
+raddiff = False
+venttest = False
+squeezemode = True
+tmax = 100.
+fromplane = True
+############################## shock-free solution for paper
+[SUBSO3_Nx4]
+outdir = SUBSO3_Nx4
+mdot = 300.
+mu30 = 0.1
+afac = 0.25
+ifdisc = False
+nx = 4800
+parallelfactor = 8
+omegafactor = 0.0
+voutfactor = -0.1
+pressfactor = 0.99999999999999 # 333333333333333333
+raddiff = False
+venttest = False
+squeezemode = True
+tmax = 100.
+#######################
+[SUBSO3_2000] 
+outdir = SUBSO3_2000
+mdot = 2000
+mu30 = 10
+afac = 0.25
+ifdisc = False
+nx = 1200
+parallelfactor = 6
+omegafactor = 0.0
+voutfactor = -0.1
+pressfactor = 0.99999999999999 # 333333333333333333
+raddiff = False
+venttest = False
+squeezemode = True
+#ifnuloss = False # turning on neutrino losses (Beaudet et al. 1967)
+#ifpairs = False # turning on simple equilibrium pair population contribution to opacity
+tmax = 1000
+#######################
+[SUBSO3_2000nu] 
+outdir = SUBSO3_2000nu
+mdot = 2000
+mu30 = 10
+afac = 0.25
+ifdisc = False
+nx = 1200
+parallelfactor = 2
+omegafactor = 0.0
+voutfactor = -0.1
+pressfactor = 0.99999999999999 # 333333333333333333
+raddiff = False
+venttest = False
+squeezemode = True
+ifnuloss = True # turning on neutrino losses (Beaudet et al. 1967)
+#ifpairs = False # turning on simple equilibrium pair population contribution to opacity
+tmax = 100

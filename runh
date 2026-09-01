@@ -1,0 +1,5 @@
+# USAGE : mpirun DIR_MODEL_NAME PARALLEL_NUM
+# default value of parallel_num is 30.
+nohup mpirun -np "${2:=30}" python3 tire_MPI.py $1 > $1/log 2>&1 &
+echo $! > save_pid_$1.txt
+cp globals.conf $1/

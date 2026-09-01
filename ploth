@@ -1,0 +1,6 @@
+# USAGE: ploth [DIRNAME]
+# !!! the key in globals.conf 
+# !!! and directory name with hacol results 
+# !!! should be the SAME
+#
+python3 plotmodel.py $1
